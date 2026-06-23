@@ -48,6 +48,9 @@ npm audit --omit=dev
 - `WEBSITE_BUILD_PLAN.md`：总体搭建计划。
 - `docs/REUSE_EVALUATION.md`：可复用项目评估和许可证边界。
 - `docs/STAGE_0_REPORT.md`：阶段 0 执行报告。
+- `docs/STANDARD_RESEARCH_WORKFLOW.md`：以后参考项目研究和子代理分工的标准流程。
+- `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`：主控、实现子代理、验证子代理的标准开发流程。
+- `docs/HANDOFF.md`：当前任务交接文档，方便新窗口接手。
 - `docs/logic/`：按模块记录从参考项目提取出的实现逻辑。
 
 ## 复用原则

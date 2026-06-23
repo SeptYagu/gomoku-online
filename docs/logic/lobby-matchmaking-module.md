@@ -6,91 +6,300 @@
 
 - `minh100/Gomoku`：无仓库级 LICENSE，只参考大厅、房间列表、私密房和随机找局流程。
 
-## 学到的逻辑
+## 关键文件和证据
 
-`minh100/Gomoku` 的大厅模块包含这些产品路径：
+客户端：
 
-- 用户可以查看房间列表。
-- 房间显示名称、玩家数、是否需要密码、加入按钮或进行中状态。
-- 房间列表支持搜索过滤。
-- 用户可以创建自定义房间。
-- 房间可以设置可选密码。
-- 用户可以点击“找一局”，有空房就加入，没有空房就自动创建。
-- 大厅通过 Socket.IO 事件实时刷新。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Lobby.js:18-39`：初始化大厅、发 `joinLobby`、监听 `lobby`。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Lobby.js:45-48`：向 `RoomForm` 和 `RoomList` 传 rooms/users。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/RoomForm.js:19-20`：随机 `ratingWin/ratingLose`。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/RoomForm.js:30-50`：`roomData` 初始状态。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/RoomForm.js:54-80`：Find Game 逻辑。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/RoomForm.js:86-109`：Custom Game 逻辑。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/RoomForm.js:114-132`：随机房名和清空表单。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/RoomForm.js:196-269`：自定义房间弹窗表单。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/RoomList.js:7-17`：搜索过滤状态。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/RoomList.js:54-83`：表头、排序、渲染房间。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/IndividualRoom.js:12-38`：密码校验和加入房间。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/IndividualRoom.js:47-107`：房间行展示与 Join/In Game 状态。
+- `.research/minh100-Gomoku/client/src/Components/Lobby/Room/IndividualRoom.js:109-128`：Wrong Password 提示。
 
-这些功能很符合我们阶段 3，但它的实现方式需要调整。
+服务端：
 
-## 我们要采用的设计
+- `.research/minh100-Gomoku/server/index.js:47-57`：`joinLobby`。
+- `.research/minh100-Gomoku/server/index.js:61-73`：`gameCreated`。
+- `.research/minh100-Gomoku/server/index.js:78-92`：`updateRoom`。
+- `.research/minh100-Gomoku/server/index.js:119-127`：`deleteGameRoom`。
+- `.research/minh100-Gomoku/server/index.js:134-144`：`leftGame`。
+- `.research/minh100-Gomoku/server/socketServer.js:5-23`：读房间和构造房间。
+- `.research/minh100-Gomoku/server/socketServer.js:25-45`：加人并更新 DB。
+- `.research/minh100-Gomoku/server/Models/roomModel.js:4-29`：房间基础字段。
+- `.research/minh100-Gomoku/server/Models/roomModel.js:30-85`：内嵌 game 默认结构。
 
-大厅数据结构：
+## 参考实现细节
 
-- `roomId`：内部 ID。
-- `roomCode`：邀请用短码。
-- `displayName`：展示名，可自动生成。
-- `locale`：房主当前语言，用于默认展示。
-- `isPrivate`：是否私密。
-- `hasPassword`：是否需要密码。
-- `playerCount`：当前玩家数。
-- `capacity`：默认 2。
-- `status`：`waiting`、`playing`、`finished`。
-- `createdAt`、`updatedAt`。
+### 大厅订阅
 
-大厅视图：
+`Lobby` 组件挂载时：
 
-- 可加入房间优先显示。
-- 空位房间排在进行中房间前面。
-- 支持按房间名、房间码、玩家昵称搜索。
-- 移动端用紧凑列表，不做大卡片堆叠。
-- 所有状态文案进入六语种字典。
+- 调用全局状态的 `getAllRooms` 和 `getAllUsers`。
+- 发出 socket 事件 `joinLobby`。
+- 监听服务端 `lobby` 事件。
+- 收到 `{ roomArray, userArray }` 后设置本地 `allRooms` 和 `allUsers`。
 
-随机找局：
+服务端收到 `joinLobby`：
 
-- 优先进入匹配队列，而不是让客户端直接挑第一间房。
-- 服务端匹配条件：
-  - 相同规则模式。
-  - 相近等级或游客池。
-  - 非私密房。
-  - 未满员。
-  - 避免短时间重复匹配同一个对手。
-- 如果等待超时，可以自动创建公开房并继续等待。
+- 从 MongoDB 读取所有 rooms。
+- 从 MongoDB 读取所有 users。
+- `io.sockets.emit("lobby", { roomArray, userArray })` 广播给所有连接。
+
+风险：
+
+- 没有单独 lobby channel，全局广播给所有 socket。
+- 每次变化广播完整 rooms/users。
+- `Lobby` 的监听 effect 依赖房间状态，会造成不必要的重复注册。
+
+### Find Game
+
+客户端完成匹配决策：
+
+- 从当前 `rooms` 过滤 `playerArray.length < 2 && password === ""`。
+- 如果存在可加入房，取第一个。
+- 直接把当前用户 push 到该 room 的 `playerArray`。
+- 构造一个 `Game(15, ...)`。
+- 发 socket `updateRoom`。
+- 跳转 `/play/:roomName`。
+
+没有可加入房：
+
+- 调 random-word-api 取两个英文单词。
+- 首字母大写后拼接成房名。
+- 把当前用户放进 `playerArray`。
+- REST 创建房间。
+- 发 socket `gameCreated`。
+- 跳转游戏页。
+
+风险：
+
+- 匹配完全由客户端决定。
+- 客户端直接修改 room 对象。
+- 随机房名没有服务端唯一性保证。
+- REST 创建和 socket 广播之间可能有竞态。
+
+### ratingWin/ratingLose
+
+`RoomForm` 渲染时生成：
+
+- `ratingWin = Math.floor(Math.random() * 6) + 20`
+- `ratingLose = Math.floor(Math.random() * 6) + 20`
+
+范围是 20-25。
+
+这些值进入 `roomData`，服务端结算评分时使用。
+
+风险：
+
+- 加减分随机，不符合可解释评分系统。
+- 客户端可篡改。
+- 与对手强弱无关。
+
+### Custom Game 与密码房
+
+Custom Game：
+
+- 弹窗表单。
+- 房名必填，最大长度 26。
+- 密码可选。
+- 客户端遍历当前 rooms，用 `roomName.toLowerCase()` 检查重名。
+- 不重名则创建房间、发 socket、跳转。
+
+密码房：
+
+- `IndividualRoom` 客户端判断 `passwordInput === room.password`。
+- 大厅数据直接包含明文 `room.password`。
+- 展示仅显示 Required/None。
+
+风险：
+
+- 明文密码随大厅数据下发。
+- 密码校验在客户端，形同无保护。
+- 数据库没有 `passwordHash`。
+- 房名唯一性只做客户端提示，不可靠。
+
+### RoomList / IndividualRoom
+
+`RoomList`：
+
+- 按 `roomName` 做大小写不敏感 substring 搜索。
+- 用 `playerArray.length` 升序排序。
+- 空房/一人房排在前面，满员房靠后。
+
+边界问题：
+
+- `.sort()` 原地修改 props/state。
+- 搜索 effect 不依赖 `rooms`，实时更新时结果可能滞后。
+- 搜索无结果时 fallback 到全部 rooms，用户会困惑。
+- 刷新按钮只切本地状态，不请求服务端。
+
+`IndividualRoom`：
+
+- 展示房名。
+- 展示玩家数 `x/2`。
+- 展示 `A vs B` 或 `A vs ...`。
+- 显示密码状态 Required/None。
+- 登录且未满员显示 Join。
+- 满员显示 In Game。
+- 密码错误显示 Wrong Password。
+
+## Socket 与数据库关系
+
+`gameCreated`：
+
+- 客户端同时走 REST POST 和 socket。
+- REST 路径才真正 `newRoom.save()`。
+- socket 路径里 `socketServer.createRoom(roomData)` 只是 `new RoomModel(roomData)`，没有保存。
+- 服务端把未保存 room push 进当前 roomArray 并广播。
+
+风险：
+
+- 大厅可能先看到未保存房间。
+- 真实持久化依赖另一路 REST 请求。
+- 状态来源不统一。
+
+`updateRoom`：
+
+- 客户端提交 `{ gameToJoin, gameObject }`。
+- 服务端校验 `gameToJoin._id` 格式。
+- 用 `roomName` 执行 `findOneAndUpdate`。
+- 更新 `playerArray` 和 `game`。
+- 重读 rooms，替换 updatedRoom。
+- 广播 `lobby`。
+- 向游戏房间发 `toGameRoom`。
+
+风险：
+
+- 客户端提交完整 gameObject。
+- 加人不是服务端原子匹配队列。
+- 并发加入可能产生竞态。
+
+`deleteGameRoom`：
+
+- 游戏结束或离开时客户端提交 `{ currentRoom }`。
+- 服务端按 `_id` 删除。
+- 重读 rooms/users 并广播大厅。
+- 存在 `roomname` / `roomName` 大小写不一致，`socket.leave` 可能无效。
+
+## 本项目采用方案
+
+匹配决策必须搬到服务端。
+
+推荐接口：
+
+- socket `matchmaking:find`
+- socket `matchmaking:cancel`
+- HTTP `GET /api/rooms`
+- HTTP `POST /api/rooms`
+- HTTP `POST /api/rooms/:id/join`
+
+服务端匹配条件：
+
+- `visibility = public`
+- `status = waiting`
+- `playerCount < 2`
+- `hasPassword = false`
+- 相同规则模式。
+- 相近评分或游客池。
+- 避免短时间重复匹配同一对手。
+
+并发控制：
+
+- PostgreSQL 事务 + 条件更新，或 Redis lock。
+- “查找并加入”必须原子化。
+- 没有空房时由服务端创建等待房。
 
 私密房：
 
-- 不在公开匹配队列出现。
-- 可通过邀请链接加入。
-- 密码只在服务端校验，不能明文保存在可读客户端状态里。
-- 数据库存密码哈希，不存明文。
+- `visibility: "private"`。
+- `hasPassword: boolean`。
+- `passwordHash` 服务端保存。
+- 大厅只返回 `hasPassword`，绝不下发明文。
+- 邀请链接使用 `inviteCode`。
 
-## 必须改进的地方
+大厅更新：
 
-参考项目中有两个不适合直接沿用的点：
+- 初始读取分页：`GET /api/rooms?cursor=&limit=&status=waiting&visibility=public&search=`
+- socket 加入 lobby channel。
+- 增量事件：
+  - `room.created`
+  - `room.updated`
+  - `room.deleted`
+- 每个事件带 `roomId`、`version`、`updatedAt`。
+- 客户端发现版本缺口时 full resync。
 
-- 客户端直接修改 `playerArray` 再提交给服务端。
-- 客户端可决定加入哪个具体空房。
+## 六语种文案 key
 
-我们的改法：
+大厅与匹配至少需要：
 
-- 客户端只发送 `matchmaking:join`、`room:create`、`room:join`。
-- 服务端修改玩家列表和房间状态。
-- 服务端返回完整房间快照。
-- 大厅刷新使用分页或增量事件，避免每次广播全量房间和全量用户。
+- `findGame`
+- `customGame`
+- `createGame`
+- `randomizeName`
+- `roomName`
+- `roomNameTaken`
+- `passwordOptional`
+- `passwordRequired`
+- `noPassword`
+- `playerCount`
+- `join`
+- `inGame`
+- `wrongPassword`
+- `loginToPlay`
+- `searchPlaceholder`
+- `matchmakingSearching`
+- `matchmakingCancel`
+- `privateRoom`
+- `publicRoom`
 
-## 推荐事件
+语言集合必须使用项目要求：
 
-- `lobby:subscribe`
-- `lobby:rooms`
-- `lobby:room-created`
-- `lobby:room-updated`
-- `lobby:room-removed`
-- `matchmaking:join`
-- `matchmaking:leave`
-- `matchmaking:matched`
-- `room:create`
-- `room:join`
-- `room:password-required`
-- `room:join-rejected`
+- `en`
+- `zh`
+- `fr`
+- `es`
+- `ru`
+- `ar`
 
-## 不复制边界
+## 实现任务清单
 
-- 不复制 `minh100/Gomoku` 的 React 组件或 Mongo schema。
-- 只学习房间列表、密码房、找局按钮、实时大厅刷新这些产品逻辑。
+- 定义 `RoomSummary`、`LobbyQuery`、`MatchmakingRequest` 类型。
+- 实现服务端房间列表分页 API。
+- 实现 lobby socket channel。
+- 实现 room 增量事件和版本号。
+- 实现服务端随机匹配。
+- 实现私密房 password hash。
+- 实现房间名/房间码服务端唯一约束。
+- 移除客户端直接修改玩家数组的模式。
+
+## 测试清单
+
+- 空大厅找局会创建等待房。
+- 有可用公开空房时加入该房。
+- 私密房不会进入随机匹配。
+- 密码错误不能加入。
+- 密码不下发到客户端。
+- 并发两人找局不会超员。
+- 搜索无结果显示空状态。
+- 房间更新只增量推送。
+- 版本缺口触发全量同步。
+- 六种语言下字段不溢出。
+
+## 许可证边界
+
+`minh100/Gomoku` 无仓库级 LICENSE。
+
+因此：
+
+- 不复制 React 组件。
+- 不复制 Mongo schema。
+- 不复制样式和弹窗实现。
+- 只吸收大厅流程、房间列表、密码房、找局按钮和实时刷新经验。

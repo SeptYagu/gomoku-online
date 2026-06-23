@@ -6,117 +6,360 @@
 
 - `minh100/Gomoku`：无仓库级 LICENSE，只参考评分、排行榜刷新和离开惩罚思路。
 
-## 学到的逻辑
+## 关键文件和证据
 
-参考项目的评分逻辑包含：
+数据模型：
 
-- 用户资料有 `username`、`rating`、`avatar`。
-- 房间里存本局胜利加分和失败扣分。
-- 对局结束后更新赢家和输家评分。
-- 用户中途离开未完成对局时扣分。
-- 排行榜按 rating 降序排序。
-- 排行榜支持用户名搜索。
-- 胜负更新后通过 socket 广播排行榜刷新。
+- `.research/minh100-Gomoku/server/Models/userModel.js:4-23`：用户字段，含 `rating`。
+- `.research/minh100-Gomoku/server/Models/roomModel.js:14-29`：房间 `playerArray`、`ratingWin`、`ratingLose`。
+- `.research/minh100-Gomoku/server/Models/roomModel.js:30-58`：内嵌 game 的 `winner`、`draw` 等字段。
 
-## 我们要采用的设计
+胜负与离开：
 
-评分模型：
+- `.research/minh100-Gomoku/client/src/Engine/Game.js:3-24`：Game 运行时结构。
+- `.research/minh100-Gomoku/client/src/Engine/Game.js:106-114`：客户端胜负/平局状态。
+- `.research/minh100-Gomoku/client/src/Engine/Game.js:212-220`：客户端落子后的胜负判定。
+- `.research/minh100-Gomoku/server/socketServer.js:59-99`：`updateWinner` / `updateLoser`。
+- `.research/minh100-Gomoku/server/socketServer.js:120-137`：`handleLeaveGame`。
+- `.research/minh100-Gomoku/server/index.js:97-114`：`updateGame` 与 `updateWinAndLose`。
+- `.research/minh100-Gomoku/server/index.js:119-144`：`deleteGameRoom` 与 `leftGame`。
+- `.research/minh100-Gomoku/client/src/Components/GameRoom/GameBoard.js:22-42`：客户端胜负后触发结算和删房。
+- `.research/minh100-Gomoku/client/src/Components/BlockingForm/BlockForm.js:47-51`：未结束离开惩罚触发。
+- `.research/minh100-Gomoku/client/src/Components/BlockingForm/LeaveForm.js:47-50`：未开局离开只删房。
 
-- 不采用随机 `ratingWin/ratingLose`。
-- 使用 ELO 或 Glicko 风格公式，阶段 3 先实现 ELO。
-- 游客可以有临时评分，但默认不进入正式排行榜。
-- 正式排行榜只统计登录用户和有效局。
+排行榜：
 
-有效局规则：
+- `.research/minh100-Gomoku/client/src/Components/Leaderboard/Leaderboard.js:7-32`：排行榜拉取、搜索、socket 更新。
+- `.research/minh100-Gomoku/client/src/Components/Leaderboard/Leaderboard.js:71-104`：客户端排序和展示。
+- `.research/minh100-Gomoku/client/src/Components/Navbar.js:21-39`：Navbar 监听 lobby 更新用户信息。
+- `.research/minh100-Gomoku/client/src/Components/Navbar.js:154-157`：Navbar 展示当前 rating。
+- `.research/minh100-Gomoku/client/src/Global/GlobalUser/GlobalUserState.js:12-16`：全量用户获取。
+- `.research/minh100-Gomoku/server/Controller/userControls.js:8-15`：服务端全量用户返回。
+- `.research/minh100-Gomoku/server/Routes/userRoute.js:8`：用户列表路由。
 
-- 至少达到最小手数，例如 8 手。
-- 双方不是同一账号、同一设备或异常相近 IP 组合。
-- 对局时长不能明显异常。
-- 重复互刷需要降权或排除。
+## 参考实现细节
 
-离开惩罚：
-
-- 游戏未开始前离开不扣分。
-- 游戏开始后主动离开，默认判负。
-- 短暂断线进入宽限期，不立刻惩罚。
-- 宽限期过后仍未重连，再判负或扣分。
-
-排行榜维度：
-
-- 总评分榜。
-- 每日胜场榜。
-- 连胜榜。
-- 可选规则模式榜：普通五子棋、禁手、Swap2。
-- 可选语言/地区展示，但排名本身不按语言切分。
-
-## 数据模型草案
+### 数据模型
 
 `User`：
 
+- `username`
+- `lowerUsername`
+- `password`
+- `rating`，Number，默认 0。
+- `avatar`
+
+缺失：
+
+- `wins`
+- `losses`
+- `draws`
+- `ratedGames`
+- `provisional`
+- `ratingUpdatedAt`
+
+`Room`：
+
+- 顶层 `playerArray` 是玩家快照数组，含 `username`、`rating`、`avatar`。
+- 顶层 `ratingWin` 和 `ratingLose` 是 Number。
+- 内嵌 `game` 包含 `board`、`currentTurn`、`turnNumber`、`winner`、`draw`、`win1`、`win2`。
+- `winner` 默认 -1。
+- `draw` 默认 false。
+
+`Game` 类：
+
+- 在客户端构造运行时 game。
+- 本地判胜成功时把 `winner` 设为当前玩家索引。
+- 棋盘满时设置 `draw = true`。
+- Game 类本身没有 rating 字段。
+
+### 胜负结算
+
+`updateWinner(gameModel,currentRoom)`：
+
+- 从 `currentRoom.playerArray[gameModel.winner]` 找 winner。
+- 用 winner username 查 User。
+- 新 rating = 当前 rating + `currentRoom.ratingWin`。
+- `findOneAndUpdate` 写回。
+
+`updateLoser(gameModel,currentRoom)`：
+
+- 如果 winner 是 0，输家取 `playerArray[1]`。
+- 否则输家取 `playerArray[0]`。
+- 用 loser username 查 User。
+- 新 rating = 当前 rating - `currentRoom.ratingLose`。
+- 写回。
+
+`updateWinAndLose` socket 事件：
+
+- 先 updateWinner。
+- 再 updateLoser。
+- 再读取全部 users。
+- 广播 `updateLeaderboard`，携带全量 users。
+
+风险：
+
+- winner 由客户端提交。
+- currentRoom 由客户端提交。
+- ratingWin/ratingLose 由客户端创建房间时带入。
+- 没有服务端重新验证棋局。
+- 加分和扣分不是事务。
+- 没有幂等，重复触发会重复加扣分。
+
+### 离开惩罚
+
+`handleLeaveGame(userLeft,currentRoom)`：
+
+- 用客户端传入的 profile username 查用户。
+- 扣 `currentRoom.ratingLose`。
+- 删除房间。
+
+触发方式：
+
+- 依赖 React Router 导航阻塞确认。
+- 等待对手阶段离开只删房，不扣分。
+
+风险：
+
+- 断网、关标签页、刷新不一定触发。
+- 没有断线重连宽限。
+- 没有判断是否达到有效局门槛。
+- 对手不一定获得胜利奖励。
+- 平局后仍可能被误判为未完成。
+
+### Leaderboard
+
+首屏：
+
+- 客户端 `getAllUsers()`。
+- REST `GET /users`。
+- 服务端 `UserModel.find()` 返回全量用户。
+
+搜索：
+
+- 客户端按 `username` substring 过滤。
+
+排序：
+
+- render 中 `sort((a,b) => b.rating - a.rating)`。
+- 会原地修改数组。
+
+socket 更新：
+
+- 收到 `updateLeaderboard` 后再次 `getAllUsers()`。
+- 同时 `setAllUsers(allNewUsers)`。
+- 但 `allUsers` state 不是主要渲染来源，主要依赖 context users。
+
+Navbar：
+
+- 不监听 `updateLeaderboard`。
+- 通过 `lobby` 事件里的 `userArray` 找当前用户并刷新 rating。
+- 如果删房/lobby 与 rating 更新顺序错位，可能短暂显示旧分。
+
+## 当前实现风险
+
+- 随机加减分，非零和，容易通胀和操控。
+- 客户端提交 winner、playerArray、ratingWin/ratingLose。
+- 服务端不重新验证棋局和玩家身份。
+- 广播全用户，可能泄露 password hash、lowerUsername、avatar 等字段。
+- 无幂等。
+- 非事务。
+- 平局没有完整结算路径。
+- 离开惩罚过于简单。
+- 排行榜无分页、无服务端排序、无搜索索引。
+- 使用 username 定位用户，而不是 immutable userId。
+
+## 本项目采用方案
+
+### 服务端权威结算
+
+客户端只发送：
+
+- 落子意图。
+- 认输意图。
+- 离开意图。
+
+服务端负责：
+
+- 验证回合。
+- 验证棋盘。
+- 判断胜负和平局。
+- 计算 rating delta。
+- 落库 rating events。
+
+服务端不接受：
+
+- 客户端 winner。
+- 客户端 rating delta。
+- 客户端 currentRoom 快照。
+
+### ELO 规则
+
+默认 rating：
+
+- 注册用户：1200。
+- 游客：临时 rating，可独立池。
+
+公式：
+
+- `expected = 1 / (1 + 10 ** ((Rb - Ra) / 400))`
+- 胜：1。
+- 负：0。
+- 平：0.5。
+
+K 值：
+
+- 新手期：32。
+- 稳定后：16 或 24。
+
+要求：
+
+- 同一局双方 delta 保持零和。
+- 落库 `ratingBefore`、`ratingAfter`、`delta`。
+
+### 有效局
+
+计分条件：
+
+- ranked 模式。
+- 双方不同玩家。
+- 服务端确认开始。
+- 达到最低手数或最低时长。
+
+不计分：
+
+- 未开始取消。
+- 过早退出。
+- 异常重复刷局。
+
+平局：
+
+- 计有效局。
+- 按 0.5 计算 delta。
+
+### 离开和断线
+
+- 显式认输立即结算。
+- 断线给 30-60 秒重连窗口。
+- 超时后按 forfeit 结算。
+- 对手按胜局拿分。
+- 未开局离开不扣分。
+
+### 游客榜
+
+- 注册用户榜和游客榜分离。
+- 游客用 `guestId/session` 维护临时 rating 与昵称。
+- 游客默认不进入注册用户总榜。
+- 游客数据可设置过期时间。
+
+### 排行榜 API
+
+推荐：
+
+```text
+GET /api/leaderboard?scope=registered|guest&page=1&pageSize=50&search=abc
+```
+
+服务端排序：
+
+- rating desc。
+- games desc。
+- updatedAt desc。
+
+返回字段：
+
 - `id`
 - `displayName`
+- `avatar`
 - `rating`
-- `avatarUrl`
-- `createdAt`
-- `lastActiveAt`
+- `rank`
+- `stats`
 
-`Game`：
+禁止返回：
 
-- `id`
-- `ruleset`
-- `status`
-- `blackUserId`
-- `whiteUserId`
-- `winnerUserId`
-- `resultReason`
-- `startedAt`
-- `endedAt`
-- `isRated`
+- password hash。
+- private profile。
+- email。
+- internal auth fields。
 
-`RatingChange`：
+### 增量事件
 
-- `id`
+socket 不广播全用户。
+
+事件：
+
+- `leaderboard:ratingChanged`
+- `user:ratingChanged`
+
+payload：
+
 - `gameId`
-- `userId`
-- `before`
-- `after`
-- `delta`
-- `reason`
+- affected user ids。
+- rating。
+- delta。
+- stats。
+- leaderboardVersion。
 
-`LeaderboardSnapshot`：
+排行榜页：
 
-- `id`
-- `kind`
-- `period`
-- `rows`
-- `generatedAt`
+- 只更新可见行。
+- 或按 version 重新拉当前页。
 
-## 推荐事件/API
+Navbar：
 
-Socket events：
+- 订阅当前用户专属 `user:ratingChanged`。
+- 或结算后拉 `/api/me`。
+- 不依赖 lobby 全量用户刷新。
 
-- `leaderboard:subscribe`
-- `leaderboard:updated`
-- `rating:changed`
+### 幂等与审计
 
-HTTP API：
+Game 增加：
 
-- `GET /api/leaderboards/rating`
-- `GET /api/leaderboards/daily-wins`
-- `GET /api/users/:id/rating-history`
+- `status`
+- `result`
+- `ratedAt`
+- `ratingApplied`
+- `ratingEvents[]`
 
-## 必须改进的地方
+数据库：
 
-参考项目会在胜负后广播全量用户列表。我们不建议这样做。
+- 结算在事务里完成。
+- 唯一约束 `gameId + ratingApplied` 或 `gameId + userId` 防重复。
 
-我们的改法：
+## 实现任务清单
 
-- 排行榜用分页 HTTP API 读取。
-- socket 只广播轻量变更：榜单类型、版本号、受影响用户。
-- 客户端根据需要刷新当前页。
-- 排行榜搜索走服务端查询，避免大用户量时把全量用户推给客户端。
+- 设计 `UserRating`、`RatingEvent`、`LeaderboardSnapshot`。
+- 实现 ELO 计算函数。
+- 实现有效局判定。
+- 实现服务端权威结算。
+- 实现认输/断线超时结算。
+- 实现排行榜分页 API。
+- 实现 `leaderboard:ratingChanged` 增量事件。
+- 实现当前用户 rating 专属更新。
+- 实现游客 rating 池。
 
-## 不复制边界
+## 测试清单
 
-- 不复制 `minh100/Gomoku` 的 schema、组件或评分代码。
-- 只保留“胜负后变更评分、离开未完成局惩罚、榜单实时刷新”的产品逻辑。
+- 胜负 ELO 零和。
+- 平局双方 delta 正确。
+- 新手 K 值和稳定 K 值正确。
+- 未开始离开不计分。
+- 有效局内认输计负。
+- 断线宽限期内重连不扣分。
+- 超时断线判负且对手加分。
+- 同一局重复结算无效。
+- 排行榜分页排序稳定。
+- 搜索不泄露敏感字段。
+- 游客不进入注册用户总榜。
+
+## 许可证边界
+
+`minh100/Gomoku` 无仓库级 LICENSE。
+
+因此：
+
+- 不复制源码。
+- 不复制组件结构。
+- 不复制 schema。
+- 不复制文案、样式或结算代码。
+- 只借鉴评分、排行榜、离开惩罚、实时刷新这类业务思路和风险结论。
