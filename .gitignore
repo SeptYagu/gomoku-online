@@ -8,3 +8,5 @@ build/
 coverage/
 *.log
 *.apk
+.research/
+.next-dev*.log
