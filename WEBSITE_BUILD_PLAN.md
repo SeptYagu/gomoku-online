@@ -30,6 +30,8 @@
 - AdSense 政策指南：https://support.google.com/adsense/answer/23921?hl=en
 - AdSense 隐私政策必备内容：https://support.google.com/adsense/answer/1348695?hl=en
 
+参考项目逻辑按模块单独记录在 `docs/logic/`，开发对应模块前先阅读对应文件。
+
 竞品共同点：
 
 - 棋盘本身不是壁垒，关键是快速开局、好友邀请、随机匹配、移动端体验和留存机制。

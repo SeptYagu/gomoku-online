@@ -186,6 +186,7 @@
 - 阶段 2：参考 `scheng20/gomoku-online` 的房间码和 Socket.IO 房间流程，自写服务端权威状态。
 - 阶段 3：参考 `minh100/Gomoku` 的排行榜、房间列表、私密房和离开惩罚设计，自写数据模型。
 - 阶段 6：参考 `sen-ltd/gomoku-ai` 与 `gkoos/gomoku` 的 Hard AI 思路，逐步增强。
+- 参考逻辑按模块拆分记录在 `docs/logic/`，每个模块独立说明来源、可采用逻辑、改造方案和不复制边界。
 
 ## 阶段 0 交付标准
 
