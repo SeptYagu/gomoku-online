@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, CircleDot, RotateCcw, Undo2, UserRound, Users, Wifi } from "lucide-react";
-import { chooseAiMove, getAiTimeLimitMs, type AiDifficulty } from "@/game/ai";
+import {
+  chooseAiMove,
+  getAiTimeLimitMs,
+  getAiWorkerCount,
+  type AiDifficulty,
+  type AiMoveSource
+} from "@/game/ai";
 import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
@@ -29,6 +35,18 @@ type GameSnapshot = {
 type AiWorkerResponse = {
   type: "best" | "done";
   point: Point | null;
+  score?: number;
+  completedDepth?: number;
+  nodes?: number;
+  source?: AiMoveSource;
+};
+
+type AiWorkerDoneResult = {
+  point: Point | null;
+  score: number;
+  completedDepth: number;
+  nodes: number;
+  source: AiMoveSource;
 };
 
 const AI_DIFFICULTIES: AiDifficulty[] = ["normal", "hard", "expert", "insane"];
@@ -44,7 +62,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("normal");
   const [firstPlayer, setFirstPlayer] = useState<FirstPlayer>("human");
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const aiWorkerRef = useRef<Worker | null>(null);
+  const aiWorkersRef = useRef<Worker[]>([]);
   const aiWorkerTimeoutRef = useRef<number | null>(null);
   const aiRequestIdRef = useRef(0);
 
@@ -58,8 +76,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
   useEffect(() => {
     return () => {
-      aiWorkerRef.current?.terminate();
-      aiWorkerRef.current = null;
+      terminateAiWorkers();
       clearAiWorkerTimeout();
     };
   }, []);
@@ -200,9 +217,16 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   function cancelAiTurn() {
     aiRequestIdRef.current += 1;
     setIsAiThinking(false);
-    aiWorkerRef.current?.terminate();
-    aiWorkerRef.current = null;
+    terminateAiWorkers();
     clearAiWorkerTimeout();
+  }
+
+  function terminateAiWorkers() {
+    for (const worker of aiWorkersRef.current) {
+      worker.terminate();
+    }
+
+    aiWorkersRef.current = [];
   }
 
   function clearAiWorkerTimeout() {
@@ -227,15 +251,20 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     }
 
     return new Promise((resolve) => {
-      aiWorkerRef.current?.terminate();
+      terminateAiWorkers();
       clearAiWorkerTimeout();
       let latestBestMove: Point | null = null;
+      let bestResult: AiWorkerDoneResult | null = null;
+      let completedWorkers = 0;
       let settled = false;
+      const workerCount = getAiWorkerCount(difficulty, navigator.hardwareConcurrency);
+      const workers = Array.from({ length: workerCount }, () =>
+        new Worker(new URL("../game/ai-worker.ts", import.meta.url), {
+          type: "module"
+        })
+      );
 
-      const worker = new Worker(new URL("../game/ai-worker.ts", import.meta.url), {
-        type: "module"
-      });
-      aiWorkerRef.current = worker;
+      aiWorkersRef.current = workers;
 
       const finishAiRequest = (point: Point | null) => {
         if (settled) {
@@ -243,11 +272,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         }
 
         settled = true;
-        worker.terminate();
-
-        if (aiWorkerRef.current === worker) {
-          aiWorkerRef.current = null;
+        for (const worker of workers) {
+          worker.terminate();
         }
+        aiWorkersRef.current = aiWorkersRef.current.filter((activeWorker) => !workers.includes(activeWorker));
 
         clearAiWorkerTimeout();
         resolve(point);
@@ -262,23 +290,61 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         });
 
       aiWorkerTimeoutRef.current = window.setTimeout(() => {
-        finishAiRequest(getEmergencyMove());
+        finishAiRequest(bestResult?.point ?? latestBestMove ?? getEmergencyMove());
       }, timeLimitMs + AI_WORKER_TIMEOUT_GRACE_MS);
 
-      worker.onmessage = (event: MessageEvent<AiWorkerResponse>) => {
-        if (event.data.type === "best") {
-          latestBestMove = event.data.point;
-          return;
+      const markWorkerComplete = () => {
+        completedWorkers += 1;
+
+        if (completedWorkers >= workers.length) {
+          finishAiRequest(bestResult?.point ?? latestBestMove ?? getEmergencyMove());
         }
-
-        finishAiRequest(event.data.point ?? latestBestMove);
       };
 
-      worker.onerror = () => {
-        finishAiRequest(getEmergencyMove());
-      };
+      workers.forEach((worker, index) => {
+        worker.onmessage = (event: MessageEvent<AiWorkerResponse>) => {
+          if (settled) {
+            return;
+          }
 
-      worker.postMessage({ board: currentBoard, moves: currentMoves, aiStone, difficulty, timeLimitMs });
+          if (event.data.type === "best") {
+            latestBestMove = event.data.point ?? latestBestMove;
+            return;
+          }
+
+          const result = normalizeAiWorkerResult(event.data);
+
+          if (isBetterAiWorkerResult(result, bestResult, currentBoard)) {
+            bestResult = result;
+          }
+
+          if (result.point) {
+            latestBestMove = result.point;
+          }
+
+          if (isDecisiveAiWorkerResult(result)) {
+            finishAiRequest(result.point);
+            return;
+          }
+
+          markWorkerComplete();
+        };
+
+        worker.onerror = () => {
+          if (!settled) {
+            markWorkerComplete();
+          }
+        };
+
+        worker.postMessage({
+          board: currentBoard,
+          moves: currentMoves,
+          aiStone,
+          difficulty,
+          timeLimitMs,
+          rootCandidateShard: workerCount > 1 ? { index, total: workerCount } : undefined
+        });
+      });
     });
   }
 
@@ -446,6 +512,59 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       </aside>
     </main>
   );
+}
+
+function normalizeAiWorkerResult(response: AiWorkerResponse): AiWorkerDoneResult {
+  return {
+    point: response.point,
+    score: response.score ?? Number.NEGATIVE_INFINITY,
+    completedDepth: response.completedDepth ?? 0,
+    nodes: response.nodes ?? 0,
+    source: response.source ?? "none"
+  };
+}
+
+function isBetterAiWorkerResult(
+  next: AiWorkerDoneResult,
+  current: AiWorkerDoneResult | null,
+  board: Board
+): boolean {
+  if (!next.point) {
+    return false;
+  }
+
+  if (!current?.point) {
+    return true;
+  }
+
+  if (next.score !== current.score) {
+    return next.score > current.score;
+  }
+
+  if (next.completedDepth !== current.completedDepth) {
+    return next.completedDepth > current.completedDepth;
+  }
+
+  if (next.nodes !== current.nodes) {
+    return next.nodes > current.nodes;
+  }
+
+  return getCenterDistance(next.point, board) < getCenterDistance(current.point, board);
+}
+
+function isDecisiveAiWorkerResult(result: AiWorkerDoneResult): boolean {
+  return (
+    result.point !== null &&
+    result.source !== "search" &&
+    result.source !== "none" &&
+    result.source !== "empty-shard"
+  );
+}
+
+function getCenterDistance(point: Point, board: Board): number {
+  const center = Math.floor(board.length / 2);
+
+  return Math.abs(point.row - center) + Math.abs(point.col - center);
 }
 
 function replayMoves(moves: Move[]): Board {

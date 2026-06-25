@@ -12,11 +12,38 @@ import type { Board, Move, Point, Stone } from "./types";
 
 export type AiDifficulty = "normal" | "hard" | "expert" | "insane";
 
+export type AiRootCandidateShard = {
+  index: number;
+  total: number;
+};
+
+export type AiMoveSource =
+  | "none"
+  | "empty-shard"
+  | "single"
+  | "winning"
+  | "blocking"
+  | "opening"
+  | "forced-threat"
+  | "threat-block"
+  | "fork"
+  | "fork-block"
+  | "search";
+
+export type AiMoveResult = {
+  point: Point | null;
+  score: number;
+  completedDepth: number;
+  nodes: number;
+  source: AiMoveSource;
+};
+
 type ChooseAiMoveOptions = {
   difficulty: AiDifficulty;
   moves?: Move[];
   timeLimitMs?: number;
   onBestMove?: (point: Point) => void;
+  rootCandidateShard?: AiRootCandidateShard;
 };
 
 type SearchProfile = {
@@ -197,6 +224,13 @@ const AI_TIME_LIMIT_MS: Record<AiDifficulty, number> = {
   insane: 30_000
 };
 
+const AI_PARALLEL_WORKERS: Record<AiDifficulty, number> = {
+  normal: 1,
+  hard: 2,
+  expert: 3,
+  insane: 4
+};
+
 const DIFFICULTY_RANK: Record<AiDifficulty, number> = {
   normal: 1,
   hard: 2,
@@ -335,8 +369,16 @@ const WINDOWS_BY_CELL = createWindowsByCell(SEARCH_WINDOWS);
 export function chooseAiMove(
   board: Board,
   aiStone: Stone,
-  { difficulty, moves, timeLimitMs, onBestMove }: ChooseAiMoveOptions
+  options: ChooseAiMoveOptions
 ): Point | null {
+  return chooseAiMoveResult(board, aiStone, options).point;
+}
+
+export function chooseAiMoveResult(
+  board: Board,
+  aiStone: Stone,
+  { difficulty, moves, timeLimitMs, onBestMove, rootCandidateShard }: ChooseAiMoveOptions
+): AiMoveResult {
   const profile = SEARCH_PROFILES[difficulty];
   const deadline = createSearchDeadline(getAiTimeLimitMs(difficulty, timeLimitMs));
   const candidatePool = getCandidateMoves(board);
@@ -346,13 +388,13 @@ export function chooseAiMove(
   );
 
   if (candidates.length === 0) {
-    return null;
+    return createAiMoveResult(null, Number.NEGATIVE_INFINITY, "none");
   }
 
   reportBestMove(onBestMove, candidates[0]);
 
   if (candidates.length === 1) {
-    return candidates[0];
+    return createAiMoveResult(candidates[0], scoreAiMove(board, candidates[0], aiStone), "single");
   }
 
   const opponent = getOpponent(aiStone);
@@ -360,65 +402,95 @@ export function chooseAiMove(
 
   if (winningMove) {
     reportBestMove(onBestMove, winningMove);
-    return winningMove;
+    return createAiMoveResult(winningMove, WIN_SCORE + scoreAiMove(board, winningMove, aiStone) * 0.001, "winning");
   }
 
   const blockingMove = chooseBestMove(board, findWinningMoves(board, candidates, opponent), aiStone);
 
   if (blockingMove) {
     reportBestMove(onBestMove, blockingMove);
-    return blockingMove;
+    return createAiMoveResult(blockingMove, WIN_SCORE - 1_000 + scoreAiMove(board, blockingMove, aiStone) * 0.001, "blocking");
   }
 
   const bookMove = chooseOpeningBookMove(board, candidatePool, aiStone, difficulty, moves);
 
   if (bookMove) {
     reportBestMove(onBestMove, bookMove);
-    return bookMove;
+    return createAiMoveResult(bookMove, scoreAiMove(board, bookMove, aiStone), "opening");
   }
 
+  const shouldRunFullBoardTactics = !rootCandidateShard || normalizeShardIndex(rootCandidateShard) === 0;
   const boardHash = getBoardHash(board);
-  const forcedThreatMove =
-    findForcedThreatMove(board, boardHash, aiStone, profile, "vcf", deadline) ??
-    findForcedThreatMove(board, boardHash, aiStone, profile, "vct", deadline);
 
-  if (forcedThreatMove) {
-    reportBestMove(onBestMove, forcedThreatMove);
-    return forcedThreatMove;
+  if (shouldRunFullBoardTactics) {
+    const forcedThreatMove =
+      findForcedThreatMove(board, boardHash, aiStone, profile, "vcf", deadline) ??
+      findForcedThreatMove(board, boardHash, aiStone, profile, "vct", deadline);
+
+    if (forcedThreatMove) {
+      reportBestMove(onBestMove, forcedThreatMove);
+      return createAiMoveResult(
+        forcedThreatMove,
+        WIN_SCORE - 2_000 + scoreAiMove(board, forcedThreatMove, aiStone) * 0.001,
+        "forced-threat"
+      );
+    }
   }
 
   if (hasSearchTimedOut(deadline)) {
-    return candidates[0];
+    return createAiMoveResult(candidates[0], scoreAiMove(board, candidates[0], aiStone), "search");
   }
 
-  const opponentThreatMove =
-    findForcedThreatMove(board, boardHash, opponent, profile, "vcf", deadline) ??
-    findForcedThreatMove(board, boardHash, opponent, profile, "vct", deadline);
+  if (shouldRunFullBoardTactics) {
+    const opponentThreatMove =
+      findForcedThreatMove(board, boardHash, opponent, profile, "vcf", deadline) ??
+      findForcedThreatMove(board, boardHash, opponent, profile, "vct", deadline);
 
-  if (opponentThreatMove && isValidMove(board, opponentThreatMove)) {
-    reportBestMove(onBestMove, opponentThreatMove);
-    return opponentThreatMove;
+    if (opponentThreatMove && isValidMove(board, opponentThreatMove)) {
+      reportBestMove(onBestMove, opponentThreatMove);
+      return createAiMoveResult(
+        opponentThreatMove,
+        WIN_SCORE - 3_000 + scoreAiMove(board, opponentThreatMove, aiStone) * 0.001,
+        "threat-block"
+      );
+    }
   }
 
   if (hasSearchTimedOut(deadline)) {
-    return candidates[0];
+    return createAiMoveResult(candidates[0], scoreAiMove(board, candidates[0], aiStone), "search");
   }
 
-  const forcingMove = findBestForkMove(board, candidates, aiStone, aiStone);
+  if (shouldRunFullBoardTactics) {
+    const forcingMove = findBestForkMove(board, candidates, aiStone, aiStone);
 
-  if (forcingMove) {
-    reportBestMove(onBestMove, forcingMove);
-    return forcingMove;
+    if (forcingMove) {
+      reportBestMove(onBestMove, forcingMove);
+      return createAiMoveResult(
+        forcingMove,
+        FORK_SCORE + scoreAiMove(board, forcingMove, aiStone) * 0.001,
+        "fork"
+      );
+    }
+
+    const forkBlock = findBestForkMove(board, candidates, opponent, aiStone);
+
+    if (forkBlock) {
+      reportBestMove(onBestMove, forkBlock);
+      return createAiMoveResult(
+        forkBlock,
+        FORK_SCORE - 1_000 + scoreAiMove(board, forkBlock, aiStone) * 0.001,
+        "fork-block"
+      );
+    }
   }
 
-  const forkBlock = findBestForkMove(board, candidates, opponent, aiStone);
+  const searchCandidates = shardRootCandidates(candidates, rootCandidateShard);
 
-  if (forkBlock) {
-    reportBestMove(onBestMove, forkBlock);
-    return forkBlock;
+  if (searchCandidates.length === 0) {
+    return createAiMoveResult(null, Number.NEGATIVE_INFINITY, "empty-shard");
   }
 
-  return chooseSearchMove(board, candidates, aiStone, profile, deadline, onBestMove);
+  return chooseSearchMove(board, searchCandidates, aiStone, profile, deadline, onBestMove);
 }
 
 export function getAiTimeLimitMs(difficulty: AiDifficulty, overrideMs?: number): number {
@@ -427,6 +499,48 @@ export function getAiTimeLimitMs(difficulty: AiDifficulty, overrideMs?: number):
   }
 
   return AI_TIME_LIMIT_MS[difficulty];
+}
+
+export function getAiWorkerCount(difficulty: AiDifficulty, hardwareConcurrency = 1): number {
+  const configuredWorkers = AI_PARALLEL_WORKERS[difficulty];
+  const normalizedConcurrency = Number.isFinite(hardwareConcurrency) ? Math.max(1, Math.floor(hardwareConcurrency)) : 1;
+  const usableWorkers = Math.max(1, normalizedConcurrency - 1);
+
+  return Math.max(1, Math.min(configuredWorkers, usableWorkers));
+}
+
+function createAiMoveResult(
+  point: Point | null,
+  score: number,
+  source: AiMoveSource,
+  completedDepth = 0,
+  nodes = 0
+): AiMoveResult {
+  return {
+    point,
+    score,
+    completedDepth,
+    nodes,
+    source
+  };
+}
+
+function shardRootCandidates(candidates: Point[], shard?: AiRootCandidateShard): Point[] {
+  if (!shard || shard.total <= 1) {
+    return candidates;
+  }
+
+  const shardCount = Math.max(1, Math.floor(shard.total));
+  const shardIndex = normalizeShardIndex(shard);
+
+  return candidates.filter((_, index) => index % shardCount === shardIndex);
+}
+
+function normalizeShardIndex(shard: AiRootCandidateShard): number {
+  const shardCount = Math.max(1, Math.floor(shard.total));
+  const rawIndex = Number.isFinite(shard.index) ? Math.floor(shard.index) : 0;
+
+  return ((rawIndex % shardCount) + shardCount) % shardCount;
 }
 
 function createSearchDeadline(timeLimitMs: number): SearchDeadline {
@@ -888,8 +1002,13 @@ function chooseSearchMove(
   profile: SearchProfile,
   deadline: SearchDeadline,
   onBestMove?: (point: Point) => void
-): Point {
+): AiMoveResult {
   const initialMoves = orderCandidateMoves(board, candidates, aiStone, aiStone).slice(0, profile.rootCandidates);
+
+  if (initialMoves.length === 0) {
+    return createAiMoveResult(null, Number.NEGATIVE_INFINITY, "empty-shard");
+  }
+
   const position = new SearchPosition(board);
   const searchState = {
     nodes: 0,
@@ -901,6 +1020,7 @@ function chooseSearchMove(
   } satisfies SearchState;
   let bestMove = initialMoves[0];
   let bestScore = Number.NEGATIVE_INFINITY;
+  let completedDepth = 0;
   const startDepth = profile.iterativeDeepening ? 1 : profile.depth;
   reportBestMove(onBestMove, bestMove);
 
@@ -958,6 +1078,7 @@ function chooseSearchMove(
     if (searchedMoves > 0) {
       bestScore = iterationBestScore;
       bestMove = iterationBestMove;
+      completedDepth = searchDepth;
       reportBestMove(onBestMove, bestMove);
     }
 
@@ -966,7 +1087,13 @@ function chooseSearchMove(
     }
   }
 
-  return bestMove;
+  return createAiMoveResult(
+    bestMove,
+    Number.isFinite(bestScore) ? bestScore : scoreAiMove(board, bestMove, aiStone),
+    "search",
+    completedDepth,
+    searchState.nodes
+  );
 }
 
 function minimax(

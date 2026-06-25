@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseAiMove, getAiTimeLimitMs, getThreatSummaryAfterMove } from "./ai";
+import { chooseAiMove, chooseAiMoveResult, getAiTimeLimitMs, getAiWorkerCount, getThreatSummaryAfterMove } from "./ai";
 import { createBoard, getGameResult, getLegalMoves, placeStone } from "./board";
 import type { Board, Move, Point, Stone } from "./types";
 
@@ -28,6 +28,14 @@ describe("ai", () => {
     expect(getAiTimeLimitMs("hard")).toBe(5_000);
     expect(getAiTimeLimitMs("expert")).toBe(10_000);
     expect(getAiTimeLimitMs("insane")).toBe(30_000);
+  });
+
+  it("caps parallel worker counts by difficulty and available cores", () => {
+    expect(getAiWorkerCount("normal", 16)).toBe(1);
+    expect(getAiWorkerCount("hard", 8)).toBe(2);
+    expect(getAiWorkerCount("expert", 8)).toBe(3);
+    expect(getAiWorkerCount("insane", 8)).toBe(4);
+    expect(getAiWorkerCount("insane", 2)).toBe(1);
   });
 
   it("takes an immediate winning move before searching", () => {
@@ -221,6 +229,40 @@ describe("ai", () => {
     expect(insaneMove).not.toBeNull();
     expect(getLegalMoves(benchmark.board)).toContainEqual(insaneMove);
     expect(insaneDuration).toBeLessThan(8_000);
+  });
+
+  it("can split root candidates across parallel search workers", () => {
+    const benchmark = playMoves([
+      ["black", 7, 7],
+      ["white", 7, 8],
+      ["black", 8, 8],
+      ["white", 6, 6],
+      ["black", 8, 7],
+      ["white", 6, 8],
+      ["black", 9, 6],
+      ["white", 5, 9],
+      ["black", 9, 8],
+      ["white", 10, 7],
+      ["black", 6, 7],
+      ["white", 8, 5]
+    ]);
+    const legalMoves = getLegalMoves(benchmark.board);
+    const results = Array.from({ length: 4 }, (_, index) =>
+      chooseAiMoveResult(benchmark.board, "black", {
+        difficulty: "hard",
+        moves: benchmark.moves,
+        timeLimitMs: 200,
+        rootCandidateShard: { index, total: 4 }
+      })
+    );
+
+    expect(results.filter((result) => result.point !== null).length).toBeGreaterThan(0);
+
+    for (const result of results) {
+      if (result.point) {
+        expect(legalMoves).toContainEqual(result.point);
+      }
+    }
   });
 
   it("returns a legal best-so-far move when the search budget is exhausted", () => {

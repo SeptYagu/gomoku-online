@@ -1,6 +1,6 @@
 # AI Worker 与设置持久化模块逻辑
 
-更新日期：2026-06-23
+更新日期：2026-06-25
 
 ## 参考来源
 
@@ -205,88 +205,66 @@ Worker 返回：
 主线程到 Worker：
 
 ```ts
-type AiWorkerIn =
-  | {
-      type: "ai:init";
-      gameId: string;
-      boardSize: 15;
-      aiPlayer: Stone;
-      difficulty: AiDifficulty;
-      board: Board;
-      boardVersion: number;
-    }
-  | {
-      type: "ai:sync";
-      gameId: string;
-      board: Board;
-      moves: Move[];
-      nextPlayer: Stone;
-      boardVersion: number;
-      reason: "new-game" | "undo" | "remote-sync";
-    }
-  | {
-      type: "ai:move-request";
-      gameId: string;
-      requestId: string;
-      boardVersion: number;
-      board: Board;
-      player: Stone;
-      difficulty: AiDifficulty;
-    }
-  | {
-      type: "ai:cancel";
-      gameId: string;
-      requestId: string;
-      boardVersion: number;
-      reason: "undo" | "reset" | "mode-change" | "unmount";
-    };
+type AiWorkerRequest = {
+  board: Board;
+  moves: Move[];
+  aiStone: Stone;
+  difficulty: AiDifficulty;
+  timeLimitMs: number;
+  rootCandidateShard?: {
+    index: number;
+    total: number;
+  };
+};
 ```
 
 Worker 到主线程：
 
 ```ts
-type AiWorkerOut =
-  | {
-      type: "ai:move-result";
-      gameId: string;
-      requestId: string;
-      boardVersion: number;
-      move: Point;
-      score?: number;
-      reason?: "win" | "block" | "search" | "fallback";
-    }
-  | {
-      type: "ai:error";
-      gameId?: string;
-      requestId?: string;
-      boardVersion?: number;
-      code: string;
-      message: string;
-    };
+type AiWorkerResponse = {
+  type: "best" | "done";
+  point: Point | null;
+  score?: number;
+  completedDepth?: number;
+  nodes?: number;
+  source?: AiMoveSource;
+};
 ```
+
+当前采用每次请求传完整棋盘的 stateless Worker 协议，不依赖 Worker 内部增量 watch 状态。旧请求取消通过主线程终止 Worker 池和 `aiRequestId` 双保险实现。
+
+并行 Worker 池：
+
+- Normal：1 个 Worker。
+- Hard：最多 2 个 Worker。
+- Expert：最多 3 个 Worker。
+- Insane：最多 4 个 Worker。
+- 实际数量受 `navigator.hardwareConcurrency` 限制，并保留至少 1 个逻辑核心给 UI。
+- 多 Worker 时，主线程给每个 Worker 传 `rootCandidateShard`。
+- Worker 调用 `chooseAiMoveResult()`，主线程按 `score`、`completedDepth`、`nodes` 和中心距离合并。
+- `best` 消息持续刷新页面硬超时可用的 best-so-far。
 
 ### 正确性规则
 
-每次棋盘语义变化递增 `boardVersion`：
-
-- 玩家落子。
-- AI 落子。
-- undo。
-- reset。
-- 远端同步。
-- 模式切换导致新局。
+每次发起 AI 请求时递增 `aiRequestIdRef`。
 
 主线程只接受同时满足：
 
-- `requestId` 等于当前 pending request。
-- `boardVersion` 等于当前版本。
-- `gameId` 等于当前对局。
+- 当前返回属于最新 `aiRequestIdRef`。
 - 当前仍是 playing。
 - 当前轮到该 AI/player。
-- 返回点在棋盘内且为空。
-- 落子通过规则引擎校验。
+- 返回点通过 `placeStone()` 规则引擎校验。
 
-`ai:cancel` 只是性能优化，正确性依靠 `requestId + boardVersion`。
+取消路径：
+
+- undo。
+- reset。
+- mode change。
+- difficulty change。
+- first-player change。
+- component unmount。
+
+这些路径会递增 `aiRequestIdRef`、清空 thinking 状态、终止当前 Worker 池并清理硬超时定时器。正确性依靠 request id 和落子规则校验；终止 Worker 池主要用于及时释放 CPU。
 
 ### 设置持久化
 

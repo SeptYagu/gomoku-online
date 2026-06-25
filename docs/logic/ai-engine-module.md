@@ -1,6 +1,6 @@
 # AI 引擎模块逻辑
 
-更新日期：2026-06-23
+更新日期：2026-06-25
 
 ## 参考来源
 
@@ -28,6 +28,27 @@
 - `.research/yyjhao-HTML5-Gomoku/js/ai-worker.js:251-258`：候选队列排序。
 - `.research/yyjhao-HTML5-Gomoku/js/ai-worker.js:260-364`：cache + nega-scout 搜索。
 - `.research/yyjhao-HTML5-Gomoku/license.txt:1`：MIT，Yao Yujian。
+
+## 本项目当前引擎配置
+
+当前 AI 是项目内自写 TypeScript 引擎，没有直接打包 Rapfi、Pikafish、Stockfish 或其他 GPL 引擎代码。
+
+难度配置：
+
+- Normal：搜索深度 1，开局库 2 手，最大思考 1 秒，1 个 Worker。
+- Hard：搜索深度 4，开局库 4 手，最大思考 5 秒，最多 2 个 Worker。
+- Expert：搜索深度 5，开局库 6 手，最大思考 10 秒，最多 3 个 Worker。
+- Insane：搜索深度 8，开局库 8 手，最大思考 30 秒，最多 4 个 Worker。
+
+并行策略：
+
+- `src/components/GameShell.tsx` 根据 `navigator.hardwareConcurrency` 和难度计算 Worker 数。
+- Worker 数不会超过难度上限，并保留至少 1 个逻辑核心给页面。
+- `src/game/ai-worker.ts` 调用 `chooseAiMoveResult()`，返回走法、分数、完成深度、节点数和来源。
+- `src/game/ai.ts` 支持 `rootCandidateShard`，把根候选按索引取模分片。
+- 主线程等待各 Worker 返回后，按分数、完成深度、节点数和中心距离合并结果。
+- 开局库、必胜、必挡、强制威胁和 fork 类结果视为决定性结果，可提前结束整个 Worker 池。
+- 页面硬超时仍返回当前最佳结果；如果没有 Worker 结果，则用 50ms 主线程应急搜索兜底。
 
 ## sen-ltd AI 细节
 
@@ -268,6 +289,8 @@ type AiResult = {
 - alpha-beta 与排序不改变最优结果。
 - Hard 超时返回合法 best-so-far。
 - Worker 旧请求不会落到新棋盘。
+- 不同难度的 Worker 数受难度和硬件核心限制。
+- 根候选分片搜索返回合法落点。
 - 中盘局面记录候选数、节点数和耗时。
 
 ## 许可证边界
