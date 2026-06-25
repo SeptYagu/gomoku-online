@@ -6,20 +6,25 @@
 
 ## 当前状态
 
-阶段 0 已启动：
+当前功能基线：
 
-- Next.js + React + TypeScript 项目骨架。
-- 15x15 棋盘首屏。
-- 本地双人落子原型。
-- 普通五子棋规则模块。
-- 基础单元测试。
-- 开源复用评估文档。
+- Next.js + React + TypeScript 项目骨架已建立。
+- 15x15 棋盘、本地双人模式、悔棋、重开、终局锁定和胜线标记已实现。
+- 默认 English，并支持 English、中文、Français、Español、Русский、العربية 六语言路由和字典。
+- 阿拉伯语页面支持 RTL，棋盘保持 LTR。
+- 浅色/黑暗模式切换和本地持久化已实现。
+- 人机模式支持 Normal、Hard、Expert、Insane 四档。
+- 浏览器端强档 AI 使用 Worker 根候选分片并行搜索，超时返回 best-so-far。
+- 当前运行时开局库来自 `data/openings/generated/standard-26-insane-8ply-1s.sgf`，覆盖标准 26 开局、每条 8 手。
+- `tools/engine-arena.ts` 可用于引擎对战评测，`tools/generate-opening-book.ts` 可用于生成 SGF 开局库。
 
-下一轮基础要求：
+下一轮建议：
 
-- 默认英语和六种语言路由/字典。
-- 阿拉伯语 RTL 布局支持。
-- 浅色/黑暗模式切换和持久化。
+- 补多语言 metadata、canonical/alternate 和 sitemap 基础 SEO。
+- 生成并筛选 16 手、每标准开局多变体的强开局库。
+- 增加 SGF 校验和 SGF 转运行时数据的可重复脚本。
+- 补强 AI 棋型矩阵、超时路径和 Worker 分片回归测试。
+- 继续细化移动端手感和小屏视觉回归。
 
 ## 本地开发
 

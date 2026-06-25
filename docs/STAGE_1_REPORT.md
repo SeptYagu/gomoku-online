@@ -4,6 +4,8 @@
 
 本报告记录 `20260625-stage1-local-ai-verify-record` 独立验证后的阶段 1 本地可玩增强切片状态，并补记交互热修复链路的独立验证：Iris 实现、Maris 复验、Lyra 恢复 lucide 图标返工、Nora 最终复验。验证范围为 Volta/Ember 实现的本地双人/AI 模式切换、Easy/Normal AI、悔棋、重开、终局锁定、六语言新增文案、黑暗模式兼容、移动端布局，以及最终状态下的棋盘点击、AI 按钮和 lucide 图标 pointer 命中。
 
+后续更新：opening-book-runtime 已在本报告之后完成并推送，当前代码已扩展为 Normal/Hard/Expert/Insane 四档 AI、浏览器 Worker 根候选分片、generated opening book 和开局库深度门控。本报告的验收矩阵仍保留阶段 1 当时的历史证据。
+
 ## 本轮完成项
 
 - 本地双人模式可连续落子。
@@ -87,8 +89,9 @@ C:\Users\12915\AppData\Local\Temp\gomoku-stage1-evidence
 
 ## 当前限制
 
-- Hard AI、AI Worker、Socket 在线对战、好友房、排行榜和真实广告未实现，符合阶段 1 切片边界。
-- Normal AI 已有轻量评分与浏览器行为验证，但尚未覆盖完整活二、活三、冲四、活四棋型矩阵的端到端测试。
+- Socket 在线对战、好友房、排行榜和真实广告仍未实现，符合阶段 1 切片边界。
+- Hard/Expert/Insane、AI Worker 根候选分片和 generated opening book 已在后续 opening-book-runtime 工作中实现；本报告阶段 1 浏览器证据未覆盖这些后续强档能力的完整体验验收。
+- AI 已有评分、战术搜索和开局库测试，但尚未覆盖完整活二、活三、冲四、活四棋型矩阵的端到端测试。
 - in-app Browser 插件本轮不可用；本轮浏览器通过系统 Chrome + Playwright Core 完成。
 - 交互热修复复验时 in-app Browser 仍不可用，错误为工具侧 `sandboxPolicy` 元数据缺失；已使用系统 Chrome + Chrome DevTools Protocol 复验。
 - 3000 端口曾存在旧 dev 进程，且 HMR/旧进程状态可能导致交互验证假阴性；后续验证如遇到按钮点不动或 build 文件锁，先确认并停止本项目旧 Next 进程，再使用生产服务复验。

@@ -30,16 +30,22 @@ main
 ee7d3e4 Implement generated opening book runtime
 ```
 
+当前已确认交接文档推送点：
+
+```text
+b8e4a35 Update handoff for opening book runtime
+```
+
 说明：本文件会随着后续提交继续变化。接手时以 `git log --oneline -1` 和 `git status --short --branch` 的实时输出为准。
 
-本轮 opening-book-runtime handoff 更新前确认：
+本轮 handoff 二次校准前确认：
 
 ```text
 git status --short --branch
 ## main...origin/main
 
 git log -1 --oneline --decorate
-ee7d3e4 (HEAD -> main, origin/main) Implement generated opening book runtime
+b8e4a35 (HEAD -> main, origin/main) Update handoff for opening book runtime
 ```
 
 历史 stage0-redo 文档更新前状态（保留作追溯，不代表当前工作区）：
@@ -128,9 +134,9 @@ node_modules/
 
 ## 4. 当前目标
 
-当前目标是收口阶段 1 本地可玩增强切片，并进入下一轮阶段 1/SEO 或后续功能派发：
+当前功能基线已完成阶段 1 本地可玩增强、交互热修复和 opening-book-runtime 接入。下一轮可进入 SEO、强开局库生成与精选、AI 测试补强或移动端手感细化等后续派发：
 
-- 阶段 1 已完成本地双人/AI 模式切换、Easy/Normal AI、悔棋、重开、终局锁定、六语言新增文案、黑暗模式兼容和移动端布局增强。
+- 阶段 1 已完成本地双人/AI 模式切换、悔棋、重开、终局锁定、六语言新增文案、黑暗模式兼容和移动端布局增强。
 - Ember 实现报告已落档：`docs/subagents/20260625-stage1-local-ai-实现-Ember.md`。
 - Atlas 独立验证兼记录已通过完整命令门禁和真实 Chrome 浏览器验收。
 - Iris 交互热修复已完成：补强按钮、棋盘点位和触控命中规则。
@@ -301,9 +307,10 @@ node_modules/
 
 | 领域 | 文件 |
 | --- | --- |
-| 根路径重定向 | `src/app/page.tsx` |
+| 根路径重定向 | `src/app/(root)/page.tsx` |
+| 根路径 layout | `src/app/(root)/layout.tsx` |
 | 语言路由页面 | `src/app/[locale]/page.tsx` |
-| HTML metadata/layout | `src/app/layout.tsx` |
+| 语言路由 layout | `src/app/[locale]/layout.tsx` |
 | 全局样式与主题 token | `src/app/globals.css` |
 | 游戏容器 | `src/components/GameShell.tsx` |
 | 棋盘组件 | `src/components/GomokuBoard.tsx` |
@@ -333,6 +340,7 @@ node_modules/
 - `docs/REUSE_EVALUATION.md`
 - `docs/STAGE_0_REPORT.md`
 - `docs/STAGE_1_REPORT.md`
+- `docs/OPENING_BOOK_GENERATION_PLAN.md`
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`
 - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`
 - `docs/HANDOFF.md`
@@ -378,13 +386,13 @@ node_modules/
 AI 引擎：
 
 - `sen-ltd/gomoku-ai` 的 minimax + alpha-beta + pattern scoring 可作为阶段 1/6 主要参考。
-- `yyjhao/HTML5-Gomoku` 的 Worker、增量评分、cache、NegaScout 可作为后期思路。
-- 阶段 1 先做 Easy/Normal，Hard 后续 Worker 化。
+- `yyjhao/HTML5-Gomoku` 的 Worker、增量评分、cache、NegaScout 已作为后续思路参考；当前项目已用自写 TypeScript 实现四档 AI、Worker 根候选分片、置换表、威胁搜索和 generated opening book。
+- 当前 UI 暴露 Normal/Hard/Expert/Insane 四档；Normal 1 秒，Hard 5 秒，Expert 10 秒，Insane 30 秒。
 
 AI Worker 与设置持久化：
 
 - `yyjhao/HTML5-Gomoku` 的 Worker 消息流和悔棋同步值得参考。
-- 不能复制旧式全局 JS；我们应使用 `requestId + boardVersion` 防旧结果落子。
+- 不能复制旧式全局 JS；当前 `GameShell` 用 request id 取消过期 AI 请求，后续在线或持久化状态再引入 boardVersion 类防旧结果机制。
 - 设置用 versioned JSON schema，语言/主题同步 cookie + localStorage。
 
 多语言与主题：
@@ -418,7 +426,7 @@ AI 引擎和开局库：
 | P1 | 实现 SEO | 补多语言 metadata、`hreflang`、canonical/alternate 和 sitemap 基础 | `src/app/**`、必要配置、相关文档 | 不做广告、Socket、排行榜 | `WEBSITE_BUILD_PLAN.md`、`docs/logic/i18n-theme-module.md` | 六语言 SEO 链接正确，build 通过 |
 | P1 | 实现强开局库生成 | 按计划生成 16 手、每标准开局至少 3 变体、10 秒/步 SGF，并做结构校验 | `data/openings/generated/**`、`.arena-results/**`、必要文档 | 不提交未筛选的运行时大库，不引入第三方未授权库 | `docs/OPENING_BOOK_GENERATION_PLAN.md`、`tools/generate-opening-book.ts` | SGF 至少 78 条 game tree、每条 16 手、前三手符合标准 26 开局、无非法落子 |
 | P1 | 实现开局库精选转换 | 增加 SGF 校验/精选/转 `src/game/opening-book.ts` 的脚本，并用 arena 胜率回灌权重 | `tools/**`、`src/game/opening-book.ts`、`src/game/ai.test.ts`、必要文档 | 不手工长期维护大段运行时数据，不绕过 arena 筛选 | `docs/OPENING_BOOK_GENERATION_PLAN.md`、`tools/engine-arena.ts` | 转换脚本可重复生成运行时库，测试覆盖库加载和难度深度门控 |
-| P2 | 实现 AI 测试补强 | 为 Normal AI 增加更完整的活二、活三、冲四、活四评分矩阵测试 | `src/game/**`、必要测试报告 | 不做 Hard AI Worker | `docs/logic/ai-engine-module.md`、`docs/STAGE_1_REPORT.md` | AI 测试覆盖关键棋型，`npm test` 通过 |
+| P2 | 实现 AI 测试补强 | 为 Normal/Hard/Expert/Insane 增加更完整的活二、活三、冲四、活四评分矩阵和超时回归测试 | `src/game/**`、必要测试报告 | 不引入外部闭源或不明许可证引擎 | `docs/logic/ai-engine-module.md`、`docs/STAGE_1_REPORT.md` | AI 测试覆盖关键棋型和预算路径，`npm test` 通过 |
 | P2 | 实现移动端手感细化 | 细化触摸目标、状态区信息密度和小屏视觉回归 | `src/components/**`、`src/app/globals.css`、必要文档 | 不做广告接入、在线服务 | `docs/STAGE_1_REPORT.md` | 390px 手机和 1024px 平板真实浏览器验收通过 |
 
 建议先不要做：
@@ -433,7 +441,7 @@ AI 引擎和开局库：
 - 强开局库生成、校验、精选、权重回灌和运行时转换。
 - 更系统的活二、活三、冲四、活四棋型测试矩阵。
 
-这些属于后续阶段。当前 stage1-local-ai 已完成独立验证，可以进入 SEO、AI 测试补强或移动端手感细化等后续工作。
+这些属于后续阶段。当前 stage1-local-ai、交互热修复和 opening-book-runtime 均已完成验证，可以进入 SEO、强开局库、AI 测试补强或移动端手感细化等后续工作。
 
 ## 11. Risk Register
 
@@ -444,9 +452,9 @@ AI 引擎和开局库：
 | 六语言/RTL 回归 | major | 新 UI 文案绕过字典或破坏 `dir` | 新增文案必须进字典，浏览器覆盖 `ar` | 全阶段 |
 | 黑暗模式回归 | major | 新样式绕过 token 或只写浅色 | 使用主题 token，浏览器覆盖 light/dark | 全阶段 |
 | 广告影响棋盘误触 | major | 广告靠近棋盘或按钮 | 广告位远离高频点击区，浏览器验收 | 商业化阶段 |
-| AI 计算阻塞 UI | major | Hard AI 在主线程运行 | Worker 化、requestId、boardVersion | AI 阶段 |
+| AI 计算阻塞 UI | major | Worker 不可用、设备核心数少、强档搜索超时或应急主线程兜底过重 | Worker 根候选分片、request id 取消旧请求、best-so-far 超时返回、保留 50ms 应急搜索预算 | AI 阶段 |
 | 共享文件并行冲突 | major | 多代理同时改 `src/app/**`、字典、全局 CSS | 主控指定 owner，串行合并 | 全阶段 |
-| AI 棋型覆盖不足 | minor | Normal AI 后续被要求具备更稳定棋力 | 增加活二、活三、冲四、活四评分矩阵测试；Hard AI 阶段前补 Worker 设计 | AI 阶段 |
+| AI 棋型覆盖不足 | minor | 四档 AI 后续被要求具备更稳定棋力 | 增加活二、活三、冲四、活四评分矩阵测试；补强强档搜索、超时和 Worker 分片回归测试 | AI 阶段 |
 | 开局库源资产和运行时数据脱节 | major | 替换 SGF 后忘记同步 `src/game/opening-book.ts` | 保持 SGF 为源资产；补 SGF 转 TS 脚本；测试固定校验生成库数量和代表线命中 | AI/开局库阶段 |
 | 开局库未经足量对战筛选 | major | 直接把长推演结果塞进运行时 | 用 arena 快速样本和较高预算样本筛选，剔除快速失败线，记录胜方前 8 手开局线 | AI/开局库阶段 |
 | 第三方引擎或开局库许可证不满足商业发布 | blocker | 引入 Pikafish、Gomocup 引擎、第三方 book、WASM 或权重 | 商业发布默认只用项目内自写引擎和自生成开局库；外部资产必须先确认许可证 | 商业化阶段 |
@@ -557,7 +565,8 @@ opening-book-runtime：
 最新提交：
 
 ```text
-ee7d3e4 Implement generated opening book runtime
+功能提交：ee7d3e4 Implement generated opening book runtime
+交接文档提交：b8e4a35 Update handoff for opening book runtime
 ```
 
 是否已推送：

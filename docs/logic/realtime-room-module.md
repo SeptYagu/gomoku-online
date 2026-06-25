@@ -167,6 +167,8 @@
 
 Socket.IO room 只做投递通道，不做游戏状态来源。
 
+当前 Stage 2A 已先落地纯 TypeScript 房间核心：`src/server/rooms.ts`。该模块不依赖 Socket.IO、不依赖数据库，负责房间码、座位、ready/start、服务端权威落子、胜负判定、认输和连接状态标记。后续 Socket.IO 层只应把客户端事件转换为 `RoomStore` 调用，并广播返回的 `RoomSnapshot`；不要在 Socket handler 里重新实现棋盘规则。
+
 房间对象：
 
 - `roomId`：内部 ID，用于存储和广播。
@@ -260,28 +262,30 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 
 ## 实现任务清单
 
-- 实现 `RoomState`、`PlayerSeat`、`MoveIntent`、`RoomSnapshot` 类型。
-- 实现房间码生成，优先用 6-8 位 A-Z/0-9。
+- `RoomState`、`PlayerSeat`、`MoveIntent`、`RoomSnapshot` 类型已在 `src/server/rooms.ts` 初版实现。
+- 房间码生成已实现，默认 6 位 A-Z/0-9 去歧义字符，并带冲突重试。
 - 实现房间 TTL 和空房清理。
-- 实现 `room:create` 原子创建并加入房主。
-- 实现 `room:join` 容量、密码、昵称和身份校验。
-- 实现 `game:start` 只允许 ready 状态触发。
-- 实现 `game:move` 服务端权威校验。
+- `room:create` 的核心状态操作已实现：创建房间并加入黑棋房主。
+- `room:join` 的核心状态操作已实现：容量、昵称、重复玩家校验；密码未做。
+- `game:start` 的核心状态操作已实现：只允许两名玩家 ready 后触发。
+- `game:move` 的核心状态操作已实现：服务端按成员、回合、坐标、占位和 moveSeq 校验，复用 `src/game/board.ts` 判定胜负。
+- `game:resign` 的核心状态操作已实现：对局中认输后直接 finished，胜方为对手。
+- 断线/重连的核心连接状态标记已实现；宽限期、token 恢复和超时判负仍未做。
 - 实现断线重连 token。
 - 多实例上线前接 Redis Adapter。
 
 ## 测试清单
 
-- 创建房间返回唯一 room code。
-- 重复 room code 能重试。
-- 房间不存在加入失败。
-- 房间满员加入失败。
-- 同名策略符合预期。
-- 第一位玩家黑棋、第二位白棋。
-- 未满员不能开始。
-- 非房间玩家不能开始或落子。
-- 非当前回合不能落子。
-- 客户端伪造 board/color 无效。
+- 创建房间返回唯一 room code。已覆盖：`src/server/rooms.test.ts`。
+- 重复 room code 能重试。已覆盖：`src/server/rooms.test.ts`。
+- 房间不存在加入失败。已覆盖：`src/server/rooms.test.ts`。
+- 房间满员加入失败。已覆盖：`src/server/rooms.test.ts`。
+- 同名策略符合预期。已覆盖：`src/server/rooms.test.ts`。
+- 第一位玩家黑棋、第二位白棋。已覆盖：`src/server/rooms.test.ts`。
+- 未满员不能开始。已覆盖：`src/server/rooms.test.ts`。
+- 非房间玩家不能开始或落子。已覆盖：`src/server/rooms.test.ts`。
+- 非当前回合不能落子。已覆盖：`src/server/rooms.test.ts`。
+- 客户端伪造 board/color 无效。当前 API 不接收客户端 board/color，只接收 `MoveIntent`；成员、回合、坐标和 `moveSeq` 校验已覆盖。
 - 断线宽限期内可恢复。
 - 宽限期后按规则处理。
 

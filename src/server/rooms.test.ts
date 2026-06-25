@@ -1,0 +1,236 @@
+import { describe, expect, it } from "vitest";
+import { RoomStore, createRoomCode, type RoomResult, type RoomSnapshot } from "./rooms";
+
+describe("RoomStore", () => {
+  it("creates rooms with a host in the black seat and public snapshots", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const created = expectOk(
+      store.createRoom({
+        playerId: "player-1",
+        playerName: "Alice"
+      })
+    );
+
+    expect(created.code).toBe("ROOM01");
+    expect(created.status).toBe("waiting");
+    expect(created.currentTurn).toBe("black");
+    expect(created.moveSeq).toBe(0);
+    expect(created.players).toEqual([
+      {
+        connected: true,
+        name: "Alice",
+        ready: false,
+        seat: "black"
+      }
+    ]);
+    expect(created.players[0]).not.toHaveProperty("id");
+    expect(created.board).toHaveLength(15);
+    expect(created.board.flat().every((cell) => cell === null)).toBe(true);
+  });
+
+  it("normalizes room codes and rejects full, duplicate, or invalid joins", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    const joined = expectOk(store.joinRoom(" room01 ", { playerId: "player-2", playerName: "Bob" }));
+
+    expect(joined.players.map((player) => player.seat)).toEqual(["black", "white"]);
+    expect(store.joinRoom("ROOM01", { playerId: "player-2", playerName: "Robert" })).toMatchObject({
+      ok: false,
+      error: { code: "duplicate-player" }
+    });
+    expect(store.joinRoom("ROOM01", { playerId: "player-3", playerName: " alice " })).toMatchObject({
+      ok: false,
+      error: { code: "duplicate-name" }
+    });
+    expect(store.joinRoom("ROOM01", { playerId: "player-4", playerName: "Cara" })).toMatchObject({
+      ok: false,
+      error: { code: "room-full" }
+    });
+    expect(store.joinRoom("MISSING", { playerId: "player-5", playerName: "Dana" })).toMatchObject({
+      ok: false,
+      error: { code: "room-not-found" }
+    });
+  });
+
+  it("requires both players to be ready before starting", () => {
+    const { store, room } = createReadyRoom();
+
+    expect(room.status).toBe("ready");
+    expect(room.players.every((player) => player.ready)).toBe(true);
+
+    const started = expectOk(store.startGame(room.code, "player-1"));
+
+    expect(started.status).toBe("playing");
+    expect(started.currentTurn).toBe("black");
+
+    expect(store.setPlayerReady(room.code, "player-1", false)).toMatchObject({
+      ok: false,
+      error: { code: "game-already-started" }
+    });
+  });
+
+  it("rejects starting before both players are present and ready", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const room = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    expect(store.startGame(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "room-not-ready" }
+    });
+
+    expectOk(store.joinRoom(room.code, { playerId: "player-2", playerName: "Bob" }));
+    expectOk(store.setPlayerReady(room.code, "player-1"));
+
+    expect(store.startGame(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "room-not-ready" }
+    });
+  });
+
+  it("applies moves authoritatively and rejects stale, illegal, or wrong-turn moves", () => {
+    const { store, room } = createStartedRoom();
+
+    expect(store.applyMove(room.code, { playerId: "player-2", point: { row: 7, col: 7 } })).toMatchObject({
+      ok: false,
+      error: { code: "not-your-turn" }
+    });
+    expect(store.applyMove(room.code, { playerId: "player-1", expectedMoveSeq: 1, point: { row: 7, col: 7 } })).toMatchObject({
+      ok: false,
+      error: { code: "move-seq-mismatch" }
+    });
+
+    const firstMove = expectOk(
+      store.applyMove(room.code, {
+        expectedMoveSeq: 0,
+        playerId: "player-1",
+        point: { row: 7, col: 7 }
+      })
+    );
+
+    expect(firstMove.board[7][7]).toBe("black");
+    expect(firstMove.currentTurn).toBe("white");
+    expect(firstMove.moveSeq).toBe(1);
+    expect(firstMove.moves).toEqual([{ row: 7, col: 7, moveNumber: 1, stone: "black" }]);
+
+    expect(store.applyMove(room.code, { playerId: "player-2", point: { row: 7, col: 7 } })).toMatchObject({
+      ok: false,
+      error: { code: "spot-unavailable" }
+    });
+    expect(store.applyMove(room.code, { playerId: "player-2", point: { row: -1, col: 7 } })).toMatchObject({
+      ok: false,
+      error: { code: "spot-unavailable" }
+    });
+    expect(store.applyMove(room.code, { playerId: "intruder", point: { row: 8, col: 7 } })).toMatchObject({
+      ok: false,
+      error: { code: "not-room-member" }
+    });
+  });
+
+  it("detects wins from the authoritative board and locks finished games", () => {
+    const { store, room } = createStartedRoom();
+    const moves: Array<[string, number, number]> = [
+      ["player-1", 7, 3],
+      ["player-2", 8, 3],
+      ["player-1", 7, 4],
+      ["player-2", 8, 4],
+      ["player-1", 7, 5],
+      ["player-2", 8, 5],
+      ["player-1", 7, 6],
+      ["player-2", 8, 6],
+      ["player-1", 7, 7]
+    ];
+    let latest = room;
+
+    moves.forEach(([playerId, row, col], index) => {
+      latest = expectOk(
+        store.applyMove(room.code, {
+          expectedMoveSeq: index,
+          playerId,
+          point: { row, col }
+        })
+      );
+    });
+
+    expect(latest.status).toBe("finished");
+    expect(latest.winner).toBe("black");
+    expect(latest.winLine).toEqual([
+      { row: 7, col: 3 },
+      { row: 7, col: 4 },
+      { row: 7, col: 5 },
+      { row: 7, col: 6 },
+      { row: 7, col: 7 }
+    ]);
+    expect(store.applyMove(room.code, { playerId: "player-2", point: { row: 9, col: 9 } })).toMatchObject({
+      ok: false,
+      error: { code: "game-not-playing" }
+    });
+  });
+
+  it("supports resigning and connection status updates", () => {
+    const { store, room } = createStartedRoom();
+    const disconnected = expectOk(store.markDisconnected(room.code, "player-2"));
+
+    expect(disconnected.players.find((player) => player.seat === "white")?.connected).toBe(false);
+
+    const restored = expectOk(store.restoreConnection(room.code, "player-2"));
+
+    expect(restored.players.find((player) => player.seat === "white")?.connected).toBe(true);
+
+    const resigned = expectOk(store.resignGame(room.code, "player-2"));
+
+    expect(resigned.status).toBe("finished");
+    expect(resigned.winner).toBe("black");
+    expect(store.resignGame(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "game-not-playing" }
+    });
+  });
+
+  it("retries room code collisions and exposes a compact default generator", () => {
+    const store = createTestRoomStore(["ROOM01", "ROOM01", "ROOM02"]);
+
+    expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+    const secondRoom = expectOk(store.createRoom({ playerId: "player-2", playerName: "Bob" }));
+
+    expect(secondRoom.code).toBe("ROOM02");
+    expect(createRoomCode()).toMatch(/^[A-Z2-9]{6}$/);
+  });
+});
+
+function createTestRoomStore(codes: string[]): RoomStore {
+  let index = 0;
+
+  return new RoomStore({
+    codeGenerator: () => codes[index++] ?? `ROOM${index}`,
+    now: () => 1_780_000_000_000 + index
+  });
+}
+
+function createReadyRoom(): { room: RoomSnapshot; store: RoomStore } {
+  const store = createTestRoomStore(["ROOM01"]);
+  const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+  expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
+  expectOk(store.setPlayerReady(created.code, "player-1"));
+  const room = expectOk(store.setPlayerReady(created.code, "player-2"));
+
+  return { room, store };
+}
+
+function createStartedRoom(): { room: RoomSnapshot; store: RoomStore } {
+  const { room, store } = createReadyRoom();
+  const started = expectOk(store.startGame(room.code, "player-1"));
+
+  return { room: started, store };
+}
+
+function expectOk<T>(result: RoomResult<T>): T {
+  expect(result.ok).toBe(true);
+
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  return result.value;
+}
