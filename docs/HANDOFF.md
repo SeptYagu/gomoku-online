@@ -728,6 +728,63 @@ opening-book-runtime：
 待提交后推送到 origin/main。
 ```
 
+## 32. 2026-06-25 阶段 3 小步 2 线上验证补记
+
+本轮目标：
+
+- 按 handoff 追加规则，补记阶段 3 小步 2 观战席提交后的真实服务器验证结果。
+- 不回改第 31 段提交前留下的“待提交/待推送”状态，保留窗口工作时间线。
+
+实际结果：
+
+- 小步 2 观战席实现已提交：
+  - `99b4b03 Implement stage 3 spectator seats`
+- 已推送到 `origin/main`。
+- 推送后等待 90 秒，运行：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net 99b4b03
+```
+
+验证结果：
+
+- 页面加载通过。
+- 页面底部版本号显示 `version 99b4b03`。
+- Socket.IO polling handshake 返回 sid。
+- Socket.IO websocket 连接通过。
+
+真实服务器三客户端冒烟：
+
+```bash
+npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
+```
+
+结果：
+
+- host / guest / spectator 均通过 websocket 连接。
+- 第三人进入观战席，不挤掉黑白玩家。
+- 观战者 ready 和落子均被拒绝，返回 `not-room-player`。
+- 观战者能收到落子广播。
+- 三局连续流程通过：ready 自动开局、重开换先、悔棋拒绝/允许、同局面拒绝后禁止连续悔棋、认输收尾。
+
+分享链接回归冒烟：
+
+```bash
+npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net
+```
+
+结果：
+
+- 创建房间后 URL 带 room code。
+- Copy invite 复制当前 URL。
+- Leave 后 URL 清理 room 参数。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 下一步可进入小步 3：房间列表 API 和 lobby socket channel。
+
 ## 30. 2026-06-25 阶段 3 文档口径提交后的线上验证补记
 
 本轮目标：
@@ -1584,3 +1641,26 @@ b6faf9e
 ```text
 待提交后推送到 origin/main。
 ```
+
+## 33. 2026-06-25 阶段 3 小步 2 末尾追加校正记录
+
+本轮目标：
+
+- 保持 handoff 规则：后续交接记录只从文件末尾追加。
+- 补记本窗口最终截止点，避免只看文件末尾时漏掉小步 2 的线上验证结果。
+
+实际结果：
+
+- 阶段 3 小步 2 观战席实现提交：`99b4b03 Implement stage 3 spectator seats`。
+- `99b4b03` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器 `http://gomoku.yagu.ddns-ip.net` 已显示 `version 99b4b03`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 99b4b03`：通过。
+- `npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`：通过，覆盖 host / guest / spectator 三客户端、观战者不能 ready/落子、观战者收到落子、三局换先、悔棋拒绝/允许、连续悔棋拒绝和认输。
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过，分享 URL 行为无回归。
+- `docs/STAGE_3_PROGRESS.md` 已更新小步 2 为完成并通过真实服务器验证。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 下一步：小步 3，房间列表 API 和 lobby socket channel。

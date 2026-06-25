@@ -46,7 +46,7 @@
 
 ## 小步 2：观战席
 
-状态：实现完成，本地验证通过；等待提交推送后做真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 目标：
 
@@ -88,3 +88,15 @@
   - `PASS create room URL - BP4KH6`
   - `PASS copy invite - copied current URL`
   - `PASS leave room URL clear - http://127.0.0.1:3029/en`
+- 推送 `99b4b03` 后等待 90 秒，`npm run verify:online -- http://gomoku.yagu.ddns-ip.net 99b4b03`：通过。
+- 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS connect spectator - websocket`
+  - `PASS spectator ready denied - not-room-player`
+  - `PASS room:join spectator - watcher seated without displacing players`
+  - `PASS spectator move sync - watcher saw game 1 black center`
+  - `PASS spectator move denied - not-room-player`
+  - 三局 ready / restart 换先 / 悔棋 / 认输流程均通过。
+- 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS create room URL - WEV6FZ`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
