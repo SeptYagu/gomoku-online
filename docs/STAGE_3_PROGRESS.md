@@ -165,7 +165,7 @@
 
 ## 小步 4：房间列表 UI：Join / Watch
 
-状态：实现完成，本地验证通过；等待提交推送后做真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 目标：
 
@@ -206,3 +206,21 @@
 - 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3031`，通过。
 - 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3031`，通过。
 - 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3031`，通过。
+- 推送 `9c12bef` 后等待 90 秒，第一次检查真实服务器仍为 `14d85e8`；再等待 90 秒后，`npm run verify:online -- http://gomoku.yagu.ddns-ip.net 9c12bef`：通过。
+- 真实服务器：`npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS lobby waiting row join - PF6LH7`
+  - `PASS lobby playing row watch - VPSRUN`
+- 真实服务器：`npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS REST room list - version 12`
+  - `PASS lobby:join - 2 rooms`
+  - `PASS lobby room created - 686LJ3`
+  - `PASS REST room list includes created room`
+  - `PASS lobby room joined - player count updated`
+  - `PASS lobby room playing - status updated`
+  - `PASS lobby room deleted - finished room hidden`
+  - `PASS REST room list hides finished room`
+- 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过，继续覆盖三客户端三局流程、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS create room URL - W5H8F2`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
