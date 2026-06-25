@@ -827,3 +827,57 @@ opening-book-runtime：
 
 - 联机悔棋现在依赖房间内存状态；服务重启会清空挂起请求和次数记录，这与当前房间状态单进程内存限制一致。
 - 客户端会主动 10 秒自动拒绝；如果目标客户端断线，服务端会在下一次快照读取或房间操作时兜底过期，但不会主动向已断线客户端弹框。
+
+## 20. 2026-06-25 真实服务器部署后验证
+
+本轮目标：
+
+- 用户已部署最新版后，验证真实服务器 `gomoku.yagu.ddns-ip.net` 是否确实运行本轮提交，并复测好友房关键链路。
+
+实际完成：
+
+- 访问 `http://gomoku.yagu.ddns-ip.net/en`，页面底部显示 `version: 9b6041e`。
+- 访问 `http://gomoku.yagu.ddns-ip.net/socket.io/?EIO=4&transport=polling`，返回 200 和 Socket.IO `sid`，说明真实服务器已跑自定义 online server，`/socket.io/` 代理可用。
+- 使用真实域名运行无头 Chrome + CDP + Socket.IO 客户端验收：
+  - Host 通过 Socket.IO 创建房间，Guest 通过浏览器 UI 加入。
+  - 双方 Ready 后自动进入 `playing`，不需要 Start。
+  - Host 落黑后 Guest 页面进入 `Your move`。
+  - Host 发起悔棋请求，Guest 棋盘中央出现 `Undo request` 弹框。
+  - 弹框显示 Allow，Reject 带倒计时，实测为 `Reject (9)`。
+  - 弹框中心与棋盘中心对齐，验证坐标：board center `(475, 831)`，modal center `(476, 831)`。
+  - Guest 点击 Allow 后，服务端快照回退到空棋盘，`currentTurn` 回到 black。
+  - 再次落黑并发起悔棋请求后，Guest 不操作，10 秒后自动拒绝；弹框消失，棋子保留。
+  - 同一局面再次请求返回 `undo-request-rejected-position`。
+
+验证命令和结果：
+
+- `Invoke-WebRequest http://gomoku.yagu.ddns-ip.net/en`：页面包含 `version: 9b6041e`。
+- `Invoke-WebRequest http://gomoku.yagu.ddns-ip.net/socket.io/?EIO=4&transport=polling`：HTTP 200，返回 sid。
+- Node/CDP 真实域名验收脚本：通过。房间码 `S8GF78`，Socket.IO 客户端连接 transport 为 `polling`。
+
+未验证项及原因：
+
+- 本轮只用一台机器模拟真实域名双端流程；用户两台真实电脑的手动复测仍建议做一轮。
+- Socket.IO 客户端最终连接显示 transport 为 `polling`；功能已正常，但如需确认 WebSocket upgrade，可单独加代理日志或强制 websocket 测试。
+
+最新提交：
+
+```text
+本段记录所在提交，见 git log 最新提交。
+```
+
+是否已推送：
+
+```text
+本段记录提交后推送到 origin/main。
+```
+
+下一步建议：
+
+- 用两台电脑打开 `http://gomoku.yagu.ddns-ip.net/en` 手动确认好友房体验，重点看移动端/不同浏览器下弹框遮罩和倒计时。
+- 若线上仍偶发 `xhr poll error`，优先采集浏览器 Network 的 `/socket.io/` 状态码和服务器反向代理日志。
+
+风险变化：
+
+- 真实服务器已确认不再是 `/socket.io` 404 或旧版本问题。
+- 由于当前线上连接可用但 transport 记录为 `polling`，性能和稳定性目前足够 MVP 使用；公开测试前仍建议确认 WebSocket upgrade 是否按预期工作。
