@@ -10,6 +10,11 @@ export type ClientToServerEvents = {
   "game:resign": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
   "game:restart": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
   "game:start": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
+  "game:undo-request": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
+  "game:undo-respond": (
+    payload: { accepted: boolean; requestId: string; roomCode: string },
+    ack: (response: RoomAck) => void
+  ) => void;
   "room:create": (payload: { playerId: string; playerName: string }, ack: (response: RoomAck) => void) => void;
   "room:join": (
     payload: { playerId: string; playerName: string; roomCode: string },
@@ -123,6 +128,26 @@ export function registerRoomSocketHandlers(io: RoomSocketServer, roomStore = new
         socket,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.resignGame(payload.roomCode, playerId)
+        ),
+        ack
+      );
+    });
+
+    socket.on("game:undo-request", (payload, ack) => {
+      acknowledgeAndBroadcast(
+        socket,
+        runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
+          roomStore.requestUndo(payload.roomCode, playerId)
+        ),
+        ack
+      );
+    });
+
+    socket.on("game:undo-respond", (payload, ack) => {
+      acknowledgeAndBroadcast(
+        socket,
+        runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
+          roomStore.respondToUndo(payload.roomCode, playerId, payload.requestId, payload.accepted)
         ),
         ack
       );

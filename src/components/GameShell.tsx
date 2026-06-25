@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, CircleDot, Copy, Flag, LogOut, Play, RotateCcw, Undo2, UserRound, Users, Wifi } from "lucide-react";
+import { Bot, Check, CircleDot, Copy, Flag, LogOut, RotateCcw, Undo2, UserRound, Users, Wifi, X } from "lucide-react";
 import {
   chooseAiMove,
   getAiTimeLimitMs,
@@ -13,7 +13,7 @@ import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/boar
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
-import type { RoomSnapshot } from "@/server/rooms";
+import type { RoomSnapshot, UndoRequestSnapshot } from "@/server/rooms";
 import { GomokuBoard } from "./GomokuBoard";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
@@ -407,26 +407,6 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
                 darkTheme: dictionary.controls.darkTheme
               }}
             />
-            <button
-              className="icon-button"
-              type="button"
-              onClick={handleUndo}
-              aria-label={dictionary.controls.undo}
-              disabled={!canUndo}
-              title={dictionary.controls.undo}
-            >
-              <Undo2 aria-hidden="true" focusable={false} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={mode === "room" ? friendRoom.restartGame : () => resetGame()}
-              aria-label={dictionary.controls.reset}
-              disabled={mode === "room" && !friendRoom.canRestart}
-              title={dictionary.controls.reset}
-            >
-              <RotateCcw aria-hidden="true" focusable={false} />
-            </button>
           </div>
         </header>
 
@@ -500,6 +480,19 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
           </div>
         ) : null}
 
+        {mode !== "room" ? (
+          <div className="game-actions">
+            <button className="mode-pill" disabled={!canUndo} onClick={handleUndo} type="button">
+              <Undo2 aria-hidden="true" focusable={false} />
+              {dictionary.controls.undo}
+            </button>
+            <button className="mode-pill" disabled={isAiThinking} onClick={() => resetGame()} type="button">
+              <RotateCcw aria-hidden="true" focusable={false} />
+              {dictionary.controls.reset}
+            </button>
+          </div>
+        ) : null}
+
         {mode === "room" ? <FriendRoomControls dictionary={dictionary} room={friendRoom} /> : null}
 
         <div className="play-area">
@@ -515,6 +508,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             winningKey={winningKey}
             onPointSelect={handlePointSelect}
           />
+          {mode === "room" ? <RoomUndoRequestOverlay dictionary={dictionary} room={friendRoom} /> : null}
         </div>
       </section>
 
@@ -693,6 +687,7 @@ function FriendRoomControls({
   const labels = dictionary.room;
   const snapshot = room.room?.snapshot ?? null;
   const selfPlayer = room.room ? snapshot?.players.find((player) => player.seat === room.room?.seat) : null;
+  const remainingUndoRequests = selfPlayer?.undoRequestsRemaining ?? 0;
 
   return (
     <div className="room-panel" aria-label={labels.panelLabel}>
@@ -780,13 +775,19 @@ function FriendRoomControls({
 
       {snapshot ? (
         <div className="room-actions">
-          <button className="mode-pill" disabled={!room.canReady} onClick={room.toggleReady} type="button">
-            <Check aria-hidden="true" focusable={false} />
-            {room.ready ? labels.unready : labels.readyAction}
-          </button>
-          <button className="mode-pill" disabled={!room.canStart} onClick={room.startGame} type="button">
-            <Play aria-hidden="true" focusable={false} />
-            {labels.startGame}
+          {room.canReady ? (
+            <button
+              className={`mode-pill ${room.ready ? "danger" : "success"}`}
+              onClick={room.toggleReady}
+              type="button"
+            >
+              <Check aria-hidden="true" focusable={false} />
+              {room.ready ? labels.unready : labels.readyAction}
+            </button>
+          ) : null}
+          <button className="mode-pill" disabled={!room.canUndo} onClick={room.undoMove} type="button">
+            <Undo2 aria-hidden="true" focusable={false} />
+            {dictionary.controls.undo} ({remainingUndoRequests})
           </button>
           <button className="mode-pill" disabled={!room.canResign} onClick={room.resignGame} type="button">
             <Flag aria-hidden="true" focusable={false} />
@@ -805,6 +806,93 @@ function FriendRoomControls({
 
       {selfPlayer ? <p className="room-message">{labels.selfStatus.replace("{name}", selfPlayer.name)}</p> : null}
       {room.error ? <p className="room-error">{room.error}</p> : null}
+    </div>
+  );
+}
+
+function RoomUndoRequestOverlay({
+  dictionary,
+  room
+}: {
+  dictionary: GameDictionary;
+  room: FriendRoomController;
+}) {
+  const labels = dictionary.room;
+  const snapshot = room.room?.snapshot ?? null;
+  const undoRequest = snapshot?.undoRequest ?? null;
+  const isTarget = Boolean(undoRequest && room.room?.seat === undoRequest.targetSeat);
+
+  if (!undoRequest || !isTarget || !snapshot) {
+    return null;
+  }
+
+  const requester = snapshot.players.find((player) => player.seat === undoRequest.requesterSeat);
+  const requesterName = requester?.name ?? (undoRequest.requesterSeat === "black" ? labels.blackSeat : labels.whiteSeat);
+
+  return (
+    <RoomUndoRequestDialog
+      key={undoRequest.id}
+      labels={labels}
+      requesterName={requesterName}
+      respondUndoRequest={room.respondUndoRequest}
+      undoRequest={undoRequest}
+    />
+  );
+}
+
+function RoomUndoRequestDialog({
+  labels,
+  requesterName,
+  respondUndoRequest,
+  undoRequest
+}: {
+  labels: GameDictionary["room"];
+  requesterName: string;
+  respondUndoRequest: (accepted: boolean) => void;
+  undoRequest: UndoRequestSnapshot;
+}) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const handledRequestRef = useRef(false);
+  const secondsLeft = Math.max(0, Math.ceil((undoRequest.expiresAt - nowMs) / 1000));
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 250);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (secondsLeft > 0 || handledRequestRef.current) {
+      return;
+    }
+
+    handledRequestRef.current = true;
+    respondUndoRequest(false);
+  }, [respondUndoRequest, secondsLeft]);
+
+  function respond(accepted: boolean) {
+    if (handledRequestRef.current) {
+      return;
+    }
+
+    handledRequestRef.current = true;
+    respondUndoRequest(accepted);
+  }
+
+  return (
+    <div aria-modal="true" className="undo-request-modal" role="dialog">
+      <h2>{labels.undoRequestTitle}</h2>
+      <p>{labels.undoRequestCopy.replace("{name}", requesterName)}</p>
+      <div className="undo-request-actions">
+        <button className="mode-pill danger" onClick={() => respond(false)} type="button">
+          <X aria-hidden="true" focusable={false} />
+          {labels.rejectUndo.replace("{seconds}", String(secondsLeft))}
+        </button>
+        <button className="mode-pill success" onClick={() => respond(true)} type="button">
+          <Check aria-hidden="true" focusable={false} />
+          {labels.allowUndo}
+        </button>
+      </div>
     </div>
   );
 }

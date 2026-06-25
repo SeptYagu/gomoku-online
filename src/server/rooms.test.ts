@@ -20,7 +20,8 @@ describe("RoomStore", () => {
         connected: true,
         name: "Alice",
         ready: false,
-        seat: "black"
+        seat: "black",
+        undoRequestsRemaining: 3
       }
     ]);
     expect(created.players[0]).not.toHaveProperty("id");
@@ -53,18 +54,22 @@ describe("RoomStore", () => {
     });
   });
 
-  it("requires both players to be ready before starting", () => {
-    const { store, room } = createReadyRoom();
+  it("starts automatically when both players are ready", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
 
-    expect(room.status).toBe("ready");
-    expect(room.players.every((player) => player.ready)).toBe(true);
+    expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
 
-    const started = expectOk(store.startGame(room.code, "player-1"));
+    const waiting = expectOk(store.setPlayerReady(created.code, "player-1"));
+
+    expect(waiting.status).toBe("waiting");
+
+    const started = expectOk(store.setPlayerReady(created.code, "player-2"));
 
     expect(started.status).toBe("playing");
     expect(started.currentTurn).toBe("black");
 
-    expect(store.setPlayerReady(room.code, "player-1", false)).toMatchObject({
+    expect(store.setPlayerReady(started.code, "player-1", false)).toMatchObject({
       ok: false,
       error: { code: "game-already-started" }
     });
@@ -124,6 +129,121 @@ describe("RoomStore", () => {
     expect(store.applyMove(room.code, { playerId: "intruder", point: { row: 8, col: 7 } })).toMatchObject({
       ok: false,
       error: { code: "not-room-member" }
+    });
+  });
+
+  it("lets the last mover request undo and applies it only after opponent approval", () => {
+    const { store, room } = createStartedRoom();
+    const firstMove = expectOk(
+      store.applyMove(room.code, {
+        expectedMoveSeq: 0,
+        playerId: "player-1",
+        point: { row: 7, col: 7 }
+      })
+    );
+
+    expect(firstMove.board[7][7]).toBe("black");
+    expect(firstMove.currentTurn).toBe("white");
+    expect(store.requestUndo(room.code, "player-2")).toMatchObject({
+      ok: false,
+      error: { code: "not-last-move-player" }
+    });
+
+    const requested = expectOk(store.requestUndo(room.code, "player-1"));
+    const requestId = requested.undoRequest?.id ?? "";
+
+    expect(requested.undoRequest).toMatchObject({
+      moveSeq: 1,
+      requesterSeat: "black",
+      targetSeat: "white"
+    });
+    expect(requested.players.find((player) => player.seat === "black")?.undoRequestsRemaining).toBe(2);
+    expect(requested.board[7][7]).toBe("black");
+    expect(store.requestUndo(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "undo-request-pending" }
+    });
+    expect(store.respondToUndo(room.code, "player-1", requestId, true)).toMatchObject({
+      ok: false,
+      error: { code: "not-undo-request-target" }
+    });
+
+    const undone = expectOk(store.respondToUndo(room.code, "player-2", requestId, true));
+
+    expect(undone.board[7][7]).toBeNull();
+    expect(undone.currentTurn).toBe("black");
+    expect(undone.moveSeq).toBe(0);
+    expect(undone.moves).toEqual([]);
+    expect(undone.undoRequest).toBeNull();
+    expect(store.requestUndo(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "no-moves-to-undo" }
+    });
+  });
+
+  it("blocks repeated undo requests for the same rejected board position", () => {
+    const { store, room } = createStartedRoom();
+
+    expectOk(store.applyMove(room.code, { playerId: "player-1", point: { row: 7, col: 7 } }));
+    const requested = expectOk(store.requestUndo(room.code, "player-1"));
+    const rejected = expectOk(store.respondToUndo(room.code, "player-2", requested.undoRequest?.id ?? "", false));
+
+    expect(rejected.board[7][7]).toBe("black");
+    expect(rejected.undoRequest).toBeNull();
+    expect(store.requestUndo(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "undo-request-rejected-position" }
+    });
+
+    expectOk(store.applyMove(room.code, { playerId: "player-2", point: { row: 7, col: 8 } }));
+    expect(store.requestUndo(room.code, "player-2")).toMatchObject({
+      ok: true,
+      value: { undoRequest: { requesterSeat: "white" } }
+    });
+  });
+
+  it("limits each player to three undo requests per game", () => {
+    const { store, room } = createStartedRoom();
+
+    playAndRejectUndo(store, room.code, "player-1", "player-2", 7, 7);
+    expectOk(store.applyMove(room.code, { playerId: "player-2", point: { row: 7, col: 8 } }));
+    playAndRejectUndo(store, room.code, "player-1", "player-2", 8, 8);
+    expectOk(store.applyMove(room.code, { playerId: "player-2", point: { row: 8, col: 7 } }));
+    playAndRejectUndo(store, room.code, "player-1", "player-2", 9, 9);
+    expectOk(store.applyMove(room.code, { playerId: "player-2", point: { row: 9, col: 8 } }));
+    expectOk(store.applyMove(room.code, { playerId: "player-1", point: { row: 10, col: 10 } }));
+
+    expect(store.requestUndo(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "undo-request-limit" }
+    });
+  });
+
+  it("expires pending undo requests as rejected after ten seconds", () => {
+    let now = 1_780_000_000_000;
+    const store = new RoomStore({
+      codeGenerator: () => "ROOM01",
+      now: () => now
+    });
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
+    expectOk(store.setPlayerReady(created.code, "player-1"));
+    expectOk(store.setPlayerReady(created.code, "player-2"));
+    expectOk(store.applyMove(created.code, { playerId: "player-1", point: { row: 7, col: 7 } }));
+
+    const requested = expectOk(store.requestUndo(created.code, "player-1"));
+
+    expect(requested.undoRequest?.expiresAt).toBe(now + 10_000);
+
+    now += 10_001;
+
+    const expired = expectOk(store.getSnapshot(created.code));
+
+    expect(expired.undoRequest).toBeNull();
+    expect(store.requestUndo(created.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "undo-request-rejected-position" }
     });
   });
 
@@ -224,6 +344,7 @@ describe("RoomStore", () => {
     expect(restarted.winner).toBeNull();
     expect(restarted.moves).toEqual([]);
     expect(restarted.players.every((player) => player.ready === false)).toBe(true);
+    expect(restarted.players.every((player) => player.undoRequestsRemaining === 3)).toBe(true);
     expect(store.startGame(room.code, "player-1")).toMatchObject({
       ok: false,
       error: { code: "room-not-ready" }
@@ -263,9 +384,21 @@ function createReadyRoom(): { room: RoomSnapshot; store: RoomStore } {
 
 function createStartedRoom(): { room: RoomSnapshot; store: RoomStore } {
   const { room, store } = createReadyRoom();
-  const started = expectOk(store.startGame(room.code, "player-1"));
 
-  return { room: started, store };
+  return { room, store };
+}
+
+function playAndRejectUndo(
+  store: RoomStore,
+  roomCode: string,
+  requesterId: string,
+  targetId: string,
+  row: number,
+  col: number
+) {
+  expectOk(store.applyMove(roomCode, { playerId: requesterId, point: { row, col } }));
+  const requested = expectOk(store.requestUndo(roomCode, requesterId));
+  expectOk(store.respondToUndo(roomCode, targetId, requested.undoRequest?.id ?? "", false));
 }
 
 function expectOk<T>(result: RoomResult<T>): T {

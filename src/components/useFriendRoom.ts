@@ -23,7 +23,7 @@ export type FriendRoomController = {
   canReady: boolean;
   canResign: boolean;
   canRestart: boolean;
-  canStart: boolean;
+  canUndo: boolean;
   connectionStatus: "idle" | "connecting" | "connected" | "disconnected";
   copyInvite: () => void;
   copiedInvite: boolean;
@@ -37,12 +37,13 @@ export type FriendRoomController = {
   playMove: (point: Point) => void;
   ready: boolean;
   resignGame: () => void;
+  respondUndoRequest: (accepted: boolean) => void;
   restartGame: () => void;
   room: RoomClientState | null;
   setJoinCode: (value: string) => void;
   setPlayerName: (value: string) => void;
-  startGame: () => void;
   toggleReady: () => void;
+  undoMove: () => void;
 };
 
 const PLAYER_ID_STORAGE_KEY = "gomoku-room-player-id";
@@ -60,11 +61,17 @@ export function useFriendRoom(): FriendRoomController {
 
   const currentPlayer = room ? getPlayerBySeat(room.snapshot, room.seat) : null;
   const ready = currentPlayer?.ready ?? false;
-  const canReady = room !== null && (room.snapshot.status === "waiting" || room.snapshot.status === "ready");
-  const canStart = room?.snapshot.status === "ready";
-  const canPlay = room?.snapshot.status === "playing" && room.snapshot.currentTurn === room.seat;
+  const lastMove = room?.snapshot.moves.at(-1) ?? null;
+  const hasPendingUndoRequest = room?.snapshot.undoRequest !== null && room?.snapshot.undoRequest !== undefined;
+  const canReady = room !== null && room.snapshot.status === "waiting";
+  const canPlay = room?.snapshot.status === "playing" && room.snapshot.currentTurn === room.seat && !hasPendingUndoRequest;
   const canResign = room?.snapshot.status === "playing";
   const canRestart = room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
+  const canUndo =
+    room?.snapshot.status === "playing" &&
+    lastMove?.stone === room.seat &&
+    !hasPendingUndoRequest &&
+    (currentPlayer?.undoRequestsRemaining ?? 0) > 0;
   const inviteUrl = useMemo(() => {
     if (!room || typeof window === "undefined") {
       return "";
@@ -162,14 +169,6 @@ export function useFriendRoom(): FriendRoomController {
     ensureSocket().emit("room:ready", { ready: !ready, roomCode: room.snapshot.code }, applyRoomAck);
   }, [applyRoomAck, ensureSocket, ready, room]);
 
-  const startGame = useCallback(() => {
-    if (!room) {
-      return;
-    }
-
-    ensureSocket().emit("game:start", { roomCode: room.snapshot.code }, applyRoomAck);
-  }, [applyRoomAck, ensureSocket, room]);
-
   const playMove = useCallback((point: Point) => {
     if (!room || !canPlay) {
       return;
@@ -192,6 +191,28 @@ export function useFriendRoom(): FriendRoomController {
     }
 
     ensureSocket().emit("game:resign", { roomCode: room.snapshot.code }, applyRoomAck);
+  }, [applyRoomAck, ensureSocket, room]);
+
+  const undoMove = useCallback(() => {
+    if (!room || !canUndo) {
+      return;
+    }
+
+    ensureSocket().emit("game:undo-request", { roomCode: room.snapshot.code }, applyRoomAck);
+  }, [applyRoomAck, canUndo, ensureSocket, room]);
+
+  const respondUndoRequest = useCallback((accepted: boolean) => {
+    const undoRequest = room?.snapshot.undoRequest;
+
+    if (!room || !undoRequest) {
+      return;
+    }
+
+    ensureSocket().emit(
+      "game:undo-respond",
+      { accepted, requestId: undoRequest.id, roomCode: room.snapshot.code },
+      applyRoomAck
+    );
   }, [applyRoomAck, ensureSocket, room]);
 
   const restartGame = useCallback(() => {
@@ -268,7 +289,7 @@ export function useFriendRoom(): FriendRoomController {
     canReady,
     canResign,
     canRestart,
-    canStart,
+    canUndo,
     connectionStatus,
     copyInvite,
     copiedInvite,
@@ -282,12 +303,13 @@ export function useFriendRoom(): FriendRoomController {
     playMove,
     ready,
     resignGame,
+    respondUndoRequest,
     restartGame,
     room,
     setJoinCode,
     setPlayerName,
-    startGame,
-    toggleReady
+    toggleReady,
+    undoMove
   };
 }
 

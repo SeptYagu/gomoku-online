@@ -169,10 +169,10 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 
 当前 Stage 2 MVP 已落地：
 
-- `src/server/rooms.ts`：纯 TypeScript 房间核心，不依赖 Socket.IO、不依赖数据库，负责房间码、座位、ready/start、服务端权威落子、胜负判定、认输、重开和连接状态标记。
+- `src/server/rooms.ts`：纯 TypeScript 房间核心，不依赖 Socket.IO、不依赖数据库，负责房间码、座位、ready 自动开局、服务端权威落子、胜负判定、联机悔棋请求、认输、重开和连接状态标记。
 - `src/server/room-socket.ts`：Socket.IO 事件层，只把客户端事件转换为 `RoomStore` 调用，并广播返回的 `RoomSnapshot`；不在 Socket handler 里重新实现棋盘规则。
 - `src/server/online-server.ts`：Next + Socket.IO 自定义在线服务，开发时用 `npm run dev:online` 启动。
-- `src/components/useFriendRoom.ts`：浏览器端好友房状态、localStorage session、重连、邀请链接和 socket 事件封装。
+- `src/components/useFriendRoom.ts`：浏览器端好友房状态、localStorage session、重连、邀请链接、ready、落子和联机悔棋 socket 事件封装。
 - `src/components/GameShell.tsx`：好友房 UI 接入棋盘、状态栏和控制按钮。
 
 房间对象：
@@ -180,7 +180,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `roomId`：内部 ID，用于存储和广播。
 - `roomCode`：邀请用短码，只做入口。
 - `players`：座位、昵称、用户 ID、连接状态。
-- `status`：`waiting`、`ready`、`playing`、`finished`、`abandoned`。
+- `status`：`waiting`、`playing`、`finished`、`abandoned`；`ready` 仍保留在类型中作为兼容状态，但当前 UI 规则是双方 ready 后直接进入 `playing`。
 - `board`：服务端权威棋盘。
 - `currentTurn`：当前座位。
 - `moveSeq`：服务端递增手数。
@@ -190,7 +190,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 状态机：
 
 - `waiting`：一名玩家或空位存在。
-- `ready`：两名玩家已入座。
+- `ready`：玩家个人准备状态；两名玩家都 ready 后自动开局。
 - `playing`：对局中。
 - `finished`：胜负、平局、认输。
 - `abandoned`：断线超时、房间过期或异常关闭。
@@ -216,8 +216,10 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 
 对局：
 
-- `game:start`
+- `game:start`（兼容保留，当前 UI 不展示）
 - `game:move`
+- `game:undo-request`
+- `game:undo-respond`
 - `game:resign`
 - `game:restart`
 
@@ -273,10 +275,11 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `room:create` 的核心状态操作已实现：创建房间并加入黑棋房主。
 - `room:join` 的核心状态操作已实现：容量、昵称、重复玩家校验；密码未做。
 - `room:rejoin` 已实现：同 `playerId` 可恢复原座位并刷新昵称、连接状态。
-- `game:start` 的核心状态操作已实现：只允许两名玩家 ready 后触发。
+- `game:start` 保留为兼容事件；当前产品 UI 不再展示 Start，双方 ready 后由 `RoomStore` 自动进入 `playing`。
 - `game:move` 的核心状态操作已实现：服务端按成员、回合、坐标、占位和 moveSeq 校验，复用 `src/game/board.ts` 判定胜负。
+- `game:undo-request` / `game:undo-respond` 已实现：只允许最后一手落子者请求悔棋；对手确认后回退，拒绝或 10 秒超时后保留局面；每人每局 3 次请求机会，同一局面被拒后不能连续重发。
 - `game:resign` 的核心状态操作已实现：对局中认输后直接 finished，胜方为对手。
-- `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready/start。
+- `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready。
 - 断线/重连的核心连接状态标记已实现；刷新恢复通过 localStorage `playerId` + `roomCode` 完成。
 - 宽限期、正式 reconnect token、房间 TTL、空房清理和超时判负仍未做。
 - 多实例上线前接 Redis Adapter。
@@ -293,7 +296,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 非房间玩家不能开始或落子。已覆盖：`src/server/rooms.test.ts`。
 - 非当前回合不能落子。已覆盖：`src/server/rooms.test.ts`。
 - 客户端伪造 board/color 无效。当前 API 不接收客户端 board/color，只接收 `MoveIntent`；成员、回合、坐标和 `moveSeq` 校验已覆盖。
-- Socket.IO 双客户端创建、加入、ready、start、落子广播、非法连走和断线提示。已覆盖：`src/server/room-socket.test.ts`。
+- Socket.IO 双客户端创建、加入、ready 自动开局、落子广播、悔棋请求确认、非法连走和断线提示。已覆盖：`src/server/room-socket.test.ts`。
 - 浏览器双上下文创建、邀请 URL 加入、实时落子、非当前回合禁点、刷新恢复和断线提示。已手动验证。
 - 断线宽限期内可恢复。基础刷新恢复已验证；正式 token + deadline 未实现。
 - 宽限期后按规则处理。未完成，公开测试前补。

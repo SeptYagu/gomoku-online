@@ -735,3 +735,95 @@ opening-book-runtime：
 风险变化：
 
 - 版本号取构建时 HEAD。若服务器用环境变量覆盖 `NEXT_PUBLIC_APP_VERSION` 或 `APP_VERSION`，页面会显示覆盖值。
+
+## 19. 2026-06-25 好友房 ready 自动开局与联机悔棋请求
+
+本轮目标：
+
+- 好友房双方都 Ready 后自动开局，移除额外 Start 操作。
+- Ready / Unready 按钮使用绿色 / 红色状态。
+- 将单机顶部悔棋和新局按钮移入功能栏；好友房中原 Start 位置改为悔棋。
+- 联机悔棋必须向对手发送请求，对手棋盘中央弹框确认后才可回退。
+- 悔棋请求弹框必须选择拒绝或允许才消失；拒绝按钮带 10 秒倒计时，超时自动拒绝。
+- 每人每局只有 3 次悔棋请求机会；同一局面被拒后不能连续重发悔棋请求。
+
+实际完成：
+
+- `RoomStore` 增加服务端权威悔棋请求状态：
+  - `undoRequest` 快照包含请求方、目标方、moveSeq、请求时间和过期时间。
+  - 每个玩家快照包含 `undoRequestsRemaining`。
+  - 只允许最后一手落子者发起悔棋请求。
+  - 请求挂起时禁止继续落子，避免倒计时和棋局推进竞争。
+  - 对手同意后回退最后一手；拒绝或 10 秒过期后保留局面。
+  - 同一 `moveSeq` 被拒后，请求方不能在棋局未变化前连续重发。
+  - 重开房间会重置 ready、悔棋次数、拒绝局面和挂起请求。
+- Socket.IO 事件从直接 `game:undo` 改为：
+  - `game:undo-request`
+  - `game:undo-respond`
+- 好友房 UI：
+  - 双方 Ready 后直接进入 playing，不再需要 Start。
+  - Ready 按钮为绿色，Unready 为红色。
+  - 好友房功能栏显示 `Undo (剩余次数)`。
+  - 对手收到悔棋请求时，在棋盘中央显示不可关闭弹框，包含 Reject 倒计时和 Allow。
+  - 10 秒未处理时客户端自动发送拒绝，服务端也会在快照/操作时兜底过期。
+- 文档同步：
+  - 更新 `WEBSITE_BUILD_PLAN.md` 阶段 2 当前状态和验收标准。
+  - 更新 `docs/STAGE_2_REPORT.md`。
+  - 更新 `docs/logic/realtime-room-module.md`。
+
+修改文件：
+
+- `WEBSITE_BUILD_PLAN.md`
+- `docs/HANDOFF.md`
+- `docs/STAGE_2_REPORT.md`
+- `docs/logic/realtime-room-module.md`
+- `src/app/globals.css`
+- `src/components/GameShell.tsx`
+- `src/components/useFriendRoom.ts`
+- `src/i18n/dictionaries.ts`
+- `src/server/room-socket.test.ts`
+- `src/server/room-socket.ts`
+- `src/server/rooms.test.ts`
+- `src/server/rooms.ts`
+
+验证命令和结果：
+
+- `npm test`：通过，4 个测试文件、49 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3022 npm start` 后，用无头 Chrome + CDP + Socket.IO 客户端验证：
+  - 浏览器 Guest 加入 Host 创建的房间。
+  - 双方 Ready 后自动进入 `playing`。
+  - Host 落黑后发起悔棋请求。
+  - Guest 棋盘中央出现 `Undo request` 弹框，Reject 按钮显示 `Reject (10)`，Allow 可见。
+  - 弹框中心与棋盘中心偏差在验证阈值内。
+  - Guest 点击 Allow 后，服务端快照回退到空棋盘，`currentTurn` 回到 black。
+  - Host 再次落子并请求悔棋，Guest 不操作，10 秒后自动拒绝；棋子保留，弹框消失。
+  - 同一局面再次请求返回 `undo-request-rejected-position`。
+
+未验证项及原因：
+
+- 未验证真实服务器 `gomoku.yagu.ddns-ip.net`；真实服务器需要先部署本轮最新代码并重新 `npm run build && npm start`。
+- 本轮浏览器验收覆盖 English UI；六语言文案已补齐，但未逐语言跑浏览器回归。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
+
+下一步建议：
+
+- 部署最新版后，先确认页面底部 `version:` 是本轮提交号，再用两台电脑复测好友房 ready 自动开局和联机悔棋请求。
+- 真实服务器仍要继续关注 `/socket.io/` 代理和 `npm start` 自定义 online server；如果版本号正确但仍有 `xhr poll error`，优先查反向代理。
+
+风险变化：
+
+- 联机悔棋现在依赖房间内存状态；服务重启会清空挂起请求和次数记录，这与当前房间状态单进程内存限制一致。
+- 客户端会主动 10 秒自动拒绝；如果目标客户端断线，服务端会在下一次快照读取或房间操作时兜底过期，但不会主动向已断线客户端弹框。

@@ -11,6 +11,16 @@ export type RoomPlayerSnapshot = {
   connected: boolean;
   ready: boolean;
   seat: RoomPlayerSeat;
+  undoRequestsRemaining: number;
+};
+
+export type UndoRequestSnapshot = {
+  expiresAt: number;
+  id: string;
+  moveSeq: number;
+  requestedAt: number;
+  requesterSeat: RoomPlayerSeat;
+  targetSeat: RoomPlayerSeat;
 };
 
 export type RoomSnapshot = {
@@ -23,6 +33,7 @@ export type RoomSnapshot = {
   moves: Move[];
   players: RoomPlayerSnapshot[];
   status: RoomStatus;
+  undoRequest: UndoRequestSnapshot | null;
   updatedAt: number;
   winner: Stone | null;
   winLine: Point[];
@@ -53,13 +64,20 @@ export type RoomErrorCode =
   | "invalid-room-code"
   | "not-room-host"
   | "move-seq-mismatch"
+  | "no-moves-to-undo"
+  | "not-last-move-player"
+  | "not-undo-request-target"
   | "not-room-member"
   | "not-your-turn"
   | "room-code-exhausted"
   | "room-full"
   | "room-not-found"
   | "room-not-ready"
-  | "spot-unavailable";
+  | "spot-unavailable"
+  | "undo-request-limit"
+  | "undo-request-missing"
+  | "undo-request-pending"
+  | "undo-request-rejected-position";
 
 export type RoomError = {
   code: RoomErrorCode;
@@ -74,7 +92,9 @@ type RoomPlayer = {
   joinedAt: number;
   name: string;
   ready: boolean;
+  rejectedUndoMoveSeq: number | null;
   seat: RoomPlayerSeat;
+  undoRequestsRemaining: number;
 };
 
 type RoomState = {
@@ -85,8 +105,10 @@ type RoomState = {
   hostSeat: RoomPlayerSeat;
   moveSeq: number;
   moves: Move[];
+  nextUndoRequestId: number;
   players: RoomPlayer[];
   status: RoomStatus;
+  undoRequest: UndoRequestSnapshot | null;
   updatedAt: number;
   winner: Stone | null;
   winLine: Point[];
@@ -101,6 +123,8 @@ type RoomStoreOptions = {
 const DEFAULT_ROOM_CODE_LENGTH = 6;
 const MAX_ROOM_CODE_ATTEMPTS = 50;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const UNDO_REQUEST_LIMIT = 3;
+const UNDO_REQUEST_TIMEOUT_MS = 10_000;
 
 export class RoomStore {
   private readonly codeGenerator: () => string;
@@ -141,10 +165,14 @@ export class RoomStore {
           connected: true,
           joinedAt: now,
           ready: false,
+          rejectedUndoMoveSeq: null,
+          undoRequestsRemaining: UNDO_REQUEST_LIMIT,
           seat: "black"
         }
       ],
+      nextUndoRequestId: 1,
       status: "waiting",
+      undoRequest: null,
       updatedAt: now,
       winner: null,
       winLine: []
@@ -190,6 +218,8 @@ export class RoomStore {
       connected: true,
       joinedAt: this.now(),
       ready: false,
+      rejectedUndoMoveSeq: null,
+      undoRequestsRemaining: UNDO_REQUEST_LIMIT,
       seat
     });
     updateRoomStatus(room, this.now());
@@ -251,6 +281,10 @@ export class RoomStore {
 
     const { room } = found.value;
 
+    if (room.status === "playing") {
+      return success(getRoomSnapshot(room));
+    }
+
     if (room.status !== "ready") {
       return failure("room-not-ready", "Both players must be ready before the game starts.");
     }
@@ -273,6 +307,10 @@ export class RoomStore {
 
     if (room.status !== "playing") {
       return failure("game-not-playing", "The game is not accepting moves.");
+    }
+
+    if (room.undoRequest) {
+      return failure("undo-request-pending", "Resolve the pending undo request before playing.");
     }
 
     if (intent.expectedMoveSeq !== undefined && intent.expectedMoveSeq !== room.moveSeq) {
@@ -298,6 +336,9 @@ export class RoomStore {
     room.board = nextBoard;
     room.moves.push(move);
     room.moveSeq += 1;
+    for (const roomPlayer of room.players) {
+      roomPlayer.rejectedUndoMoveSeq = null;
+    }
     applyGameResult(room, result);
     room.updatedAt = this.now();
 
@@ -317,10 +358,113 @@ export class RoomStore {
       return failure("game-not-playing", "Only active games can be resigned.");
     }
 
+    room.undoRequest = null;
     room.status = "finished";
     room.winner = getOpponent(player.seat);
     room.winLine = [];
     room.updatedAt = this.now();
+
+    return success(getRoomSnapshot(room));
+  }
+
+  requestUndo(roomCode: string, playerId: string): RoomResult<RoomSnapshot> {
+    const found = this.getRoomAndPlayer(roomCode, playerId);
+
+    if (!found.ok) {
+      return found;
+    }
+
+    const { room, player } = found.value;
+    const now = this.now();
+
+    if (room.status !== "playing") {
+      return failure("game-not-playing", "Only active games can request undo.");
+    }
+
+    if (room.undoRequest) {
+      return failure("undo-request-pending", "An undo request is already waiting for a response.");
+    }
+
+    const lastMove = room.moves.at(-1);
+
+    if (!lastMove) {
+      return failure("no-moves-to-undo", "There is no move to undo.");
+    }
+
+    if (lastMove.stone !== player.seat) {
+      return failure("not-last-move-player", "Only the player who made the last move can request undo.");
+    }
+
+    if (player.undoRequestsRemaining <= 0) {
+      return failure("undo-request-limit", "No undo requests remain for this game.");
+    }
+
+    if (player.rejectedUndoMoveSeq === room.moveSeq) {
+      return failure("undo-request-rejected-position", "This board position already had an undo request rejected.");
+    }
+
+    player.undoRequestsRemaining -= 1;
+    room.undoRequest = {
+      expiresAt: now + UNDO_REQUEST_TIMEOUT_MS,
+      id: `${room.code}-${room.nextUndoRequestId}`,
+      moveSeq: room.moveSeq,
+      requestedAt: now,
+      requesterSeat: player.seat,
+      targetSeat: getOpponent(player.seat)
+    };
+    room.nextUndoRequestId += 1;
+    room.updatedAt = now;
+
+    return success(getRoomSnapshot(room));
+  }
+
+  respondToUndo(
+    roomCode: string,
+    playerId: string,
+    requestId: string,
+    accepted: boolean
+  ): RoomResult<RoomSnapshot> {
+    const room = this.getRoom(roomCode);
+
+    if (!room) {
+      return failure("room-not-found", "Room does not exist.");
+    }
+
+    const player = room.players.find((candidate) => candidate.id === playerId);
+
+    if (!player) {
+      return failure("not-room-member", "Player is not in this room.");
+    }
+
+    const undoRequest = room.undoRequest;
+    const now = this.now();
+
+    if (!undoRequest || undoRequest.id !== requestId) {
+      return failure("undo-request-missing", "Undo request is no longer active.");
+    }
+
+    if (player.seat !== undoRequest.targetSeat) {
+      return failure("not-undo-request-target", "Only the opponent can answer this undo request.");
+    }
+
+    room.undoRequest = null;
+
+    if (!accepted || now >= undoRequest.expiresAt) {
+      markUndoRequestRejected(room, undoRequest, now);
+      return success(getRoomSnapshot(room));
+    }
+
+    const lastMove = room.moves.at(-1);
+
+    if (!lastMove) {
+      return failure("no-moves-to-undo", "There is no move to undo.");
+    }
+
+    if (lastMove.stone !== undoRequest.requesterSeat || room.moveSeq !== undoRequest.moveSeq) {
+      return failure("undo-request-missing", "Undo request no longer matches the board position.");
+    }
+
+    undoLatestMove(room, now);
 
     return success(getRoomSnapshot(room));
   }
@@ -342,12 +486,16 @@ export class RoomStore {
     room.currentTurn = "black";
     room.moveSeq = 0;
     room.moves = [];
+    room.nextUndoRequestId = 1;
     room.status = "waiting";
+    room.undoRequest = null;
     room.winner = null;
     room.winLine = [];
 
     for (const roomPlayer of room.players) {
       roomPlayer.ready = false;
+      roomPlayer.rejectedUndoMoveSeq = null;
+      roomPlayer.undoRequestsRemaining = UNDO_REQUEST_LIMIT;
     }
 
     updateRoomStatus(room, this.now());
@@ -388,6 +536,8 @@ export class RoomStore {
       return failure("room-not-found", "Room does not exist.");
     }
 
+    expireUndoRequest(room, this.now());
+
     return success(getRoomSnapshot(room));
   }
 
@@ -416,6 +566,8 @@ export class RoomStore {
     if (!room) {
       return failure("room-not-found", "Room does not exist.");
     }
+
+    expireUndoRequest(room, this.now());
 
     const player = room.players.find((candidate) => candidate.id === playerId);
 
@@ -471,7 +623,57 @@ function updateRoomStatus(room: RoomState, now: number) {
     return;
   }
 
-  room.status = room.players.length === 2 && room.players.every((player) => player.ready) ? "ready" : "waiting";
+  room.status = room.players.length === 2 && room.players.every((player) => player.ready) ? "playing" : "waiting";
+  room.currentTurn = room.status === "playing" ? "black" : room.currentTurn;
+  room.updatedAt = now;
+}
+
+function replayRoomMoves(moves: Move[]): Board {
+  return moves.reduce((board, move) => placeStone(board, move, move.stone), createBoard());
+}
+
+function undoLatestMove(room: RoomState, now: number) {
+  const lastMove = room.moves.at(-1);
+
+  if (!lastMove) {
+    return;
+  }
+
+  const nextMoves = room.moves.slice(0, -1);
+
+  room.board = replayRoomMoves(nextMoves);
+  room.currentTurn = lastMove.stone;
+  room.moveSeq = nextMoves.length;
+  room.moves = nextMoves;
+  room.status = "playing";
+  room.winner = null;
+  room.winLine = [];
+  for (const roomPlayer of room.players) {
+    roomPlayer.rejectedUndoMoveSeq = null;
+  }
+  room.updatedAt = now;
+}
+
+function expireUndoRequest(room: RoomState, now: number): boolean {
+  const undoRequest = room.undoRequest;
+
+  if (!undoRequest || now < undoRequest.expiresAt) {
+    return false;
+  }
+
+  markUndoRequestRejected(room, undoRequest, now);
+
+  return true;
+}
+
+function markUndoRequestRejected(room: RoomState, undoRequest: UndoRequestSnapshot, now: number) {
+  const requester = room.players.find((player) => player.seat === undoRequest.requesterSeat);
+
+  if (requester) {
+    requester.rejectedUndoMoveSeq = undoRequest.moveSeq;
+  }
+
+  room.undoRequest = null;
   room.updatedAt = now;
 }
 
@@ -505,13 +707,15 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
     hostSeat: room.hostSeat,
     moveSeq: room.moveSeq,
     moves: room.moves.map((move) => ({ ...move })),
-    players: room.players.map(({ connected, name, ready, seat }) => ({
+    players: room.players.map(({ connected, name, ready, seat, undoRequestsRemaining }) => ({
       connected,
       name,
       ready,
-      seat
+      seat,
+      undoRequestsRemaining
     })),
     status: room.status,
+    undoRequest: room.undoRequest ? { ...room.undoRequest } : null,
     updatedAt: room.updatedAt,
     winner: room.winner,
     winLine: room.winLine.map((point) => ({ ...point }))

@@ -32,6 +32,7 @@ export type GameDictionary = {
   };
   room: {
     blackSeat: string;
+    allowUndo: string;
     connected: string;
     connection: string;
     copied: string;
@@ -57,6 +58,10 @@ export type GameDictionary = {
     selfStatus: string;
     startGame: string;
     unready: string;
+    undoRequestCopy: string;
+    undoRequestTitle: string;
+    undoRequestsRemaining: string;
+    rejectUndo: string;
     waitingForOpponent: string;
     waitingForReady: string;
     whiteSeat: string;
@@ -127,6 +132,7 @@ const en = {
     },
     room: {
       blackSeat: "Black",
+      allowUndo: "Allow",
       connected: "Connected",
       connection: "Connection",
       copied: "Copied",
@@ -152,6 +158,10 @@ const en = {
       selfStatus: "{name} is in the room.",
       startGame: "Start",
       unready: "Unready",
+      undoRequestCopy: "{name} asks to undo the last move.",
+      undoRequestTitle: "Undo request",
+      undoRequestsRemaining: "Undo requests: {count}",
+      rejectUndo: "Reject ({seconds})",
       waitingForOpponent: "Waiting for opponent",
       waitingForReady: "Waiting for ready",
       whiteSeat: "White",
@@ -218,6 +228,7 @@ const zh = {
     },
     room: {
       blackSeat: "黑棋",
+      allowUndo: "允许",
       connected: "已连接",
       connection: "连接",
       copied: "已复制",
@@ -243,6 +254,10 @@ const zh = {
       selfStatus: "{name} 已在房间中。",
       startGame: "开始",
       unready: "取消准备",
+      undoRequestCopy: "{name} 请求悔回上一手。",
+      undoRequestTitle: "悔棋请求",
+      undoRequestsRemaining: "悔棋请求：{count}",
+      rejectUndo: "拒绝（{seconds}）",
       waitingForOpponent: "等待对手加入",
       waitingForReady: "等待准备",
       whiteSeat: "白棋",
@@ -309,6 +324,7 @@ const fr = {
     },
     room: {
       blackSeat: "Noirs",
+      allowUndo: "Autoriser",
       connected: "Connecté",
       connection: "Connexion",
       copied: "Copié",
@@ -334,6 +350,10 @@ const fr = {
       selfStatus: "{name} est dans le salon.",
       startGame: "Démarrer",
       unready: "Annuler prêt",
+      undoRequestCopy: "{name} demande d'annuler le dernier coup.",
+      undoRequestTitle: "Demande d'annulation",
+      undoRequestsRemaining: "Demandes restantes : {count}",
+      rejectUndo: "Refuser ({seconds})",
       waitingForOpponent: "En attente d'un adversaire",
       waitingForReady: "En attente des joueurs",
       whiteSeat: "Blancs",
@@ -400,6 +420,7 @@ const es = {
     },
     room: {
       blackSeat: "Negras",
+      allowUndo: "Permitir",
       connected: "Conectado",
       connection: "Conexión",
       copied: "Copiado",
@@ -425,6 +446,10 @@ const es = {
       selfStatus: "{name} está en la sala.",
       startGame: "Empezar",
       unready: "No listo",
+      undoRequestCopy: "{name} pide deshacer el último movimiento.",
+      undoRequestTitle: "Solicitud de deshacer",
+      undoRequestsRemaining: "Solicitudes restantes: {count}",
+      rejectUndo: "Rechazar ({seconds})",
       waitingForOpponent: "Esperando rival",
       waitingForReady: "Esperando listos",
       whiteSeat: "Blancas",
@@ -491,6 +516,7 @@ const ru = {
     },
     room: {
       blackSeat: "Черные",
+      allowUndo: "Разрешить",
       connected: "Подключен",
       connection: "Связь",
       copied: "Скопировано",
@@ -516,6 +542,10 @@ const ru = {
       selfStatus: "{name} в комнате.",
       startGame: "Старт",
       unready: "Не готов",
+      undoRequestCopy: "{name} просит отменить последний ход.",
+      undoRequestTitle: "Запрос отмены",
+      undoRequestsRemaining: "Запросов осталось: {count}",
+      rejectUndo: "Отклонить ({seconds})",
       waitingForOpponent: "Ожидание соперника",
       waitingForReady: "Ожидание готовности",
       whiteSeat: "Белые",
@@ -582,6 +612,7 @@ const ar = {
     },
     room: {
       blackSeat: "الأسود",
+      allowUndo: "السماح",
       connected: "متصل",
       connection: "الاتصال",
       copied: "تم النسخ",
@@ -607,6 +638,10 @@ const ar = {
       selfStatus: "{name} داخل الغرفة.",
       startGame: "بدء",
       unready: "إلغاء الجاهزية",
+      undoRequestCopy: "{name} يطلب التراجع عن النقلة الأخيرة.",
+      undoRequestTitle: "طلب تراجع",
+      undoRequestsRemaining: "طلبات التراجع: {count}",
+      rejectUndo: "رفض ({seconds})",
       waitingForOpponent: "بانتظار الخصم",
       waitingForReady: "بانتظار الجاهزية",
       whiteSeat: "الأبيض",

@@ -52,13 +52,8 @@ describe("room socket handlers", () => {
 
       const hostSawReady = waitForEvent<RoomSnapshot>(host, "room:state");
       const readyAck = await emitAck(guest, "room:ready", { ready: true, roomCode });
-      expect(readyAck.ok ? readyAck.value.snapshot.status : null).toBe("ready");
-      expect((await hostSawReady).status).toBe("ready");
-
-      const guestSawStart = waitForEvent<RoomSnapshot>(guest, "room:state");
-      const startAck = await emitAck(host, "game:start", { roomCode });
-      expect(startAck.ok ? startAck.value.snapshot.status : null).toBe("playing");
-      expect((await guestSawStart).status).toBe("playing");
+      expect(readyAck.ok ? readyAck.value.snapshot.status : null).toBe("playing");
+      expect((await hostSawReady).status).toBe("playing");
 
       const guestSawMove = waitForEvent<RoomSnapshot>(guest, "room:state");
       const moveAck = await emitAck(host, "game:move", {
@@ -72,6 +67,28 @@ describe("room socket handlers", () => {
       const broadcastMove = await guestSawMove;
       expect(broadcastMove.board[7][7]).toBe("black");
       expect(broadcastMove.currentTurn).toBe("white");
+
+      const guestSawUndoRequest = waitForEvent<RoomSnapshot>(guest, "room:state");
+      const undoRequestAck = await emitAck(host, "game:undo-request", { roomCode });
+      expect(undoRequestAck.ok ? undoRequestAck.value.snapshot.undoRequest?.targetSeat : null).toBe("white");
+
+      const undoRequestSnapshot = await guestSawUndoRequest;
+      const requestId = undoRequestSnapshot.undoRequest?.id ?? "";
+
+      expect(undoRequestSnapshot.undoRequest?.requesterSeat).toBe("black");
+
+      const hostSawUndo = waitForEvent<RoomSnapshot>(host, "room:state");
+      const undoAck = await emitAck(guest, "game:undo-respond", { accepted: true, requestId, roomCode });
+      expect(undoAck.ok ? undoAck.value.snapshot.board[7][7] : "occupied").toBeNull();
+      expect(undoAck.ok ? undoAck.value.snapshot.currentTurn : null).toBe("black");
+      expect((await hostSawUndo).moves).toHaveLength(0);
+
+      const replayAck = await emitAck(host, "game:move", {
+        expectedMoveSeq: 0,
+        point: { row: 7, col: 7 },
+        roomCode
+      });
+      expect(replayAck.ok ? replayAck.value.snapshot.board[7][7] : null).toBe("black");
 
       const illegalAck = await emitAck(host, "game:move", {
         expectedMoveSeq: 1,
