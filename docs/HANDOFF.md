@@ -728,6 +728,37 @@ opening-book-runtime：
 待提交后推送到 origin/main。
 ```
 
+## 30. 2026-06-25 阶段 3 文档口径提交后的线上验证补记
+
+本轮目标：
+
+- 按 handoff 追加规则，补记上一段文档口径澄清提交后的推送和线上验证结果。
+- 不回改第 29 段提交前留下的“待提交/待推送”状态，保留窗口工作时间线。
+
+实际结果：
+
+- 第 29 段对应文档口径澄清已提交：
+  - `a9b2c8f Clarify stage 3 game record analysis scope`
+- 已推送到 `origin/main`。
+- 推送后等待 90 秒，运行线上验证：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net a9b2c8f
+```
+
+验证结果：
+
+- 页面加载通过。
+- 页面底部版本号显示 `version a9b2c8f`。
+- Socket.IO polling handshake 返回 sid。
+- Socket.IO websocket 连接通过。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，已实现、推送并通过真实服务器验证。
+- 棋谱提交/游客棋谱/本地分析/开局库数据口径，已写入 build plan、stage 3 plan、progress 和 rating/leaderboard 模块设计。
+- 下一步可进入阶段 3 小步 2：房间成员模型扩展，支持第三人及之后进入观战席。
+
 下一步建议：
 
 - 部署后直接看页面底部 `version:`，或让 Codex 读取真实页面 DOM 来确认服务器实际跑到哪个提交。
