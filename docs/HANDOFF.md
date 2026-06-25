@@ -1,6 +1,6 @@
 # 当前任务交接文档
 
-更新日期：2026-06-23
+更新日期：2026-06-25
 
 本文件是新窗口、新代理或后续阶段接手时的第一入口。每次阶段性完成后必须更新本文件。
 
@@ -166,6 +166,7 @@ node_modules/
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`
 - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`
 - `docs/HANDOFF.md`
+- `docs/subagents/README.md`
 - `docs/logic/README.md`
 
 模块研究：
@@ -259,6 +260,7 @@ AI Worker 与设置持久化：
 - 每个阶段遵循 `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`。
 - 参考项目研究遵循 `docs/STANDARD_RESEARCH_WORKFLOW.md`。
 - 每次阶段完成更新本文件。
+- 每次使用子代理后，把子代理报告落到 `docs/subagents/`，并在本文件记录路径。
 - 每次代码改动做测试、lint、build。
 - 每次 UI 改动做真实浏览器检查。
 - 每次提交前检查 `git status --short --branch` 和 `git diff --check`。
@@ -272,7 +274,12 @@ AI Worker 与设置持久化：
 - 不让客户端决定在线胜负、评分、房间状态。
 - 不把广告放在棋盘或按钮附近。
 
-## 13. 交接更新模板
+## 13. 本轮子代理报告
+
+- `docs/subagents/20260625-流程规范补强-实现-Hubble.md`
+- `docs/subagents/20260625-流程规范补强-验证-Nova.md`
+
+## 14. 交接更新模板
 
 每次阶段性完成后，把以下信息补进本文件：
 
@@ -280,6 +287,7 @@ AI Worker 与设置持久化：
 本轮目标：
 实际完成：
 修改文件：
+本轮子代理报告文档路径：
 验证命令和结果：
 未验证项及原因：
 最新提交：
