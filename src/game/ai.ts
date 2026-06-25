@@ -15,6 +15,7 @@ export type AiDifficulty = "normal" | "hard" | "expert" | "insane";
 type ChooseAiMoveOptions = {
   difficulty: AiDifficulty;
   moves?: Move[];
+  timeLimitMs?: number;
 };
 
 type SearchProfile = {
@@ -46,6 +47,7 @@ type TranspositionEntry = {
 type SearchState = {
   nodes: number;
   age: number;
+  deadline: SearchDeadline;
   cache: Map<number, TranspositionEntry>;
   threatCache: Map<string, ThreatSummary>;
   evaluationCache: Map<string, number>;
@@ -74,7 +76,14 @@ type ThreatSearchMode = "vcf" | "vct";
 
 type ThreatSearchState = {
   nodes: number;
+  deadline: SearchDeadline;
   cache: Map<string, boolean>;
+};
+
+type SearchDeadline = {
+  expiresAt: number;
+  timedOut: boolean;
+  checks: number;
 };
 
 type CandidateSnapshot = {
@@ -178,6 +187,13 @@ const OPENING_BOOK_PLIES: Record<AiDifficulty, number> = {
   hard: 4,
   expert: 6,
   insane: 8
+};
+
+const AI_TIME_LIMIT_MS: Record<AiDifficulty, number> = {
+  normal: 1_000,
+  hard: 5_000,
+  expert: 10_000,
+  insane: 30_000
 };
 
 const DIFFICULTY_RANK: Record<AiDifficulty, number> = {
@@ -318,9 +334,10 @@ const WINDOWS_BY_CELL = createWindowsByCell(SEARCH_WINDOWS);
 export function chooseAiMove(
   board: Board,
   aiStone: Stone,
-  { difficulty, moves }: ChooseAiMoveOptions
+  { difficulty, moves, timeLimitMs }: ChooseAiMoveOptions
 ): Point | null {
   const profile = SEARCH_PROFILES[difficulty];
+  const deadline = createSearchDeadline(getAiTimeLimitMs(difficulty, timeLimitMs));
   const candidatePool = getCandidateMoves(board);
   const candidates = orderCandidateMoves(board, candidatePool, aiStone, aiStone).slice(
     0,
@@ -356,19 +373,27 @@ export function chooseAiMove(
 
   const boardHash = getBoardHash(board);
   const forcedThreatMove =
-    findForcedThreatMove(board, boardHash, aiStone, profile, "vcf") ??
-    findForcedThreatMove(board, boardHash, aiStone, profile, "vct");
+    findForcedThreatMove(board, boardHash, aiStone, profile, "vcf", deadline) ??
+    findForcedThreatMove(board, boardHash, aiStone, profile, "vct", deadline);
 
   if (forcedThreatMove) {
     return forcedThreatMove;
   }
 
+  if (hasSearchTimedOut(deadline)) {
+    return candidates[0];
+  }
+
   const opponentThreatMove =
-    findForcedThreatMove(board, boardHash, opponent, profile, "vcf") ??
-    findForcedThreatMove(board, boardHash, opponent, profile, "vct");
+    findForcedThreatMove(board, boardHash, opponent, profile, "vcf", deadline) ??
+    findForcedThreatMove(board, boardHash, opponent, profile, "vct", deadline);
 
   if (opponentThreatMove && isValidMove(board, opponentThreatMove)) {
     return opponentThreatMove;
+  }
+
+  if (hasSearchTimedOut(deadline)) {
+    return candidates[0];
   }
 
   const forcingMove = findBestForkMove(board, candidates, aiStone, aiStone);
@@ -383,7 +408,37 @@ export function chooseAiMove(
     return forkBlock;
   }
 
-  return chooseSearchMove(board, candidates, aiStone, profile);
+  return chooseSearchMove(board, candidates, aiStone, profile, deadline);
+}
+
+export function getAiTimeLimitMs(difficulty: AiDifficulty, overrideMs?: number): number {
+  if (overrideMs !== undefined) {
+    return Math.max(0, Math.floor(overrideMs));
+  }
+
+  return AI_TIME_LIMIT_MS[difficulty];
+}
+
+function createSearchDeadline(timeLimitMs: number): SearchDeadline {
+  return {
+    expiresAt: performance.now() + timeLimitMs,
+    timedOut: false,
+    checks: 0
+  };
+}
+
+function hasSearchTimedOut(deadline: SearchDeadline): boolean {
+  if (deadline.timedOut) {
+    return true;
+  }
+
+  deadline.checks += 1;
+
+  if (performance.now() >= deadline.expiresAt) {
+    deadline.timedOut = true;
+  }
+
+  return deadline.timedOut;
 }
 
 export function scoreAiMove(board: Board, point: Point, aiStone: Stone): number {
@@ -816,13 +871,15 @@ function chooseSearchMove(
   board: Board,
   candidates: Point[],
   aiStone: Stone,
-  profile: SearchProfile
+  profile: SearchProfile,
+  deadline: SearchDeadline
 ): Point {
   const initialMoves = orderCandidateMoves(board, candidates, aiStone, aiStone).slice(0, profile.rootCandidates);
   const position = new SearchPosition(board);
   const searchState = {
     nodes: 0,
     age: 0,
+    deadline,
     cache: new Map<number, TranspositionEntry>(),
     threatCache: new Map<string, ThreatSummary>(),
     evaluationCache: new Map<string, number>()
@@ -840,6 +897,10 @@ function chooseSearchMove(
     let searchedMoves = 0;
 
     for (const point of orderedMoves) {
+      if (hasSearchTimedOut(deadline)) {
+        break;
+      }
+
       position.makeMove(point, aiStone);
 
       const result = getSearchGameResult(position, point, aiStone);
@@ -872,7 +933,7 @@ function chooseSearchMove(
         iterationBestMove = point;
       }
 
-      if (searchState.nodes >= profile.maxNodes) {
+      if (searchState.nodes >= profile.maxNodes || hasSearchTimedOut(deadline)) {
         break;
       }
     }
@@ -882,7 +943,7 @@ function chooseSearchMove(
       bestMove = iterationBestMove;
     }
 
-    if (!profile.iterativeDeepening || bestScore >= WIN_SCORE || searchState.nodes >= profile.maxNodes) {
+    if (!profile.iterativeDeepening || bestScore >= WIN_SCORE || searchState.nodes >= profile.maxNodes || deadline.timedOut) {
       break;
     }
   }
@@ -901,6 +962,10 @@ function minimax(
   searchState: SearchState
 ): number {
   searchState.nodes += 1;
+
+  if (hasSearchTimedOut(searchState.deadline)) {
+    return evaluateCachedPosition(position, aiStone, searchState);
+  }
 
   const cacheKey = getTranspositionKey(position.hash1, currentStone);
   const cacheLock = getTranspositionLock(position.hash2, currentStone);
@@ -924,9 +989,12 @@ function minimax(
     }
   }
 
-  if (depth <= 0 || searchState.nodes >= profile.maxNodes) {
+  if (depth <= 0 || searchState.nodes >= profile.maxNodes || hasSearchTimedOut(searchState.deadline)) {
     const tacticalScore =
-      depth <= 0 && profile.tacticalExtensionDepth > 0 && searchState.nodes < profile.maxNodes
+      depth <= 0 &&
+        profile.tacticalExtensionDepth > 0 &&
+        searchState.nodes < profile.maxNodes &&
+        !searchState.deadline.timedOut
         ? extendTacticalSearch(
             position,
             profile.tacticalExtensionDepth,
@@ -993,6 +1061,10 @@ function minimax(
     let bestMove = candidates[0];
 
     for (const point of candidates) {
+      if (hasSearchTimedOut(searchState.deadline)) {
+        break;
+      }
+
       position.makeMove(point, currentStone);
 
       const result = getSearchGameResult(position, point, currentStone);
@@ -1012,7 +1084,7 @@ function minimax(
 
       alpha = Math.max(alpha, best);
 
-      if (beta <= alpha || searchState.nodes >= profile.maxNodes) {
+      if (beta <= alpha || searchState.nodes >= profile.maxNodes || searchState.deadline.timedOut) {
         break;
       }
     }
@@ -1033,6 +1105,10 @@ function minimax(
   let bestMove = candidates[0];
 
   for (const point of candidates) {
+    if (hasSearchTimedOut(searchState.deadline)) {
+      break;
+    }
+
     position.makeMove(point, currentStone);
 
     const result = getSearchGameResult(position, point, currentStone);
@@ -1052,7 +1128,7 @@ function minimax(
 
     beta = Math.min(beta, best);
 
-    if (beta <= alpha || searchState.nodes >= profile.maxNodes) {
+    if (beta <= alpha || searchState.nodes >= profile.maxNodes || searchState.deadline.timedOut) {
       break;
     }
   }
@@ -1079,7 +1155,7 @@ function extendTacticalSearch(
   profile: SearchProfile,
   searchState: SearchState
 ): number | null {
-  if (depth <= 0 || searchState.nodes >= profile.maxNodes) {
+  if (depth <= 0 || searchState.nodes >= profile.maxNodes || hasSearchTimedOut(searchState.deadline)) {
     return evaluateCachedPosition(position, aiStone, searchState);
   }
 
@@ -1093,7 +1169,7 @@ function extendTacticalSearch(
     let best = Number.NEGATIVE_INFINITY;
 
     for (const point of candidates) {
-      if (searchState.nodes >= profile.maxNodes) {
+      if (searchState.nodes >= profile.maxNodes || hasSearchTimedOut(searchState.deadline)) {
         break;
       }
 
@@ -1131,10 +1207,10 @@ function extendTacticalSearch(
     return best;
   }
 
-  let best = Number.POSITIVE_INFINITY;
+    let best = Number.POSITIVE_INFINITY;
 
   for (const point of candidates) {
-    if (searchState.nodes >= profile.maxNodes) {
+    if (searchState.nodes >= profile.maxNodes || hasSearchTimedOut(searchState.deadline)) {
       break;
     }
 
@@ -1456,7 +1532,8 @@ function findForcedThreatMove(
   positionHash: number,
   attackerStone: Stone,
   profile: SearchProfile,
-  mode: ThreatSearchMode
+  mode: ThreatSearchMode,
+  deadline: SearchDeadline
 ): Point | null {
   const depth = getThreatSearchDepth(profile, mode);
 
@@ -1466,12 +1543,13 @@ function findForcedThreatMove(
 
   const state = {
     nodes: 0,
+    deadline,
     cache: new Map<string, boolean>()
   } satisfies ThreatSearchState;
-  const moves = getThreatAttackMoves(board, attackerStone, profile, mode);
+  const moves = getThreatAttackMoves(board, attackerStone, profile, mode, deadline);
 
   for (const point of moves) {
-    if (state.nodes >= profile.threatSearchNodes) {
+    if (state.nodes >= profile.threatSearchNodes || hasSearchTimedOut(deadline)) {
       break;
     }
 
@@ -1504,7 +1582,7 @@ function canForceThreatWin(
   mode: ThreatSearchMode,
   state: ThreatSearchState
 ): boolean {
-  if (depth <= 0 || state.nodes >= profile.threatSearchNodes) {
+  if (depth <= 0 || state.nodes >= profile.threatSearchNodes || hasSearchTimedOut(state.deadline)) {
     return false;
   }
 
@@ -1532,10 +1610,10 @@ function canForceThreatWin(
       return true;
     }
 
-    const moves = getThreatAttackMoves(board, attackerStone, profile, mode);
+    const moves = getThreatAttackMoves(board, attackerStone, profile, mode, state.deadline);
 
     for (const point of moves) {
-      if (state.nodes >= profile.threatSearchNodes) {
+      if (state.nodes >= profile.threatSearchNodes || hasSearchTimedOut(state.deadline)) {
         break;
       }
 
@@ -1566,7 +1644,7 @@ function canForceThreatWin(
     return false;
   }
 
-  const replies = getThreatDefenseMoves(board, currentStone, attackerStone, profile, mode);
+  const replies = getThreatDefenseMoves(board, currentStone, attackerStone, profile, mode, state.deadline);
 
   if (replies.length === 0) {
     state.cache.set(cacheKey, false);
@@ -1574,7 +1652,7 @@ function canForceThreatWin(
   }
 
   for (const point of replies) {
-    if (state.nodes >= profile.threatSearchNodes) {
+    if (state.nodes >= profile.threatSearchNodes || hasSearchTimedOut(state.deadline)) {
       state.cache.set(cacheKey, false);
       return false;
     }
@@ -1605,10 +1683,19 @@ function getThreatAttackMoves(
   board: Board,
   attackerStone: Stone,
   profile: SearchProfile,
-  mode: ThreatSearchMode
+  mode: ThreatSearchMode,
+  deadline: SearchDeadline
 ): Point[] {
+  if (hasSearchTimedOut(deadline)) {
+    return [];
+  }
+
   const candidatePool = getCandidateMoves(board);
   const winningMoves = findWinningMoves(board, candidatePool, attackerStone);
+
+  if (hasSearchTimedOut(deadline)) {
+    return [];
+  }
 
   if (winningMoves.length > 0) {
     return orderCandidateMoves(board, winningMoves, attackerStone, attackerStone).slice(
@@ -1628,10 +1715,19 @@ function getThreatDefenseMoves(
   defenderStone: Stone,
   attackerStone: Stone,
   profile: SearchProfile,
-  mode: ThreatSearchMode
+  mode: ThreatSearchMode,
+  deadline: SearchDeadline
 ): Point[] {
+  if (hasSearchTimedOut(deadline)) {
+    return [];
+  }
+
   const candidatePool = getCandidateMoves(board);
   const defenderWins = findWinningMoves(board, candidatePool, defenderStone);
+
+  if (hasSearchTimedOut(deadline)) {
+    return [];
+  }
 
   if (defenderWins.length > 0) {
     return orderCandidateMoves(board, defenderWins, defenderStone, defenderStone).slice(
@@ -1641,6 +1737,10 @@ function getThreatDefenseMoves(
   }
 
   const attackerWins = findWinningMoves(board, candidatePool, attackerStone);
+
+  if (hasSearchTimedOut(deadline)) {
+    return [];
+  }
 
   if (attackerWins.length > 0) {
     return orderCandidateMoves(board, attackerWins, defenderStone, defenderStone);
@@ -1850,6 +1950,10 @@ function cacheSearchScore(
   flag: TranspositionFlag = "exact",
   bestMove?: Point
 ): number {
+  if (searchState.deadline.timedOut) {
+    return score;
+  }
+
   const existing = searchState.cache.get(key);
 
   if (!existing || existing.lock === lock || existing.depth <= depth || existing.age < searchState.age - 2) {

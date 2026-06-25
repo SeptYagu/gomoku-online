@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, CircleDot, RotateCcw, Undo2, UserRound, Users, Wifi } from "lucide-react";
-import { chooseAiMove, type AiDifficulty } from "@/game/ai";
+import { chooseAiMove, getAiTimeLimitMs, type AiDifficulty } from "@/game/ai";
 import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
@@ -31,6 +31,8 @@ type AiWorkerResponse = {
 };
 
 const AI_DIFFICULTIES: AiDifficulty[] = ["normal", "hard", "expert", "insane"];
+const AI_WORKER_TIMEOUT_GRACE_MS = 750;
+const AI_EMERGENCY_TIME_LIMIT_MS = 50;
 
 export function GameShell({ dictionary, locale }: GameShellProps) {
   const [board, setBoard] = useState<Board>(() => createBoard());
@@ -42,6 +44,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const [firstPlayer, setFirstPlayer] = useState<FirstPlayer>("human");
   const [isAiThinking, setIsAiThinking] = useState(false);
   const aiWorkerRef = useRef<Worker | null>(null);
+  const aiWorkerTimeoutRef = useRef<number | null>(null);
   const aiRequestIdRef = useRef(0);
 
   const winningKey = useMemo(() => {
@@ -56,6 +59,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     return () => {
       aiWorkerRef.current?.terminate();
       aiWorkerRef.current = null;
+      clearAiWorkerTimeout();
     };
   }, []);
 
@@ -197,6 +201,16 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     setIsAiThinking(false);
     aiWorkerRef.current?.terminate();
     aiWorkerRef.current = null;
+    clearAiWorkerTimeout();
+  }
+
+  function clearAiWorkerTimeout() {
+    if (aiWorkerTimeoutRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(aiWorkerTimeoutRef.current);
+    aiWorkerTimeoutRef.current = null;
   }
 
   function requestAiMove(
@@ -205,19 +219,39 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     aiStone: Stone,
     difficulty: AiDifficulty
   ): Promise<Point | null> {
+    const timeLimitMs = getAiTimeLimitMs(difficulty);
+
     if (typeof Worker === "undefined") {
-      return Promise.resolve(chooseAiMove(currentBoard, aiStone, { difficulty, moves: currentMoves }));
+      return Promise.resolve(chooseAiMove(currentBoard, aiStone, { difficulty, moves: currentMoves, timeLimitMs }));
     }
 
     return new Promise((resolve) => {
       aiWorkerRef.current?.terminate();
+      clearAiWorkerTimeout();
 
       const worker = new Worker(new URL("../game/ai-worker.ts", import.meta.url), {
         type: "module"
       });
       aiWorkerRef.current = worker;
+      aiWorkerTimeoutRef.current = window.setTimeout(() => {
+        worker.terminate();
+
+        if (aiWorkerRef.current === worker) {
+          aiWorkerRef.current = null;
+        }
+
+        aiWorkerTimeoutRef.current = null;
+        resolve(
+          chooseAiMove(currentBoard, aiStone, {
+            difficulty,
+            moves: currentMoves,
+            timeLimitMs: AI_EMERGENCY_TIME_LIMIT_MS
+          })
+        );
+      }, timeLimitMs + AI_WORKER_TIMEOUT_GRACE_MS);
 
       worker.onmessage = (event: MessageEvent<AiWorkerResponse>) => {
+        clearAiWorkerTimeout();
         worker.terminate();
 
         if (aiWorkerRef.current === worker) {
@@ -228,16 +262,17 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       };
 
       worker.onerror = () => {
+        clearAiWorkerTimeout();
         worker.terminate();
 
         if (aiWorkerRef.current === worker) {
           aiWorkerRef.current = null;
         }
 
-        resolve(chooseAiMove(currentBoard, aiStone, { difficulty, moves: currentMoves }));
+        resolve(chooseAiMove(currentBoard, aiStone, { difficulty, moves: currentMoves, timeLimitMs }));
       };
 
-      worker.postMessage({ board: currentBoard, moves: currentMoves, aiStone, difficulty });
+      worker.postMessage({ board: currentBoard, moves: currentMoves, aiStone, difficulty, timeLimitMs });
     });
   }
 
@@ -428,7 +463,10 @@ function createInitialGameState(
   }
 
   const aiStone = getAiStone(firstPlayer);
-  const aiPoint = chooseAiMove(emptyBoard, aiStone, { difficulty: aiDifficulty });
+  const aiPoint = chooseAiMove(emptyBoard, aiStone, {
+    difficulty: aiDifficulty,
+    timeLimitMs: getAiTimeLimitMs(aiDifficulty)
+  });
 
   if (!aiPoint) {
     return {

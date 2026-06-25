@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseAiMove, getThreatSummaryAfterMove } from "./ai";
+import { chooseAiMove, getAiTimeLimitMs, getThreatSummaryAfterMove } from "./ai";
 import { createBoard, getGameResult, getLegalMoves, placeStone } from "./board";
 import type { Board, Move, Point, Stone } from "./types";
 
@@ -21,6 +21,13 @@ describe("ai", () => {
       row: 7,
       col: 7
     });
+  });
+
+  it("uses bounded maximum think times by difficulty", () => {
+    expect(getAiTimeLimitMs("normal")).toBe(1_000);
+    expect(getAiTimeLimitMs("hard")).toBe(5_000);
+    expect(getAiTimeLimitMs("expert")).toBe(10_000);
+    expect(getAiTimeLimitMs("insane")).toBe(30_000);
   });
 
   it("takes an immediate winning move before searching", () => {
@@ -214,6 +221,24 @@ describe("ai", () => {
     expect(insaneMove).not.toBeNull();
     expect(getLegalMoves(benchmark.board)).toContainEqual(insaneMove);
     expect(insaneDuration).toBeLessThan(8_000);
+  });
+
+  it("returns a legal best-so-far move when the search budget is exhausted", () => {
+    const detachedOpening = playMoves([
+      ["black", 7, 7],
+      ["white", 5, 5]
+    ]);
+    const started = performance.now();
+    const move = chooseAiMove(detachedOpening.board, "black", {
+      difficulty: "insane",
+      moves: detachedOpening.moves,
+      timeLimitMs: 5
+    });
+    const duration = performance.now() - started;
+
+    expect(move).not.toBeNull();
+    expect(getLegalMoves(detachedOpening.board)).toContainEqual(move);
+    expect(duration).toBeLessThan(1_000);
   });
 });
 

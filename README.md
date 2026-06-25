@@ -55,6 +55,15 @@ npm run arena -- --games 100 --baseline HEAD^ --candidate current --difficulty i
 
 默认不预置随机开局，让双方自然使用自己的开局库。需要扩大样本时可以加 `--random-openings 2`，但这会让早盘更早进入搜索，疯狂档耗时会明显增加。
 
+## AI 思考预算
+
+AI 的时间是最大预算，不会固定等待。开局库、必胜/必挡、或搜索提前完成时会立即返回；复杂局面超时后返回当前已完成搜索里的最佳走法。
+
+- Normal：1 秒
+- Hard：5 秒
+- Expert：10 秒
+- Insane：30 秒
+
 ## 项目文档
 
 - `WEBSITE_BUILD_PLAN.md`：总体搭建计划。

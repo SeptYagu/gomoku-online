@@ -6,6 +6,7 @@ type AiWorkerRequest = {
   moves: Move[];
   aiStone: Stone;
   difficulty: AiDifficulty;
+  timeLimitMs: number;
 };
 
 type AiWorkerResponse = {
@@ -13,8 +14,8 @@ type AiWorkerResponse = {
 };
 
 self.onmessage = (event: MessageEvent<AiWorkerRequest>) => {
-  const { board, moves, aiStone, difficulty } = event.data;
-  const point = chooseAiMove(board, aiStone, { difficulty, moves });
+  const { board, moves, aiStone, difficulty, timeLimitMs } = event.data;
+  const point = chooseAiMove(board, aiStone, { difficulty, moves, timeLimitMs });
 
   self.postMessage({ point } satisfies AiWorkerResponse);
 };
