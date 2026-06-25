@@ -1,9 +1,11 @@
 import type { Stone } from "../game/types";
-import type { RoomError, RoomSnapshot } from "./rooms";
+import type { RoomError, RoomParticipantRole, RoomSnapshot } from "./rooms";
 
 export type RoomClientState = {
+  name: string;
   playerId: string;
-  seat: Stone;
+  role: RoomParticipantRole;
+  seat: Stone | null;
   snapshot: RoomSnapshot;
 };
 

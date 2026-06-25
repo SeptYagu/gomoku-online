@@ -57,6 +57,9 @@ export type GameDictionary = {
     roomCode: string;
     roomCodePlaceholder: string;
     selfStatus: string;
+    spectatorSeat: string;
+    spectatorStatus: string;
+    spectators: string;
     startGame: string;
     unready: string;
     undoRequestCopy: string;
@@ -158,6 +161,9 @@ const en = {
       roomCode: "Room code",
       roomCodePlaceholder: "Random code",
       selfStatus: "{name} is in the room.",
+      spectatorSeat: "Spectator",
+      spectatorStatus: "{name} is watching.",
+      spectators: "Spectators",
       startGame: "Start",
       unready: "Unready",
       undoRequestCopy: "{name} asks to undo the last move.",
@@ -255,6 +261,9 @@ const zh = {
       roomCode: "房间码",
       roomCodePlaceholder: "随机房间码",
       selfStatus: "{name} 已在房间中。",
+      spectatorSeat: "观战席",
+      spectatorStatus: "{name} 正在观战。",
+      spectators: "观战者",
       startGame: "开始",
       unready: "取消准备",
       undoRequestCopy: "{name} 请求悔回上一手。",
@@ -352,6 +361,9 @@ const fr = {
       roomCode: "Code du salon",
       roomCodePlaceholder: "Code aléatoire",
       selfStatus: "{name} est dans le salon.",
+      spectatorSeat: "Spectateur",
+      spectatorStatus: "{name} regarde la partie.",
+      spectators: "Spectateurs",
       startGame: "Démarrer",
       unready: "Annuler prêt",
       undoRequestCopy: "{name} demande d'annuler le dernier coup.",
@@ -449,6 +461,9 @@ const es = {
       roomCode: "Código",
       roomCodePlaceholder: "Código aleatorio",
       selfStatus: "{name} está en la sala.",
+      spectatorSeat: "Espectador",
+      spectatorStatus: "{name} está mirando.",
+      spectators: "Espectadores",
       startGame: "Empezar",
       unready: "No listo",
       undoRequestCopy: "{name} pide deshacer el último movimiento.",
@@ -546,6 +561,9 @@ const ru = {
       roomCode: "Код комнаты",
       roomCodePlaceholder: "Случайный код",
       selfStatus: "{name} в комнате.",
+      spectatorSeat: "Зритель",
+      spectatorStatus: "{name} наблюдает за игрой.",
+      spectators: "Зрители",
       startGame: "Старт",
       unready: "Не готов",
       undoRequestCopy: "{name} просит отменить последний ход.",
@@ -643,6 +661,9 @@ const ar = {
       roomCode: "رمز الغرفة",
       roomCodePlaceholder: "رمز عشوائي",
       selfStatus: "{name} داخل الغرفة.",
+      spectatorSeat: "مشاهد",
+      spectatorStatus: "{name} يشاهد المباراة.",
+      spectators: "المشاهدون",
       startGame: "بدء",
       unready: "إلغاء الجاهزية",
       undoRequestCopy: "{name} يطلب التراجع عن النقلة الأخيرة.",

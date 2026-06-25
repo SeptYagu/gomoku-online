@@ -26,11 +26,12 @@ describe("RoomStore", () => {
       }
     ]);
     expect(created.players[0]).not.toHaveProperty("id");
+    expect(created.spectators).toEqual([]);
     expect(created.board).toHaveLength(15);
     expect(created.board.flat().every((cell) => cell === null)).toBe(true);
   });
 
-  it("normalizes room codes and rejects full, duplicate, or invalid joins", () => {
+  it("normalizes room codes and rejects duplicate or invalid joins", () => {
     const store = createTestRoomStore(["ROOM01"]);
     expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
 
@@ -45,14 +46,71 @@ describe("RoomStore", () => {
       ok: false,
       error: { code: "duplicate-name" }
     });
-    expect(store.joinRoom("ROOM01", { playerId: "player-4", playerName: "Cara" })).toMatchObject({
-      ok: false,
-      error: { code: "room-full" }
-    });
     expect(store.joinRoom("MISSING", { playerId: "player-5", playerName: "Dana" })).toMatchObject({
       ok: false,
       error: { code: "room-not-found" }
     });
+  });
+
+  it("puts third and later room members into spectator seats", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
+
+    const watched = expectOk(store.joinRoom(created.code, { playerId: "player-3", playerName: "Cara" }));
+
+    expect(watched.players.map((player) => player.seat)).toEqual(["black", "white"]);
+    expect(watched.spectators).toEqual([
+      {
+        connected: true,
+        joinedAt: 1_780_000_000_000 + 1,
+        name: "Cara"
+      }
+    ]);
+    expect(store.getParticipantRole(created.code, "player-3")).toEqual({
+      name: "Cara",
+      role: "spectator",
+      seat: null
+    });
+    expect(store.joinRoom(created.code, { playerId: "player-4", playerName: "Cara" })).toMatchObject({
+      ok: false,
+      error: { code: "duplicate-name" }
+    });
+  });
+
+  it("blocks spectators from player-only actions while keeping them connected to snapshots", () => {
+    const { room, store } = createStartedRoom();
+    const watched = expectOk(store.joinRoom(room.code, { playerId: "spectator-1", playerName: "Cara" }));
+
+    expect(watched.spectators).toHaveLength(1);
+    expect(store.setPlayerReady(room.code, "spectator-1")).toMatchObject({
+      ok: false,
+      error: { code: "not-room-player" }
+    });
+    expect(store.applyMove(room.code, { playerId: "spectator-1", point: { row: 7, col: 7 } })).toMatchObject({
+      ok: false,
+      error: { code: "not-room-player" }
+    });
+    expect(store.requestUndo(room.code, "spectator-1")).toMatchObject({
+      ok: false,
+      error: { code: "not-room-player" }
+    });
+    expect(store.resignGame(room.code, "spectator-1")).toMatchObject({
+      ok: false,
+      error: { code: "not-room-player" }
+    });
+
+    const disconnected = expectOk(store.markDisconnected(room.code, "spectator-1"));
+
+    expect(disconnected.spectators[0]).toMatchObject({ connected: false, name: "Cara" });
+
+    const reconnected = expectOk(
+      store.reconnectRoom(room.code, { playerId: "spectator-1", playerName: "Cara Back" })
+    );
+
+    expect(reconnected.spectators[0]).toMatchObject({ connected: true, name: "Cara Back" });
+    expect(expectOk(store.leaveRoom(room.code, "spectator-1")).spectators).toEqual([]);
   });
 
   it("starts automatically when both players are ready", () => {

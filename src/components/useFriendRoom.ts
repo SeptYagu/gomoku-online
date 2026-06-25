@@ -60,15 +60,17 @@ export function useFriendRoom(): FriendRoomController {
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
 
-  const currentPlayer = room ? getPlayerBySeat(room.snapshot, room.seat) : null;
+  const isPlayer = room?.role === "player" && room.seat !== null;
+  const currentPlayer = isPlayer ? getPlayerBySeat(room.snapshot, room.seat) : null;
   const ready = currentPlayer?.ready ?? false;
   const lastMove = room?.snapshot.moves.at(-1) ?? null;
   const hasPendingUndoRequest = room?.snapshot.undoRequest !== null && room?.snapshot.undoRequest !== undefined;
-  const canReady = room !== null && room.snapshot.status === "waiting";
-  const canPlay = room?.snapshot.status === "playing" && room.snapshot.currentTurn === room.seat && !hasPendingUndoRequest;
-  const canResign = room?.snapshot.status === "playing";
-  const canRestart = room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
+  const canReady = isPlayer && room?.snapshot.status === "waiting";
+  const canPlay = isPlayer && room?.snapshot.status === "playing" && room.snapshot.currentTurn === room.seat && !hasPendingUndoRequest;
+  const canResign = isPlayer && room?.snapshot.status === "playing";
+  const canRestart = isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
   const canUndo =
+    isPlayer &&
     room?.snapshot.status === "playing" &&
     lastMove?.stone === room.seat &&
     !hasPendingUndoRequest &&
@@ -118,8 +120,7 @@ export function useFriendRoom(): FriendRoomController {
       return;
     }
 
-    const acknowledgedPlayer = getPlayerBySeat(response.value.snapshot, response.value.seat);
-    const acknowledgedPlayerName = acknowledgedPlayer?.name ?? "Player";
+    const acknowledgedPlayerName = response.value.name || "Player";
 
     setError(null);
     setRoom(response.value);
@@ -335,7 +336,11 @@ export function useFriendRoom(): FriendRoomController {
   };
 }
 
-function getPlayerBySeat(snapshot: RoomSnapshot, seat: Stone) {
+function getPlayerBySeat(snapshot: RoomSnapshot, seat: Stone | null) {
+  if (!seat) {
+    return null;
+  }
+
   return snapshot.players.find((player) => player.seat === seat) ?? null;
 }
 

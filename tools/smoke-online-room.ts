@@ -27,15 +27,17 @@ async function main(): Promise<void> {
   const suffix = Date.now().toString(36);
   const host = await connectClient(baseUrl);
   const guest = await connectClient(baseUrl);
+  const spectator = await connectClient(baseUrl);
 
   try {
     console.log(`Online room smoke: ${baseUrl}`);
     console.log(`PASS connect host - ${host.io.engine.transport.name}`);
     console.log(`PASS connect guest - ${guest.io.engine.transport.name}`);
+    console.log(`PASS connect spectator - ${spectator.io.engine.transport.name}`);
 
-    const roomCode = await createAndJoinRoom(host, guest, suffix);
+    const roomCode = await createAndJoinRoom(host, guest, spectator, suffix);
 
-    await playGameOne(host, guest, roomCode);
+    await playGameOne(host, guest, spectator, roomCode);
     await restartRoom(host, guest, roomCode, "white", 2);
     await playGameTwo(host, guest, roomCode);
     await restartRoom(host, guest, roomCode, "black", 3);
@@ -43,10 +45,16 @@ async function main(): Promise<void> {
   } finally {
     host.disconnect();
     guest.disconnect();
+    spectator.disconnect();
   }
 }
 
-async function createAndJoinRoom(host: SmokeSocket, guest: SmokeSocket, suffix: string): Promise<string> {
+async function createAndJoinRoom(
+  host: SmokeSocket,
+  guest: SmokeSocket,
+  spectator: SmokeSocket,
+  suffix: string
+): Promise<string> {
   const createAck = await emitAck(host, "room:create", {
     playerId: `smoke-host-${suffix}`,
     playerName: `Smoke Host ${suffix}`
@@ -71,12 +79,55 @@ async function createAndJoinRoom(host: SmokeSocket, guest: SmokeSocket, suffix: 
   await hostSawJoin;
   console.log("PASS room:join - two players synced");
 
+  const hostSawSpectator = waitForState(
+    host,
+    (snapshot) => snapshot.code === roomCode && snapshot.spectators.some((viewer) => viewer.name.includes("Spectator"))
+  );
+  const spectatorAck = await emitAck(spectator, "room:join", {
+    playerId: `smoke-spectator-${suffix}`,
+    playerName: `Smoke Spectator ${suffix}`,
+    roomCode
+  });
+  const watchedRoom = requireOk(spectatorAck, "room:join spectator").snapshot;
+
+  assert(spectatorAck.ok && spectatorAck.value.role === "spectator", "third joiner should be a spectator");
+  assert(spectatorAck.ok && spectatorAck.value.seat === null, "spectator should not receive a player seat");
+  assert(watchedRoom.players.length === 2, "spectator join should keep two player seats");
+  assert(watchedRoom.spectators.length === 1, "spectator join should add one spectator");
+  await hostSawSpectator;
+  await expectAckError(
+    spectator,
+    "room:ready",
+    { ready: true, roomCode },
+    "not-room-player",
+    "spectator ready denied"
+  );
+  console.log("PASS room:join spectator - watcher seated without displacing players");
+
   return roomCode;
 }
 
-async function playGameOne(host: SmokeSocket, guest: SmokeSocket, roomCode: string): Promise<void> {
+async function playGameOne(
+  host: SmokeSocket,
+  guest: SmokeSocket,
+  spectator: SmokeSocket,
+  roomCode: string
+): Promise<void> {
   await readyGame(host, guest, roomCode, "black", 1);
+  const spectatorSawMove = waitForState(
+    spectator,
+    (snapshot) => snapshot.code === roomCode && snapshot.board[7]?.[7] === "black"
+  );
   await playMove(host, guest, roomCode, { row: 7, col: 7 }, "black", 0, "game 1 black center");
+  await spectatorSawMove;
+  console.log("PASS spectator move sync - watcher saw game 1 black center");
+  await expectAckError(
+    spectator,
+    "game:move",
+    { expectedMoveSeq: 1, point: { row: 7, col: 8 }, roomCode },
+    "not-room-player",
+    "spectator move denied"
+  );
   await expectAckError(guest, "game:undo-request", { roomCode }, "not-last-move-player", "game 1 white undo denied");
 
   const requestId = await requestUndo(host, guest, roomCode, "black", "white", "game 1 black undo request");

@@ -21,6 +21,7 @@ describe("room socket handlers", () => {
     try {
       const host = await harness.connectClient();
       const guest = await harness.connectClient();
+      const spectator = await harness.connectClient();
 
       const createAck = await emitAck(host, "room:create", {
         playerId: "host-player",
@@ -43,8 +44,30 @@ describe("room socket handlers", () => {
       });
 
       expect(joinAck.ok).toBe(true);
+      expect(joinAck.ok ? joinAck.value.role : null).toBe("player");
       expect(joinAck.ok ? joinAck.value.seat : null).toBe("white");
       expect((await hostSawJoin).players).toHaveLength(2);
+
+      const hostSawSpectator = waitForEventMatching<RoomSnapshot>(
+        host,
+        "room:state",
+        (snapshot) => snapshot.spectators.some((candidate) => candidate.name === "Watcher")
+      );
+      const spectatorAck = await emitAck(spectator, "room:join", {
+        playerId: "spectator-player",
+        playerName: "Watcher",
+        roomCode
+      });
+
+      expect(spectatorAck.ok).toBe(true);
+      expect(spectatorAck.ok ? spectatorAck.value.role : null).toBe("spectator");
+      expect(spectatorAck.ok ? spectatorAck.value.seat : "occupied").toBeNull();
+      expect(spectatorAck.ok ? spectatorAck.value.snapshot.spectators : []).toHaveLength(1);
+      expect(await emitAck(spectator, "room:ready", { ready: true, roomCode })).toMatchObject({
+        ok: false,
+        error: { code: "not-room-player" }
+      });
+      await hostSawSpectator;
 
       const guestSawHostReady = waitForEvent<RoomSnapshot>(guest, "room:state");
       const hostReadyAck = await emitAck(host, "room:ready", { ready: true, roomCode });
@@ -57,6 +80,11 @@ describe("room socket handlers", () => {
       expect((await hostSawReady).status).toBe("playing");
 
       const guestSawMove = waitForEvent<RoomSnapshot>(guest, "room:state");
+      const spectatorSawMove = waitForEventMatching<RoomSnapshot>(
+        spectator,
+        "room:state",
+        (snapshot) => snapshot.board[7][7] === "black"
+      );
       const moveAck = await emitAck(host, "game:move", {
         expectedMoveSeq: 0,
         point: { row: 7, col: 7 },
@@ -68,6 +96,12 @@ describe("room socket handlers", () => {
       const broadcastMove = await guestSawMove;
       expect(broadcastMove.board[7][7]).toBe("black");
       expect(broadcastMove.currentTurn).toBe("white");
+      expect((await spectatorSawMove).board[7][7]).toBe("black");
+      expect(await emitAck(spectator, "game:move", { expectedMoveSeq: 1, point: { row: 7, col: 8 }, roomCode }))
+        .toMatchObject({
+          ok: false,
+          error: { code: "not-room-player" }
+        });
 
       const guestSawUndoRequest = waitForEvent<RoomSnapshot>(guest, "room:state");
       const undoRequestAck = await emitAck(host, "game:undo-request", { roomCode });

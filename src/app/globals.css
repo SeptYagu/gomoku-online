@@ -345,7 +345,7 @@ h1 {
 .room-summary {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .room-summary strong {
@@ -380,6 +380,18 @@ h1 {
   color: var(--muted);
   font-size: 0.82rem;
   margin: 2px 0 0;
+}
+
+.room-spectators {
+  display: grid;
+  gap: 8px;
+}
+
+.room-spectator-icon {
+  color: var(--muted);
+  flex: 0 0 auto;
+  height: 20px;
+  width: 20px;
 }
 
 .room-message,

@@ -188,8 +188,8 @@ export function registerRoomSocketHandlers(
     socket.on("room:leave", (payload, ack) => {
       acknowledgeAndBroadcast(
         socket,
-        runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
-          roomStore.markDisconnected(payload.roomCode, playerId)
+        runForCurrentMember(socket, roomStore, payload.roomCode, (playerId) =>
+          roomStore.leaveRoom(payload.roomCode, playerId)
         ),
         ack
       );
@@ -232,9 +232,9 @@ function handleJoinedRoom(
   }
 
   const roomCode = result.value.code;
-  const seat = roomStore.getPlayerSeat(roomCode, playerId);
+  const participant = roomStore.getParticipantRole(roomCode, playerId);
 
-  if (!seat) {
+  if (!participant) {
     return { ok: false, error: { code: "not-room-member", message: "Player is not in this room." } };
   }
 
@@ -246,7 +246,9 @@ function handleJoinedRoom(
     ok: true,
     value: {
       playerId,
-      seat,
+      name: participant.name,
+      role: participant.role,
+      seat: participant.seat,
       snapshot: result.value
     }
   };
@@ -277,17 +279,62 @@ function runForCurrentPlayer(
     return result;
   }
 
-  const seat = roomStore.getPlayerSeat(result.value.code, playerId);
+  const participant = roomStore.getParticipantRole(result.value.code, playerId);
 
-  if (!seat) {
+  if (!participant) {
     return { ok: false, error: { code: "not-room-member", message: "Player is not in this room." } };
+  }
+
+  if (participant.role !== "player" || !participant.seat) {
+    return { ok: false, error: { code: "not-room-player", message: "Spectators cannot perform player actions." } };
   }
 
   return {
     ok: true,
     value: {
       playerId,
-      seat,
+      name: participant.name,
+      role: participant.role,
+      seat: participant.seat,
+      snapshot: result.value
+    }
+  };
+}
+
+function runForCurrentMember(
+  socket: RoomSocket,
+  roomStore: RoomStore,
+  roomCode: string,
+  action: (playerId: string) => RoomResult<RoomSnapshot>
+): RoomAck {
+  const normalizedRoomCode = roomCode.trim().toUpperCase();
+  const playerId = socket.data.playerId;
+
+  if (!playerId || socket.data.roomCode !== normalizedRoomCode) {
+    return {
+      ok: false,
+      error: {
+        code: "not-room-member",
+        message: "This socket has not joined the room."
+      }
+    };
+  }
+
+  const result = action(playerId);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const participant = roomStore.getParticipantRole(result.value.code, playerId);
+
+  return {
+    ok: true,
+    value: {
+      playerId,
+      name: participant?.name ?? "",
+      role: participant?.role ?? "spectator",
+      seat: participant?.seat ?? null,
       snapshot: result.value
     }
   };

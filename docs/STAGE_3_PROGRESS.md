@@ -43,3 +43,48 @@
   - `PASS create room URL - E8VJ9U`
   - `PASS copy invite - copied current URL`
   - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+
+## 小步 2：观战席
+
+状态：实现完成，本地验证通过；等待提交推送后做真实服务器验证。
+
+目标：
+
+- 第三个及之后加入同一房间的人进入观战席，不挤掉黑白玩家座位。
+- 房间快照新增 `spectators`，包含观战者昵称、连接状态和加入时间。
+- 观战者能看到棋盘、玩家列表、胜负、重开状态和观战人数。
+- 观战者不能 ready、落子、认输、请求悔棋、响应悔棋或重开。
+
+实现：
+
+- `src/server/rooms.ts`
+  - 新增 `RoomParticipantRole`、`RoomSpectatorSnapshot` 和 `spectators` 房间状态。
+  - `room:join` 前两名成员进入黑白座位；第三人及之后进入 `spectators`。
+  - `room:rejoin` 可恢复玩家座位或观战身份。
+  - 观战者触发玩家动作时返回 `not-room-player`。
+  - 观战者点击 Leave 时从观战席移除；断线时只标记观战连接状态。
+- `src/server/room-contract.ts`、`src/server/room-socket.ts`
+  - Room ack 返回 `role`、`seat` 和当前成员 `name`。
+  - Socket 层区分玩家动作和房间成员动作。
+- `src/components/useFriendRoom.ts`、`src/components/GameShell.tsx`
+  - 前端识别 `player` / `spectator` 身份。
+  - 观战者显示为 Spectator，功能栏玩家动作自动禁用。
+  - 房间摘要显示观战人数，并列出观战者。
+- `tools/smoke-online-room.ts`
+  - 冒烟脚本升级为三客户端：host、guest、spectator。
+  - 继续覆盖三局换先、悔棋拒绝/允许、连续悔棋拒绝和认输收尾。
+
+验证：
+
+- `npm test`：通过，5 个测试文件、59 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3029 npm start` 后运行 `npm run smoke:online-room -- http://127.0.0.1:3029`，通过。
+  - `PASS room:join spectator - watcher seated without displacing players`
+  - `PASS spectator move sync - watcher saw game 1 black center`
+  - `PASS spectator move denied - not-room-player`
+  - 三局 ready / restart 换先 / 悔棋 / 认输流程均通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3029`，通过。
+  - `PASS create room URL - BP4KH6`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://127.0.0.1:3029/en`

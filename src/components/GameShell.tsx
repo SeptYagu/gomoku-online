@@ -686,7 +686,8 @@ function FriendRoomControls({
 }) {
   const labels = dictionary.room;
   const snapshot = room.room?.snapshot ?? null;
-  const selfPlayer = room.room ? snapshot?.players.find((player) => player.seat === room.room?.seat) : null;
+  const selfPlayer =
+    room.room?.role === "player" ? snapshot?.players.find((player) => player.seat === room.room?.seat) : null;
   const remainingUndoRequests = selfPlayer?.undoRequestsRemaining ?? 0;
 
   return (
@@ -739,7 +740,17 @@ function FriendRoomControls({
           </div>
           <div>
             <p className="metric-label">{labels.yourSeat}</p>
-            <strong>{room.room?.seat === "black" ? labels.blackSeat : labels.whiteSeat}</strong>
+            <strong>
+              {room.room?.role === "spectator"
+                ? labels.spectatorSeat
+                : room.room?.seat === "black"
+                  ? labels.blackSeat
+                  : labels.whiteSeat}
+            </strong>
+          </div>
+          <div>
+            <p className="metric-label">{labels.spectators}</p>
+            <strong>{snapshot.spectators.length}</strong>
           </div>
           <div>
             <p className="metric-label">{labels.connection}</p>
@@ -770,6 +781,26 @@ function FriendRoomControls({
               </div>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {snapshot?.spectators.length ? (
+        <div className="room-spectators">
+          <p className="metric-label">{labels.spectators}</p>
+          <div className="room-players">
+            {snapshot.spectators.map((spectator) => (
+              <div className="room-player" key={`${spectator.name}-${spectator.joinedAt}`}>
+                <Users aria-hidden="true" className="room-spectator-icon" focusable={false} />
+                <div>
+                  <strong>
+                    {spectator.name}
+                    {room.room?.role === "spectator" && spectator.name === room.room.name ? ` ${labels.you}` : ""}
+                  </strong>
+                  <p>{spectator.connected ? labels.connected : labels.disconnected}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -804,7 +835,14 @@ function FriendRoomControls({
         </div>
       ) : null}
 
-      {selfPlayer ? <p className="room-message">{labels.selfStatus.replace("{name}", selfPlayer.name)}</p> : null}
+      {room.room ? (
+        <p className="room-message">
+          {(room.room.role === "spectator" ? labels.spectatorStatus : labels.selfStatus).replace(
+            "{name}",
+            room.room.name || selfPlayer?.name || room.playerName
+          )}
+        </p>
+      ) : null}
       {room.error ? <p className="room-error">{room.error}</p> : null}
     </div>
   );
@@ -820,7 +858,7 @@ function RoomUndoRequestOverlay({
   const labels = dictionary.room;
   const snapshot = room.room?.snapshot ?? null;
   const undoRequest = snapshot?.undoRequest ?? null;
-  const isTarget = Boolean(undoRequest && room.room?.seat === undoRequest.targetSeat);
+  const isTarget = Boolean(undoRequest && room.room?.role === "player" && room.room.seat === undoRequest.targetSeat);
 
   if (!undoRequest || !isTarget || !snapshot) {
     return null;
@@ -933,14 +971,22 @@ function getRoomStatusText(room: FriendRoomController, dictionary: GameDictionar
       return dictionary.status.draw;
     }
 
-    return snapshot.winner === room.room?.seat ? dictionary.room.youWin : dictionary.room.youLose;
+    if (room.room?.role !== "player") {
+      return snapshot.winner === "black" ? dictionary.status.blackWins : dictionary.status.whiteWins;
+    }
+
+    return snapshot.winner === room.room.seat ? dictionary.room.youWin : dictionary.room.youLose;
   }
 
   if (snapshot.status === "abandoned") {
     return dictionary.room.roomClosed;
   }
 
-  return snapshot.currentTurn === room.room?.seat ? dictionary.room.yourTurn : dictionary.room.opponentTurn;
+  if (room.room?.role === "player") {
+    return snapshot.currentTurn === room.room.seat ? dictionary.room.yourTurn : dictionary.room.opponentTurn;
+  }
+
+  return snapshot.currentTurn === "black" ? dictionary.status.blackTurn : dictionary.status.whiteTurn;
 }
 
 function getRoomStatusNote(room: FriendRoomController, dictionary: GameDictionary): string {
@@ -950,7 +996,7 @@ function getRoomStatusNote(room: FriendRoomController, dictionary: GameDictionar
     return dictionary.room.createOrJoin;
   }
 
-  return `${dictionary.room.roomCode}: ${snapshot.code}`;
+  return `${dictionary.room.roomCode}: ${snapshot.code} · ${dictionary.room.spectators}: ${snapshot.spectators.length}`;
 }
 
 function getStatusText(status: GameStatus, dictionary: GameDictionary): string {

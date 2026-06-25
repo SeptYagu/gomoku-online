@@ -5,6 +5,7 @@ import type { Board, GameStatus, Move, Point, Stone } from "../game/types";
 export type RoomStatus = "waiting" | "ready" | "playing" | "finished" | "abandoned";
 
 export type RoomPlayerSeat = Stone;
+export type RoomParticipantRole = "player" | "spectator";
 
 export type RoomPlayerSnapshot = {
   name: string;
@@ -13,6 +14,12 @@ export type RoomPlayerSnapshot = {
   ready: boolean;
   seat: RoomPlayerSeat;
   undoRequestsRemaining: number;
+};
+
+export type RoomSpectatorSnapshot = {
+  connected: boolean;
+  joinedAt: number;
+  name: string;
 };
 
 export type UndoRequestSnapshot = {
@@ -33,6 +40,7 @@ export type RoomSnapshot = {
   moveSeq: number;
   moves: Move[];
   players: RoomPlayerSnapshot[];
+  spectators: RoomSpectatorSnapshot[];
   status: RoomStatus;
   undoRequest: UndoRequestSnapshot | null;
   updatedAt: number;
@@ -67,6 +75,7 @@ export type RoomErrorCode =
   | "move-seq-mismatch"
   | "no-moves-to-undo"
   | "not-last-move-player"
+  | "not-room-player"
   | "not-undo-request-target"
   | "not-room-member"
   | "not-your-turn"
@@ -105,6 +114,14 @@ type RoomPlayer = {
   undoRequestsRemaining: number;
 };
 
+type RoomSpectator = {
+  connected: boolean;
+  disconnectedAt: number | null;
+  id: string;
+  joinedAt: number;
+  name: string;
+};
+
 type RoomState = {
   board: Board;
   code: string;
@@ -116,6 +133,7 @@ type RoomState = {
   nextUndoRequestId: number;
   nextStartingSeat: RoomPlayerSeat;
   players: RoomPlayer[];
+  spectators: RoomSpectator[];
   status: RoomStatus;
   undoRequest: UndoRequestSnapshot | null;
   updatedAt: number;
@@ -205,6 +223,7 @@ export class RoomStore {
       ],
       nextUndoRequestId: 1,
       nextStartingSeat: "black",
+      spectators: [],
       status: "waiting",
       undoRequest: null,
       updatedAt: now,
@@ -224,8 +243,8 @@ export class RoomStore {
       return failure("room-not-found", "Room does not exist.");
     }
 
-    if (room.status === "playing" || room.status === "finished" || room.status === "abandoned") {
-      return failure("game-already-started", "This room is no longer accepting players.");
+    if (room.status === "abandoned") {
+      return failure("game-already-started", "This room is closed.");
     }
 
     const player = normalizePlayerInput(input);
@@ -234,16 +253,25 @@ export class RoomStore {
       return failure("invalid-player", "Player id and name are required.");
     }
 
-    if (room.players.some((candidate) => candidate.id === player.id)) {
+    if (hasParticipantId(room, player.id)) {
       return failure("duplicate-player", "Player is already in this room.");
     }
 
-    if (room.players.some((candidate) => namesMatch(candidate.name, player.name))) {
+    if (hasParticipantName(room, player.name)) {
       return failure("duplicate-name", "A player with this name is already in this room.");
     }
 
-    if (room.players.length >= 2) {
-      return failure("room-full", "Room already has two players.");
+    const now = this.now();
+
+    if (room.players.length >= 2 || room.status === "playing" || room.status === "finished") {
+      room.spectators.push({
+        ...player,
+        connected: true,
+        disconnectedAt: null,
+        joinedAt: now
+      });
+      room.updatedAt = now;
+      return success(getRoomSnapshot(room));
     }
 
     const seat = room.players.some((candidate) => candidate.seat === "black") ? "white" : "black";
@@ -252,13 +280,13 @@ export class RoomStore {
       connected: true,
       disconnectedAt: null,
       disconnectDeadline: null,
-      joinedAt: this.now(),
+      joinedAt: now,
       ready: false,
       rejectedUndoMoveSeq: null,
       undoRequestsRemaining: UNDO_REQUEST_LIMIT,
       seat
     });
-    updateRoomStatus(room, this.now());
+    updateRoomStatus(room, now);
 
     return success(getRoomSnapshot(room));
   }
@@ -276,16 +304,20 @@ export class RoomStore {
       return failure("invalid-player", "Player id and name are required.");
     }
 
-    const existingPlayer = room.players.find((candidate) => candidate.id === player.id);
+    const existingParticipant = findParticipant(room, player.id);
 
-    if (!existingPlayer) {
+    if (!existingParticipant) {
       return failure("not-room-member", "Player is not in this room.");
     }
 
-    existingPlayer.name = player.name;
-    existingPlayer.connected = true;
-    existingPlayer.disconnectedAt = null;
-    existingPlayer.disconnectDeadline = null;
+    existingParticipant.name = player.name;
+    existingParticipant.connected = true;
+    existingParticipant.disconnectedAt = null;
+
+    if ("disconnectDeadline" in existingParticipant) {
+      existingParticipant.disconnectDeadline = null;
+    }
+
     room.updatedAt = this.now();
 
     return success(getRoomSnapshot(room));
@@ -471,6 +503,10 @@ export class RoomStore {
     const player = room.players.find((candidate) => candidate.id === playerId);
 
     if (!player) {
+      if (room.spectators.some((candidate) => candidate.id === playerId)) {
+        return failure("not-room-player", "Spectators cannot perform player actions.");
+      }
+
       return failure("not-room-member", "Player is not in this room.");
     }
 
@@ -547,7 +583,7 @@ export class RoomStore {
   }
 
   markDisconnected(roomCode: string, playerId: string): RoomResult<RoomSnapshot> {
-    const found = this.getRoomAndPlayer(roomCode, playerId);
+    const found = this.getRoomAndParticipant(roomCode, playerId);
 
     if (!found.ok) {
       return found;
@@ -555,26 +591,52 @@ export class RoomStore {
 
     const now = this.now();
 
-    found.value.player.connected = false;
-    found.value.player.disconnectedAt = now;
-    found.value.player.disconnectDeadline =
-      found.value.room.status === "playing" ? now + this.lifecycleLimits.disconnectGraceMs : null;
-    found.value.room.undoRequest = null;
+    found.value.participant.connected = false;
+    found.value.participant.disconnectedAt = now;
+
+    if (found.value.role === "player" && "disconnectDeadline" in found.value.participant) {
+      found.value.participant.disconnectDeadline =
+        found.value.room.status === "playing" ? now + this.lifecycleLimits.disconnectGraceMs : null;
+      found.value.room.undoRequest = null;
+    }
+
     found.value.room.updatedAt = now;
 
     return success(getRoomSnapshot(found.value.room));
   }
 
+  leaveRoom(roomCode: string, playerId: string): RoomResult<RoomSnapshot> {
+    const room = this.getRoom(roomCode);
+
+    if (!room) {
+      return failure("room-not-found", "Room does not exist.");
+    }
+
+    const spectatorIndex = room.spectators.findIndex((candidate) => candidate.id === playerId);
+
+    if (spectatorIndex >= 0) {
+      room.spectators.splice(spectatorIndex, 1);
+      room.updatedAt = this.now();
+      return success(getRoomSnapshot(room));
+    }
+
+    return this.markDisconnected(roomCode, playerId);
+  }
+
   restoreConnection(roomCode: string, playerId: string): RoomResult<RoomSnapshot> {
-    const found = this.getRoomAndPlayer(roomCode, playerId);
+    const found = this.getRoomAndParticipant(roomCode, playerId);
 
     if (!found.ok) {
       return found;
     }
 
-    found.value.player.connected = true;
-    found.value.player.disconnectedAt = null;
-    found.value.player.disconnectDeadline = null;
+    found.value.participant.connected = true;
+    found.value.participant.disconnectedAt = null;
+
+    if ("disconnectDeadline" in found.value.participant) {
+      found.value.participant.disconnectDeadline = null;
+    }
+
     found.value.room.updatedAt = this.now();
 
     return success(getRoomSnapshot(found.value.room));
@@ -600,6 +662,31 @@ export class RoomStore {
     const room = this.getRoom(roomCode);
 
     return room?.players.find((candidate) => candidate.id === playerId)?.seat ?? null;
+  }
+
+  getParticipantRole(
+    roomCode: string,
+    playerId: string
+  ): { name: string; role: RoomParticipantRole; seat: RoomPlayerSeat | null } | null {
+    const room = this.getRoom(roomCode);
+
+    if (!room) {
+      return null;
+    }
+
+    const player = room.players.find((candidate) => candidate.id === playerId);
+
+    if (player) {
+      return { name: player.name, role: "player", seat: player.seat };
+    }
+
+    const spectator = room.spectators.find((candidate) => candidate.id === playerId);
+
+    if (spectator) {
+      return { name: spectator.name, role: "spectator", seat: null };
+    }
+
+    return null;
   }
 
   sweepExpiredRooms(): RoomLifecycleSweep {
@@ -660,10 +747,45 @@ export class RoomStore {
     const player = room.players.find((candidate) => candidate.id === playerId);
 
     if (!player) {
+      if (room.spectators.some((candidate) => candidate.id === playerId)) {
+        return failure("not-room-player", "Spectators cannot perform player actions.");
+      }
+
       return failure("not-room-member", "Player is not in this room.");
     }
 
     return success({ player, room });
+  }
+
+  private getRoomAndParticipant(
+    roomCode: string,
+    playerId: string
+  ): RoomResult<{
+    participant: RoomPlayer | RoomSpectator;
+    role: RoomParticipantRole;
+    room: RoomState;
+  }> {
+    const room = this.getRoom(roomCode);
+
+    if (!room) {
+      return failure("room-not-found", "Room does not exist.");
+    }
+
+    expireUndoRequest(room, this.now());
+
+    const player = room.players.find((candidate) => candidate.id === playerId);
+
+    if (player) {
+      return success({ participant: player, role: "player", room });
+    }
+
+    const spectator = room.spectators.find((candidate) => candidate.id === playerId);
+
+    if (spectator) {
+      return success({ participant: spectator, role: "spectator", room });
+    }
+
+    return failure("not-room-member", "Player is not in this room.");
   }
 
   private generateUniqueRoomCode(): string | null {
@@ -765,7 +887,13 @@ function shouldDeleteRoom(room: RoomState, now: number, limits: RoomLifecycleLim
     return now - room.updatedAt >= limits.completedRoomTtlMs;
   }
 
-  if (room.status !== "playing" && room.players.length > 0 && room.players.every((player) => !player.connected)) {
+  const participants = [...room.players, ...room.spectators];
+
+  if (
+    room.status !== "playing" &&
+    participants.length > 0 &&
+    participants.every((participant) => !participant.connected)
+  ) {
     return now - room.updatedAt >= limits.emptyRoomTtlMs;
   }
 
@@ -848,6 +976,25 @@ function normalizePlayerInput(input: CreateRoomInput | JoinRoomInput): Pick<Room
   return { id, name };
 }
 
+function findParticipant(room: RoomState, playerId: string): RoomPlayer | RoomSpectator | null {
+  return (
+    room.players.find((candidate) => candidate.id === playerId) ??
+    room.spectators.find((candidate) => candidate.id === playerId) ??
+    null
+  );
+}
+
+function hasParticipantId(room: RoomState, playerId: string): boolean {
+  return findParticipant(room, playerId) !== null;
+}
+
+function hasParticipantName(room: RoomState, playerName: string): boolean {
+  return (
+    room.players.some((candidate) => namesMatch(candidate.name, playerName)) ||
+    room.spectators.some((candidate) => namesMatch(candidate.name, playerName))
+  );
+}
+
 function normalizeRoomCode(roomCode: string): string | null {
   const code = roomCode.trim().toUpperCase();
 
@@ -874,6 +1021,11 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
       ready,
       seat,
       undoRequestsRemaining
+    })),
+    spectators: room.spectators.map(({ connected, joinedAt, name }) => ({
+      connected,
+      joinedAt,
+      name
     })),
     status: room.status,
     undoRequest: room.undoRequest ? { ...room.undoRequest } : null,
