@@ -51,6 +51,12 @@ npm audit --omit=dev
 npm run arena -- --games 100 --baseline HEAD^ --candidate current --difficulty insane
 ```
 
+要评测浏览器多 Worker 版本，用 `current-parallel` 作为候选引擎；Windows PowerShell 通过 `npm.cmd` 传 `HEAD^` 时可能被转义，建议直接写明确提交号：
+
+```bash
+npm run arena -- --games 10 --baseline 09ea4e5 --candidate current-parallel --difficulty insane
+```
+
 结果会写入 `.arena-results/latest.json`。报告包含总胜率、先后手胜负、每盘棋谱，以及胜方前 8 手开局线的中心相对坐标汇总，可用于判断优化是否有效并沉淀自有开局库。
 
 默认不预置随机开局，让双方自然使用自己的开局库。需要扩大样本时可以加 `--random-openings 2`，但这会让早盘更早进入搜索，疯狂档耗时会明显增加。

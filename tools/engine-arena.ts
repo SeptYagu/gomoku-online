@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,13 +16,28 @@ type EngineOptions = {
   moves: Move[];
 };
 
+type AiMoveResult = {
+  point: Point | null;
+  score: number;
+  completedDepth: number;
+  nodes: number;
+  source?: string;
+};
+
 type EngineModule = {
   chooseAiMove: (board: Board, aiStone: Stone, options: EngineOptions) => Point | null;
+  chooseAiMoveResult?: (
+    board: Board,
+    aiStone: Stone,
+    options: EngineOptions & { rootCandidateShard?: { index: number; total: number } }
+  ) => AiMoveResult;
+  getAiWorkerCount?: (difficulty: Difficulty, hardwareConcurrency?: number) => number;
 };
 
 type Engine = {
   id: EngineId;
   spec: string;
+  mode: "single" | "parallel";
   module: EngineModule;
 };
 
@@ -237,11 +253,11 @@ function readDifficulty(value: string): Difficulty {
 }
 
 async function loadEngine(id: EngineId, spec: string): Promise<Engine> {
-  if (spec === "current") {
+  if (spec === "current" || spec === "current-parallel") {
     const modulePath = path.resolve(ROOT_DIR, "src/game/ai.ts");
     const engineModule = (await import(pathToFileURL(modulePath).href)) as unknown as EngineModule;
 
-    return { id, spec, module: engineModule };
+    return { id, spec, mode: spec === "current-parallel" ? "parallel" : "single", module: engineModule };
   }
 
   const cacheDir = path.resolve(ROOT_DIR, ".arena-cache", sanitizeRef(spec), "src", "game");
@@ -260,11 +276,85 @@ async function loadEngine(id: EngineId, spec: string): Promise<Engine> {
   const modulePath = path.join(cacheDir, "ai.ts");
   const engineModule = (await import(`${pathToFileURL(modulePath).href}?t=${Date.now()}`)) as unknown as EngineModule;
 
-  return { id, spec, module: engineModule };
+  return { id, spec, mode: "single", module: engineModule };
 }
 
 function sanitizeRef(ref: string): string {
   return ref.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function chooseEngineMove(engine: Engine, board: Board, stone: Stone, options: EngineOptions): Point | null {
+  if (engine.mode === "single") {
+    return engine.module.chooseAiMove(board, stone, options);
+  }
+
+  return chooseParallelEngineMove(engine, board, stone, options);
+}
+
+function chooseParallelEngineMove(engine: Engine, board: Board, stone: Stone, options: EngineOptions): Point | null {
+  if (!engine.module.chooseAiMoveResult) {
+    throw new Error(`${engine.spec} does not expose chooseAiMoveResult for parallel arena mode.`);
+  }
+
+  const hardwareConcurrency = availableParallelism();
+  const workerCount = Math.max(1, engine.module.getAiWorkerCount?.(options.difficulty, hardwareConcurrency) ?? 1);
+  let bestResult: AiMoveResult | null = null;
+
+  for (let index = 0; index < workerCount; index += 1) {
+    const result = engine.module.chooseAiMoveResult(board, stone, {
+      ...options,
+      rootCandidateShard: workerCount > 1 ? { index, total: workerCount } : undefined
+    });
+
+    if (isBetterAiResult(result, bestResult, board)) {
+      bestResult = result;
+    }
+
+    if (isDecisiveAiResult(result)) {
+      return result.point;
+    }
+  }
+
+  return bestResult?.point ?? engine.module.chooseAiMove(board, stone, options);
+}
+
+function isBetterAiResult(next: AiMoveResult, current: AiMoveResult | null, board: Board): boolean {
+  if (!next.point) {
+    return false;
+  }
+
+  if (!current?.point) {
+    return true;
+  }
+
+  if (next.score !== current.score) {
+    return next.score > current.score;
+  }
+
+  if (next.completedDepth !== current.completedDepth) {
+    return next.completedDepth > current.completedDepth;
+  }
+
+  if (next.nodes !== current.nodes) {
+    return next.nodes > current.nodes;
+  }
+
+  return getCenterDistance(next.point, board) < getCenterDistance(current.point, board);
+}
+
+function isDecisiveAiResult(result: AiMoveResult): boolean {
+  return (
+    result.point !== null &&
+    result.source !== "search" &&
+    result.source !== "none" &&
+    result.source !== "empty-shard"
+  );
+}
+
+function getCenterDistance(point: Point, board: Board): number {
+  const center = Math.floor(board.length / 2);
+
+  return Math.abs(point.row - center) + Math.abs(point.col - center);
 }
 
 function playGame({
@@ -297,7 +387,7 @@ function playGame({
   while (moves.length < options.maxMoves) {
     const stone = getStoneForPly(moves.length);
     const engine = players[stone];
-    const move = engine.module.chooseAiMove(board, stone, {
+    const move = chooseEngineMove(engine, board, stone, {
       difficulty: options.difficulty,
       moves
     });
@@ -569,7 +659,7 @@ function printHelp(): void {
 Options:
   --games <n>             Number of games. Default: 20
   --baseline <ref>        Baseline engine git ref or current. Default: HEAD^
-  --candidate <ref>       Candidate engine git ref or current. Default: current
+  --candidate <ref>       Candidate engine git ref, current, or current-parallel. Default: current
   --difficulty <name>     normal, hard, expert, insane. Default: insane
   --random-openings <n>   Seeded central opening plies before engines move. Default: 0
   --opening-plies <n>     Winner opening plies recorded in the report. Default: 8
