@@ -24,15 +24,25 @@ git@github.com:SeptYagu/gomoku-online.git
 main
 ```
 
-本轮提交前最近已确认推送点：
+当前已确认功能推送点：
 
 ```text
-20a813d docs: require timestamped subagent reports
+ee7d3e4 Implement generated opening book runtime
 ```
 
 说明：本文件会随着后续提交继续变化。接手时以 `git log --oneline -1` 和 `git status --short --branch` 的实时输出为准。
 
-本轮阶段 0 重做文档更新前确认：
+本轮 opening-book-runtime handoff 更新前确认：
+
+```text
+git status --short --branch
+## main...origin/main
+
+git log -1 --oneline --decorate
+ee7d3e4 (HEAD -> main, origin/main) Implement generated opening book runtime
+```
+
+历史 stage0-redo 文档更新前状态（保留作追溯，不代表当前工作区）：
 
 ```text
 git status --short --branch
@@ -128,6 +138,9 @@ node_modules/
 - Nora 最终独立验证兼记录已通过 Lyra 返工后的最终状态，确认 `/en` 桌面棋盘落子、AI 按钮、Easy/Normal、AI 不覆盖玩家、Undo/New game、lucide 图标不抢 pointer 命中，以及 `/ar` 390x844 移动端 AI 按钮和棋盘点击均可用。
 - 本轮阶段报告已落档：`docs/STAGE_1_REPORT.md`。
 - 后续仍默认使用“独立验证兼记录子代理”完成验证执行、验证报告、阶段报告和 `docs/HANDOFF.md` 的验证状态收口；该角色不能修代码，不能修改实现内容。
+- 最新 AI/开局库工作已完成并推送到 `ee7d3e4`：运行时只使用 `data/openings/generated/standard-26-insane-8ply-1s.sgf` 这一套生成开局库，不再混入旧手写库。
+- 当前开局库配置：同一套 26 条标准开局、每条 8 手；Normal/Hard/Expert/Insane 分别最多使用 2/4/6/8 手。
+- 当前 AI 仍是项目内自写 TypeScript 引擎，可按商业发布方向继续闭源使用；未引入 GPL/AGPL 外部引擎、WASM、权重或第三方开局数据库。
 
 ## 5. 已完成
 
@@ -218,6 +231,17 @@ node_modules/
   - `git diff --check` 通过，仅有 LF/CRLF 工作副本提示。
   - 系统 Chrome `149.0.7827.155` + Chrome DevTools Protocol 浏览器验收覆盖 `/en` 桌面落子、AI 按钮、Easy/Normal、AI 不覆盖玩家、Undo/New game、lucide SVG 不抢 pointer 命中、`/ar` 390x844 移动端 AI 按钮和棋盘点击。
   - 控制台未见阻断交互的 runtime/hydration/click handler 错误。
+- AI 引擎和开局库近期工作已完成：
+  - Insane 搜索深度保留 8 层，最大思考预算 30 秒。
+  - Normal/Hard/Expert/Insane 最大思考预算分别为 1/5/10/30 秒，提前完成、命中开局库或战术立即返回。
+  - Hard/Expert/Insane 支持浏览器 Worker 根候选分片并行搜索，按用户设备核心数最多使用 2/3/4 个 Worker。
+  - 搜索超时路径使用 best-so-far；页面硬超时也有 50ms 主线程应急搜索兜底。
+  - `tools/engine-arena.ts` 已支持新旧引擎自动对弈、随机开局、胜率和胜方前 8 手开局线统计。
+  - `tools/generate-opening-book.ts` 已支持从标准 26 开局前三手出发，用当前引擎推演 SGF 开局库。
+  - `docs/OPENING_BOOK_GENERATION_PLAN.md` 已记录 16 手、每开局 3 变体、10 秒/步的强开局库生成计划。
+  - `data/openings/generated/standard-26-insane-8ply-1s.sgf` 已作为当前正式 SGF 源资产。
+  - `src/game/opening-book.ts` 已作为当前运行时开局库数据。
+  - `src/game/ai.ts` 已移除旧手写开局库，运行时只引用 `GENERATED_OPENING_BOOK_LINES`。
 
 ## 6. Verification Matrix
 
@@ -265,6 +289,11 @@ node_modules/
 | stage1-interaction-hotfix-final 独立验证兼记录 | `npm audit --omit=dev` | 通过 | Nora 验证，0 vulnerabilities |
 | stage1-interaction-hotfix-final 独立验证兼记录 | `git diff --check` | 通过 | Nora 验证，仅有 LF/CRLF 工作副本提示 |
 | stage1-interaction-hotfix-final 浏览器验收 | 系统 Chrome + Chrome DevTools Protocol | 通过 | Nora 覆盖 Lyra 返工后最终状态：`/en` 桌面空点点击 moves 0 -> 1、AI 按钮可点击且显示 Easy/Normal、AI Easy/Normal 落子 1 黑 1 白且不覆盖玩家、Normal active、Undo/New game、lucide SVG 存在且不抢 pointer 命中、`/ar` 390x844 移动端 AI 按钮和棋盘点击；控制台无阻断交互错误 |
+| opening-book-runtime | `npm test` | 通过 | `ee7d3e4` 提交前通过，2 个测试文件、34 个测试用例；新增生成开局库加载和难度深度门控测试 |
+| opening-book-runtime | `npm run lint` | 通过 | `ee7d3e4` 提交前通过 |
+| opening-book-runtime | `npm run build` | 通过 | 首次因旧 Next dev 进程锁住 `.next/static/...` EPERM 失败；停止本项目 3000 端口 Next 进程、确认路径后清理 `.next`，重试通过 |
+| opening-book-runtime | `git diff --check` | 通过 | 仅有 LF/CRLF 工作副本提示 |
+| opening-book-runtime 浏览器验收 | 系统 Chrome/Chromium + Chrome DevTools Protocol | 通过 | `/zh` 人机模式、玩家先手、疯狂档；点击中心后出现 1 黑 1 白，状态回到“黑棋回合”，控制台无阻断错误 |
 
 代码改动后必须重新运行完整门禁。UI 改动还必须做真实浏览器检查。
 
@@ -288,7 +317,12 @@ node_modules/
 | 规则类型 | `src/game/types.ts` |
 | 规则测试 | `src/game/board.test.ts` |
 | AI 逻辑 | `src/game/ai.ts` |
+| AI Worker | `src/game/ai-worker.ts` |
 | AI 测试 | `src/game/ai.test.ts` |
+| 运行时开局库 | `src/game/opening-book.ts` |
+| 正式 SGF 开局库源资产 | `data/openings/generated/standard-26-insane-8ply-1s.sgf` |
+| 引擎对战评测 | `tools/engine-arena.ts` |
+| SGF 开局库推演 | `tools/generate-opening-book.ts` |
 | Vitest 配置 | `vitest.config.ts` |
 | Next 配置 | `next.config.ts` |
 
@@ -367,11 +401,23 @@ AI Worker 与设置持久化：
 - Lyra 已完成图标返工，Nora 已最终复验通过，确认恢复 lucide 图标后“无法落子、AI 按钮点不动”仍不复现，且图标不抢 pointer 命中。
 - in-app Browser 插件本轮不可用，已用系统 Chrome + Playwright Core 完成真实浏览器验收。
 
+AI 引擎和开局库：
+
+- 当前引擎是项目内自写 TypeScript 引擎，不是成熟第三方引擎；商业发布方向可控。
+- 已参考传统引擎思路实现迭代加深、置换表、候选排序、VCF/VCT 威胁搜索、战术扩展、best-so-far 超时返回和浏览器 Worker 根候选并行搜索。
+- 当前运行时开局库只使用 `data/openings/generated/standard-26-insane-8ply-1s.sgf` 派生出的 `src/game/opening-book.ts`，旧手写库已从 `src/game/ai.ts` 移除。
+- 当前同一套生成库对所有难度开放，难度差异由 `OPENING_BOOK_PLIES` 控制：Normal 2 手、Hard 4 手、Expert 6 手、Insane 8 手。
+- 现有生成库是 26 条标准开局、每条 8 手、每步 1 秒推演的 starter book；还没有完成 16 手、每开局 3 变体、10 秒/步的强库生成和筛选。
+- 目前没有把 GPL/AGPL 引擎、Pikafish、Gomocup 引擎二进制、WASM、权重或第三方开局库打包进前端。
+- `ee7d3e4` 已通过测试、lint、build 和真实浏览器点击验收，并已推送到 `origin/main`。
+
 ## 10. 下一步派发表
 
 | 优先级 | 子代理 | 目标 | 允许修改范围 | 禁止范围 | 输入文档 | 验收标准 |
 | --- | --- | --- | --- | --- | --- | --- |
 | P1 | 实现 SEO | 补多语言 metadata、`hreflang`、canonical/alternate 和 sitemap 基础 | `src/app/**`、必要配置、相关文档 | 不做广告、Socket、排行榜 | `WEBSITE_BUILD_PLAN.md`、`docs/logic/i18n-theme-module.md` | 六语言 SEO 链接正确，build 通过 |
+| P1 | 实现强开局库生成 | 按计划生成 16 手、每标准开局至少 3 变体、10 秒/步 SGF，并做结构校验 | `data/openings/generated/**`、`.arena-results/**`、必要文档 | 不提交未筛选的运行时大库，不引入第三方未授权库 | `docs/OPENING_BOOK_GENERATION_PLAN.md`、`tools/generate-opening-book.ts` | SGF 至少 78 条 game tree、每条 16 手、前三手符合标准 26 开局、无非法落子 |
+| P1 | 实现开局库精选转换 | 增加 SGF 校验/精选/转 `src/game/opening-book.ts` 的脚本，并用 arena 胜率回灌权重 | `tools/**`、`src/game/opening-book.ts`、`src/game/ai.test.ts`、必要文档 | 不手工长期维护大段运行时数据，不绕过 arena 筛选 | `docs/OPENING_BOOK_GENERATION_PLAN.md`、`tools/engine-arena.ts` | 转换脚本可重复生成运行时库，测试覆盖库加载和难度深度门控 |
 | P2 | 实现 AI 测试补强 | 为 Normal AI 增加更完整的活二、活三、冲四、活四评分矩阵测试 | `src/game/**`、必要测试报告 | 不做 Hard AI Worker | `docs/logic/ai-engine-module.md`、`docs/STAGE_1_REPORT.md` | AI 测试覆盖关键棋型，`npm test` 通过 |
 | P2 | 实现移动端手感细化 | 细化触摸目标、状态区信息密度和小屏视觉回归 | `src/components/**`、`src/app/globals.css`、必要文档 | 不做广告接入、在线服务 | `docs/STAGE_1_REPORT.md` | 390px 手机和 1024px 平板真实浏览器验收通过 |
 
@@ -380,7 +426,12 @@ AI Worker 与设置持久化：
 - Socket.IO 在线对战。
 - 排行榜。
 - 真实广告。
-- Hard AI。
+
+可以继续做的 AI 工作：
+
+- 长时间 arena 对战，用旧版本、当前版本和不同开局库版本对比胜率。
+- 强开局库生成、校验、精选、权重回灌和运行时转换。
+- 更系统的活二、活三、冲四、活四棋型测试矩阵。
 
 这些属于后续阶段。当前 stage1-local-ai 已完成独立验证，可以进入 SEO、AI 测试补强或移动端手感细化等后续工作。
 
@@ -396,6 +447,9 @@ AI Worker 与设置持久化：
 | AI 计算阻塞 UI | major | Hard AI 在主线程运行 | Worker 化、requestId、boardVersion | AI 阶段 |
 | 共享文件并行冲突 | major | 多代理同时改 `src/app/**`、字典、全局 CSS | 主控指定 owner，串行合并 | 全阶段 |
 | AI 棋型覆盖不足 | minor | Normal AI 后续被要求具备更稳定棋力 | 增加活二、活三、冲四、活四评分矩阵测试；Hard AI 阶段前补 Worker 设计 | AI 阶段 |
+| 开局库源资产和运行时数据脱节 | major | 替换 SGF 后忘记同步 `src/game/opening-book.ts` | 保持 SGF 为源资产；补 SGF 转 TS 脚本；测试固定校验生成库数量和代表线命中 | AI/开局库阶段 |
+| 开局库未经足量对战筛选 | major | 直接把长推演结果塞进运行时 | 用 arena 快速样本和较高预算样本筛选，剔除快速失败线，记录胜方前 8 手开局线 | AI/开局库阶段 |
+| 第三方引擎或开局库许可证不满足商业发布 | blocker | 引入 Pikafish、Gomocup 引擎、第三方 book、WASM 或权重 | 商业发布默认只用项目内自写引擎和自生成开局库；外部资产必须先确认许可证 | 商业化阶段 |
 | 构建缓存文件锁 | note | Windows/OneDrive 下 `.next` 旧缓存被进程或属性锁住 | 停止本项目 Next 进程，确认路径后清理 `.next` 生成缓存再 build | 本地验证 |
 | 旧 dev 进程/HMR 干扰交互验证 | note | 3000 端口残留旧 Next dev 进程、HMR WebSocket 异常或 Fast Refresh 状态异常 | 记录旧进程 PID 和启动时间；优先使用生产服务复验；必要时停止本项目旧 Next 进程后重试 | 本地验证 |
 
@@ -455,7 +509,77 @@ stage1-local-ai：
 - `docs/subagents/20260625-stage1-interaction-hotfix-final-验证兼记录-Nora.md`
 - `docs/STAGE_1_REPORT.md`
 
-## 14. 交接更新模板
+opening-book-runtime：
+
+- 无子代理报告。本轮由主控直接实现、验证、提交和推送。
+- 相关提交：`ee7d3e4 Implement generated opening book runtime`
+- 相关计划：`docs/OPENING_BOOK_GENERATION_PLAN.md`
+
+## 14. 最近一次交接：opening-book-runtime
+
+本轮目标：
+
+- 按用户要求实装生成开局库。
+- 只使用 `data/openings/generated/standard-26-insane-8ply-1s.sgf` 这一套开局库，不再使用之前的手写库。
+
+实际完成：
+
+- 新增正式 SGF 源资产 `data/openings/generated/standard-26-insane-8ply-1s.sgf`。
+- 新增运行时开局库 `src/game/opening-book.ts`，包含标准 26 开局、每条 8 手。
+- `src/game/ai.ts` 移除旧手写 `OPENING_BOOK_LINES`，只引用 `GENERATED_OPENING_BOOK_LINES`。
+- 运行时同一套生成库对所有难度开放，Normal/Hard/Expert/Insane 分别最多使用 2/4/6/8 手。
+- `src/game/ai.test.ts` 增加生成库加载和不同难度开局库深度门控测试。
+- README 和 `docs/logic/ai-engine-module.md` 已同步当前策略。
+
+修改文件：
+
+- `README.md`
+- `docs/logic/ai-engine-module.md`
+- `src/game/ai.ts`
+- `src/game/ai.test.ts`
+- `src/game/opening-book.ts`
+- `data/openings/generated/standard-26-insane-8ply-1s.sgf`
+
+验证命令和结果：
+
+- `npm test`：通过，2 个测试文件、34 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过；首次因旧 Next dev 进程锁 `.next/static/...` 失败，停止本项目 3000 端口进程并清理 `.next` 后重试通过。
+- `git diff --check`：通过，仅有 LF/CRLF 工作副本提示。
+- 真实浏览器/CDP：`/zh` 人机模式、玩家先手、疯狂档，中心落子后 AI 正常回应，页面出现 1 黑 1 白，状态回到“黑棋回合”，无阻断控制台错误。
+
+未验证项及原因：
+
+- 未跑长时间 arena 胜率评测；本轮是开局库接入，不是质量筛选。
+- 未生成 16 手、每开局 3 变体、10 秒/步强库；该任务耗时约 1.5 到 3 小时，已在 `docs/OPENING_BOOK_GENERATION_PLAN.md` 计划。
+- 未引入第三方成熟开局库或外部引擎；商业发布风险优先，当前保持自写引擎和自生成库。
+
+最新提交：
+
+```text
+ee7d3e4 Implement generated opening book runtime
+```
+
+是否已推送：
+
+```text
+已推送到 origin/main
+```
+
+下一步建议：
+
+- 先补 SGF 校验和 SGF 转 `src/game/opening-book.ts` 的可重复脚本。
+- 生成 16 手、3 变体强库前先做小样本冒烟，确认脚本、非法落子检查和输出结构。
+- 生成后用 arena 跑快速样本和较高预算样本，按胜率和快速失败情况筛选/降权，再进入运行时。
+- 若继续优化引擎，优先补棋型矩阵测试和 arena 回归，避免只凭体感判断棋力。
+
+风险变化：
+
+- 现在运行时没有旧手写库兜底，所有开局多样性来自这 26 条生成线及 8 种对称变换；若用户觉得重复，需要扩大生成库变体并做权重筛选。
+- SGF 和 `src/game/opening-book.ts` 目前是两个文件，后续必须用脚本保持同步，避免源资产和运行时数据脱节。
+- Windows/OneDrive 下旧 dev 进程仍可能锁 `.next`，build 前先确认本项目 3000 端口进程。
+
+## 15. 交接更新模板
 
 每次阶段性完成后，把以下信息补进本文件：
 
