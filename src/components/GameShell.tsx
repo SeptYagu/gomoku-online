@@ -1,14 +1,9 @@
 "use client";
 
-import { Bot, CircleDot, RotateCcw, Users, Wifi } from "lucide-react";
+import { Bot, CircleDot, RotateCcw, Undo2, Users, Wifi } from "lucide-react";
 import { useMemo, useState } from "react";
-import {
-  checkWin,
-  createBoard,
-  getOpponent,
-  isBoardFull,
-  placeStone
-} from "@/game/board";
+import { chooseAiMove, type AiDifficulty } from "@/game/ai";
+import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
@@ -21,11 +16,15 @@ type GameShellProps = {
   locale: Locale;
 };
 
+type GameMode = "local" | "ai";
+
 export function GameShell({ dictionary, locale }: GameShellProps) {
   const [board, setBoard] = useState<Board>(() => createBoard());
   const [nextPlayer, setNextPlayer] = useState<Stone>("black");
   const [status, setStatus] = useState<GameStatus>({ state: "playing", nextPlayer: "black" });
   const [moves, setMoves] = useState<Move[]>([]);
+  const [mode, setMode] = useState<GameMode>("local");
+  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("easy");
 
   const winningKey = useMemo(() => {
     if (status.state !== "won") {
@@ -42,42 +41,101 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     setMoves([]);
   }
 
+  function handleModeChange(nextMode: GameMode) {
+    setMode(nextMode);
+    resetGame();
+  }
+
+  function handleDifficultyChange(difficulty: AiDifficulty) {
+    setAiDifficulty(difficulty);
+    resetGame();
+  }
+
+  function handleUndo() {
+    if (moves.length === 0) {
+      return;
+    }
+
+    const removeCount = mode === "ai" && moves.length >= 2 && moves.at(-1)?.stone === "white" ? 2 : 1;
+    const remainingMoves = moves.slice(0, Math.max(0, moves.length - removeCount));
+    const nextBoard = replayMoves(remainingMoves);
+    const nextStone = remainingMoves.length === 0 ? "black" : getOpponent(remainingMoves.at(-1)!.stone);
+
+    setBoard(nextBoard);
+    setMoves(remainingMoves);
+    setNextPlayer(nextStone);
+    setStatus({ state: "playing", nextPlayer: nextStone });
+  }
+
   function handlePointSelect(point: Point) {
     if (status.state !== "playing") {
       return;
     }
 
+    if (mode === "ai" && nextPlayer !== "black") {
+      return;
+    }
+
     try {
-      const nextBoard = placeStone(board, point, nextPlayer);
-      const line = checkWin(nextBoard, point, nextPlayer);
-      const move = {
+      const humanMove = {
         ...point,
         stone: nextPlayer,
         moveNumber: moves.length + 1
       };
+      const nextBoard = placeStone(board, point, nextPlayer);
+      const nextMoves = [...moves, humanMove];
+      const result = getGameResult(nextBoard, point, nextPlayer);
 
-      setBoard(nextBoard);
-      setMoves((currentMoves) => [...currentMoves, move]);
-
-      if (line) {
-        setStatus({ state: "won", winner: nextPlayer, line });
+      if (result.state !== "playing") {
+        commitGameState(nextBoard, nextMoves, result);
         return;
       }
 
-      if (isBoardFull(nextBoard)) {
-        setStatus({ state: "draw" });
+      if (mode === "ai") {
+        commitAiTurn(nextBoard, nextMoves);
         return;
       }
 
-      const upcoming = getOpponent(nextPlayer);
-      setNextPlayer(upcoming);
-      setStatus({ state: "playing", nextPlayer: upcoming });
+      commitGameState(nextBoard, nextMoves, result);
     } catch {
       // Illegal clicks are intentionally ignored; the board remains authoritative.
     }
   }
 
+  function commitAiTurn(currentBoard: Board, currentMoves: Move[]) {
+    const aiPoint = chooseAiMove(currentBoard, "white", { difficulty: aiDifficulty });
+
+    if (!aiPoint) {
+      commitGameState(currentBoard, currentMoves, { state: "draw" });
+      return;
+    }
+
+    const aiBoard = placeStone(currentBoard, aiPoint, "white");
+    const aiMove = {
+      ...aiPoint,
+      stone: "white" as const,
+      moveNumber: currentMoves.length + 1
+    };
+    const aiMoves = [...currentMoves, aiMove];
+    const aiResult = getGameResult(aiBoard, aiPoint, "white");
+
+    if (aiResult.state === "playing") {
+      commitGameState(aiBoard, aiMoves, { state: "playing", nextPlayer: "black" });
+      return;
+    }
+
+    commitGameState(aiBoard, aiMoves, aiResult);
+  }
+
+  function commitGameState(nextBoard: Board, nextMoves: Move[], nextStatus: GameStatus) {
+    setBoard(nextBoard);
+    setMoves(nextMoves);
+    setStatus(nextStatus);
+    setNextPlayer(nextStatus.state === "playing" ? nextStatus.nextPlayer : (nextMoves.at(-1)?.stone ?? "black"));
+  }
+
   const lastMove = moves.at(-1) ?? null;
+  const canUndo = moves.length > 0;
 
   return (
     <main className="app-shell">
@@ -99,6 +157,16 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             <button
               className="icon-button"
               type="button"
+              onClick={handleUndo}
+              aria-label={dictionary.controls.undo}
+              disabled={!canUndo}
+              title={dictionary.controls.undo}
+            >
+              <Undo2 size={20} />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
               onClick={resetGame}
               aria-label={dictionary.controls.reset}
               title={dictionary.controls.reset}
@@ -109,11 +177,19 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         </header>
 
         <div className="mode-strip" aria-label={dictionary.modes.label}>
-          <button className="mode-pill active" type="button">
+          <button
+            className={`mode-pill ${mode === "local" ? "active" : ""}`}
+            type="button"
+            onClick={() => handleModeChange("local")}
+          >
             <Users size={16} />
             {dictionary.modes.local}
           </button>
-          <button className="mode-pill" type="button" disabled>
+          <button
+            className={`mode-pill ${mode === "ai" ? "active" : ""}`}
+            type="button"
+            onClick={() => handleModeChange("ai")}
+          >
             <Bot size={16} />
             {dictionary.modes.ai}
           </button>
@@ -122,6 +198,25 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             {dictionary.modes.room}
           </button>
         </div>
+
+        {mode === "ai" ? (
+          <div className="difficulty-strip" aria-label={dictionary.ai.difficultyLabel}>
+            <button
+              className={`mode-pill ${aiDifficulty === "easy" ? "active" : ""}`}
+              type="button"
+              onClick={() => handleDifficultyChange("easy")}
+            >
+              {dictionary.ai.easy}
+            </button>
+            <button
+              className={`mode-pill ${aiDifficulty === "normal" ? "active" : ""}`}
+              type="button"
+              onClick={() => handleDifficultyChange("normal")}
+            >
+              {dictionary.ai.normal}
+            </button>
+          </div>
+        ) : null}
 
         <div className="play-area">
           <GomokuBoard
@@ -144,6 +239,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             {dictionary.status.title}
           </div>
           <p className="status-copy">{getStatusText(status, dictionary)}</p>
+          <p className="status-note">
+            {mode === "ai" ? dictionary.ai.playerBlackAiWhite : dictionary.modes.local}
+          </p>
           <div className="stone-row">
             <span
               aria-label={dictionary.status.blackStone}
@@ -169,6 +267,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       </aside>
     </main>
   );
+}
+
+function replayMoves(moves: Move[]): Board {
+  return moves.reduce((currentBoard, move) => placeStone(currentBoard, move, move.stone), createBoard());
 }
 
 function getStatusText(status: GameStatus, dictionary: GameDictionary): string {

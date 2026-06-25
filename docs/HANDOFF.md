@@ -118,14 +118,13 @@ node_modules/
 
 ## 4. 当前目标
 
-当前目标是在 `20260625-001746-stage0-redo` 已收口的基础上，补强标准流程文档，把验证执行、验证报告和验证状态收口合并到“独立验证兼记录子代理”：
+当前目标是收口阶段 1 本地可玩增强切片，并进入下一轮阶段 1/SEO 或后续功能派发：
 
-- 阶段 0 重做版已补齐默认英语、六语言路由、字典和阿拉伯语 RTL。
-- 阶段 0 重做版已补齐浅色/黑暗模式切换入口和 `localStorage` 持久化。
-- 阶段 0 重做版已补齐规则模块接口和规则测试。
-- Aster 独立验证已通过完整代码门禁和真实 Chrome/CDP 浏览器验收。
-- 文档必须明确 UI/规则/文档子代理自测边界，以及最终通过状态来自 Aster 独立验证。
-- 后续流程默认使用“独立验证兼记录子代理”，该角色可以运行验证、写验证报告、更新验证矩阵、阶段报告和 `docs/HANDOFF.md` 中的验证状态与报告路径；但不能修代码，不能修改实现内容。
+- 阶段 1 已完成本地双人/AI 模式切换、Easy/Normal AI、悔棋、重开、终局锁定、六语言新增文案、黑暗模式兼容和移动端布局增强。
+- Ember 实现报告已落档：`docs/subagents/20260625-stage1-local-ai-实现-Ember.md`。
+- Atlas 独立验证兼记录已通过完整命令门禁和真实 Chrome 浏览器验收。
+- 本轮阶段报告已落档：`docs/STAGE_1_REPORT.md`。
+- 后续仍默认使用“独立验证兼记录子代理”完成验证执行、验证报告、阶段报告和 `docs/HANDOFF.md` 的验证状态收口；该角色不能修代码，不能修改实现内容。
 
 ## 5. 已完成
 
@@ -188,6 +187,22 @@ node_modules/
   - `git diff --check` 通过，仅有 LF/CRLF 工作副本提示。
   - 关键规则文本已用 `rg` 定位核对。
   - 验证报告：`docs/subagents/20260625-workflow-merge-verify-docs-验证兼记录-Orion.md`
+- 阶段 1 本地可玩增强实现已完成：
+  - 本地双人/AI 模式切换。
+  - Easy/Normal AI 初版。
+  - 本地悔棋、AI 悔棋、重开。
+  - 终局后禁止继续落子。
+  - 六语言新增按钮和 AI 文案。
+  - 黑暗模式和移动端布局补强。
+  - 实现报告：`docs/subagents/20260625-stage1-local-ai-实现-Ember.md`
+- 阶段 1 独立验证兼记录已通过：
+  - `npm test` 通过，2 个测试文件、21 个测试用例。
+  - `npm run lint` 通过。
+  - `npm run build` 首次因 `.next` 文件锁失败；清理生成缓存后重试通过。
+  - `npm audit --omit=dev` 通过，0 vulnerabilities。
+  - `git diff --check` 通过，仅有 LF/CRLF 工作副本提示。
+  - 系统 Chrome + Playwright Core 浏览器验收覆盖 `/en` 桌面、AI 模式、终局锁定、`/ar` 移动端 RTL/LTR、浅色/黑暗模式和六语言新增文案。
+  - 验证报告：`docs/subagents/20260625-stage1-local-ai-验证兼记录-Atlas.md`
 
 ## 6. Verification Matrix
 
@@ -213,6 +228,16 @@ node_modules/
 | stage0-redo 验证兼记录收口 | `git diff --check` | 通过 | Lumen 本轮实际运行；仅更新允许范围内文档 |
 | workflow merge verify docs | `git diff --check` | 通过 | Cedar 本轮实际运行；仅有 LF/CRLF 工作副本提示 |
 | workflow merge verify docs 独立验证兼记录 | `git diff --check` + `rg` 关键规则定位 | 通过 | Orion 验证，确认验证兼记录角色合并、授权边界、返工路径、派发枚举、报告目录和 HANDOFF 收口口径均已落实 |
+| stage1-local-ai 实现自测 | `npm test` | 通过 | Ember 自测，2 个测试文件，21 个测试用例 |
+| stage1-local-ai 实现自测 | `npm run lint` | 通过 | Ember 自测 |
+| stage1-local-ai 实现自测 | `npm run build` | 通过 | Ember 自测 |
+| stage1-local-ai 实现自测 | `git diff --check` | 通过 | Ember 自测，仅有 LF/CRLF 工作副本提示 |
+| stage1-local-ai 独立验证兼记录 | `npm test` | 通过 | Atlas 验证，2 个测试文件，21 个测试用例 |
+| stage1-local-ai 独立验证兼记录 | `npm run lint` | 通过 | Atlas 验证 |
+| stage1-local-ai 独立验证兼记录 | `npm run build` | 通过 | Atlas 验证；首次 `.next/server/app/ar.segments` 文件锁失败，清理生成缓存后重试通过 |
+| stage1-local-ai 独立验证兼记录 | `npm audit --omit=dev` | 通过 | Atlas 验证，0 vulnerabilities |
+| stage1-local-ai 独立验证兼记录 | `git diff --check` | 通过 | Atlas 验证，仅有 LF/CRLF 工作副本提示 |
+| stage1-local-ai 浏览器验收 | 系统 Chrome + Playwright Core | 通过 | Atlas 覆盖 `/en` 桌面本地/AI、Easy/Normal、AI 不占已有格、AI 悔棋、终局锁定、胜线/最后一步、`/ar` 390x844 RTL 且棋盘 LTR、浅色/黑暗模式和六语言新增文案；in-app Browser 插件因工具侧 `sandboxPolicy` 元数据错误不可用 |
 
 代码改动后必须重新运行完整门禁。UI 改动还必须做真实浏览器检查。
 
@@ -235,6 +260,8 @@ node_modules/
 | 规则逻辑 | `src/game/board.ts` |
 | 规则类型 | `src/game/types.ts` |
 | 规则测试 | `src/game/board.test.ts` |
+| AI 逻辑 | `src/game/ai.ts` |
+| AI 测试 | `src/game/ai.test.ts` |
 | Vitest 配置 | `vitest.config.ts` |
 | Next 配置 | `next.config.ts` |
 
@@ -244,6 +271,7 @@ node_modules/
 - `WEBSITE_BUILD_PLAN.md`
 - `docs/REUSE_EVALUATION.md`
 - `docs/STAGE_0_REPORT.md`
+- `docs/STAGE_1_REPORT.md`
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`
 - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`
 - `docs/HANDOFF.md`
@@ -304,13 +332,19 @@ AI Worker 与设置持久化：
 - 当前项目已建立 `[locale]` 路由、六语言字典、RTL、主题 token、主题切换和 `localStorage` 持久化。
 - Aster 已完成独立浏览器验收；后续 UI/SEO 改动需要继续覆盖六语言、RTL 和主题持久化。
 
+阶段 1 本地可玩增强：
+
+- Ember 已完成本地双人/AI 模式切换、Easy/Normal AI、悔棋、重开和终局锁定。
+- Atlas 已完成独立验证兼记录，确认 `/en` 桌面、`/ar` 移动端、六语言文案和浅色/黑暗模式通过。
+- in-app Browser 插件本轮不可用，已用系统 Chrome + Playwright Core 完成真实浏览器验收。
+
 ## 10. 下一步派发表
 
 | 优先级 | 子代理 | 目标 | 允许修改范围 | 禁止范围 | 输入文档 | 验收标准 |
 | --- | --- | --- | --- | --- | --- | --- |
 | P1 | 实现 SEO | 补多语言 metadata、`hreflang`、canonical/alternate 和 sitemap 基础 | `src/app/**`、必要配置、相关文档 | 不做广告、Socket、排行榜 | `WEBSITE_BUILD_PLAN.md`、`docs/logic/i18n-theme-module.md` | 六语言 SEO 链接正确，build 通过 |
-| P1 | 实现 Game UX | 完善本地双人体验、悔棋、重开和状态流迁移到新版规则接口 | `src/components/**`、`src/game/**`、必要测试 | 不做在线服务、排行榜、真实广告 | `docs/logic/rules-engine-module.md`、`docs/logic/i18n-theme-module.md` | 完整下完一盘，悔棋/重开可用，规则测试通过 |
-| P1 | 实现 AI Easy | 增加 Easy AI 初版 | `src/game/**`、必要 UI 接入和测试 | 不做 Hard AI Worker | `docs/logic/ai-engine-module.md` | 随机合法落子并优先基础补杀/防守，测试通过 |
+| P2 | 实现 AI 测试补强 | 为 Normal AI 增加更完整的活二、活三、冲四、活四评分矩阵测试 | `src/game/**`、必要测试报告 | 不做 Hard AI Worker | `docs/logic/ai-engine-module.md`、`docs/STAGE_1_REPORT.md` | AI 测试覆盖关键棋型，`npm test` 通过 |
+| P2 | 实现移动端手感细化 | 细化触摸目标、状态区信息密度和小屏视觉回归 | `src/components/**`、`src/app/globals.css`、必要文档 | 不做广告接入、在线服务 | `docs/STAGE_1_REPORT.md` | 390px 手机和 1024px 平板真实浏览器验收通过 |
 
 建议先不要做：
 
@@ -319,7 +353,7 @@ AI Worker 与设置持久化：
 - 真实广告。
 - Hard AI。
 
-这些属于后续阶段。当前 stage0-redo 已完成独立验证；流程规范完成验证兼记录角色合并后，可以进入 SEO、Game UX 和 Easy AI 等阶段 1 工作。
+这些属于后续阶段。当前 stage1-local-ai 已完成独立验证，可以进入 SEO、AI 测试补强或移动端手感细化等后续工作。
 
 ## 11. Risk Register
 
@@ -332,6 +366,8 @@ AI Worker 与设置持久化：
 | 广告影响棋盘误触 | major | 广告靠近棋盘或按钮 | 广告位远离高频点击区，浏览器验收 | 商业化阶段 |
 | AI 计算阻塞 UI | major | Hard AI 在主线程运行 | Worker 化、requestId、boardVersion | AI 阶段 |
 | 共享文件并行冲突 | major | 多代理同时改 `src/app/**`、字典、全局 CSS | 主控指定 owner，串行合并 | 全阶段 |
+| AI 棋型覆盖不足 | minor | Normal AI 后续被要求具备更稳定棋力 | 增加活二、活三、冲四、活四评分矩阵测试；Hard AI 阶段前补 Worker 设计 | AI 阶段 |
+| 构建缓存文件锁 | note | Windows/OneDrive 下 `.next` 旧缓存被进程或属性锁住 | 停止本项目 Next 进程，确认路径后清理 `.next` 生成缓存再 build | 本地验证 |
 
 ## 12. Do / Do Not
 
@@ -378,6 +414,12 @@ workflow-merge-verify-docs：
 
 - `docs/subagents/20260625-workflow-merge-verify-docs-实现-Cedar.md`
 - `docs/subagents/20260625-workflow-merge-verify-docs-验证兼记录-Orion.md`
+
+stage1-local-ai：
+
+- `docs/subagents/20260625-stage1-local-ai-实现-Ember.md`
+- `docs/subagents/20260625-stage1-local-ai-验证兼记录-Atlas.md`
+- `docs/STAGE_1_REPORT.md`
 
 ## 14. 交接更新模板
 

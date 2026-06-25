@@ -5,6 +5,7 @@ export type GameDictionary = {
   heroTitle: string;
   controls: {
     reset: string;
+    undo: string;
     language: string;
     theme: string;
     lightTheme: string;
@@ -15,6 +16,12 @@ export type GameDictionary = {
     local: string;
     ai: string;
     room: string;
+  };
+  ai: {
+    difficultyLabel: string;
+    easy: string;
+    normal: string;
+    playerBlackAiWhite: string;
   };
   board: {
     label: string;
@@ -50,6 +57,7 @@ const en = {
     heroTitle: "Play Gomoku Online",
     controls: {
       reset: "New game",
+      undo: "Undo",
       language: "Language",
       theme: "Theme",
       lightTheme: "Switch to light mode",
@@ -60,6 +68,12 @@ const en = {
       local: "Local two-player",
       ai: "AI",
       room: "Friend room"
+    },
+    ai: {
+      difficultyLabel: "AI difficulty",
+      easy: "Easy",
+      normal: "Normal",
+      playerBlackAiWhite: "You play black. AI plays white."
     },
     board: {
       label: "15 by 15 Gomoku board",
@@ -91,6 +105,7 @@ const zh = {
     heroTitle: "在线对弈五子棋",
     controls: {
       reset: "新开一局",
+      undo: "悔棋",
       language: "语言",
       theme: "主题",
       lightTheme: "切换到浅色模式",
@@ -101,6 +116,12 @@ const zh = {
       local: "本地双人",
       ai: "人机",
       room: "好友房"
+    },
+    ai: {
+      difficultyLabel: "AI 难度",
+      easy: "简单",
+      normal: "普通",
+      playerBlackAiWhite: "你执黑，AI 执白。"
     },
     board: {
       label: "15 乘 15 五子棋棋盘",
@@ -132,6 +153,7 @@ const fr = {
     heroTitle: "Jouer au Gomoku en ligne",
     controls: {
       reset: "Nouvelle partie",
+      undo: "Annuler",
       language: "Langue",
       theme: "Thème",
       lightTheme: "Passer au mode clair",
@@ -142,6 +164,12 @@ const fr = {
       local: "Deux joueurs locaux",
       ai: "IA",
       room: "Salon ami"
+    },
+    ai: {
+      difficultyLabel: "Difficulté de l'IA",
+      easy: "Facile",
+      normal: "Normal",
+      playerBlackAiWhite: "Vous jouez les noirs. L'IA joue les blancs."
     },
     board: {
       label: "Plateau de Gomoku 15 par 15",
@@ -173,6 +201,7 @@ const es = {
     heroTitle: "Juega Gomoku en línea",
     controls: {
       reset: "Nueva partida",
+      undo: "Deshacer",
       language: "Idioma",
       theme: "Tema",
       lightTheme: "Cambiar al modo claro",
@@ -183,6 +212,12 @@ const es = {
       local: "Dos jugadores locales",
       ai: "IA",
       room: "Sala de amigos"
+    },
+    ai: {
+      difficultyLabel: "Dificultad de IA",
+      easy: "Fácil",
+      normal: "Normal",
+      playerBlackAiWhite: "Juegas con negras. La IA juega con blancas."
     },
     board: {
       label: "Tablero de Gomoku de 15 por 15",
@@ -214,6 +249,7 @@ const ru = {
     heroTitle: "Играйте в гомоку онлайн",
     controls: {
       reset: "Новая игра",
+      undo: "Отменить",
       language: "Язык",
       theme: "Тема",
       lightTheme: "Включить светлую тему",
@@ -224,6 +260,12 @@ const ru = {
       local: "Два игрока",
       ai: "ИИ",
       room: "Комната друга"
+    },
+    ai: {
+      difficultyLabel: "Сложность ИИ",
+      easy: "Легко",
+      normal: "Обычно",
+      playerBlackAiWhite: "Вы играете черными. ИИ играет белыми."
     },
     board: {
       label: "Доска гомоку 15 на 15",
@@ -255,6 +297,7 @@ const ar = {
     heroTitle: "العب غوموكو على الإنترنت",
     controls: {
       reset: "لعبة جديدة",
+      undo: "تراجع",
       language: "اللغة",
       theme: "السمة",
       lightTheme: "التبديل إلى الوضع الفاتح",
@@ -265,6 +308,12 @@ const ar = {
       local: "لاعبان محليان",
       ai: "الذكاء الاصطناعي",
       room: "غرفة صديق"
+    },
+    ai: {
+      difficultyLabel: "صعوبة الذكاء الاصطناعي",
+      easy: "سهل",
+      normal: "عادي",
+      playerBlackAiWhite: "أنت تلعب بالأسود. الذكاء الاصطناعي يلعب بالأبيض."
     },
     board: {
       label: "لوحة غوموكو 15 في 15",
