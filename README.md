@@ -124,6 +124,12 @@ npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net
 ```
 
+房间聊天频道可跑 Socket.IO 冒烟，确认玩家/观战者发言、房内广播、频率限制和非成员拒绝：
+
+```bash
+npm run smoke:room-chat -- http://gomoku.yagu.ddns-ip.net
+```
+
 ## 验证命令
 
 ```bash

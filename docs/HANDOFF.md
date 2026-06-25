@@ -1919,3 +1919,55 @@ b6faf9e
 - 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
 - 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
 - 下一步：小步 5，房间聊天频道。
+
+## 41. 2026-06-25 阶段 3 小步 5：房间聊天频道本地完成
+
+本轮目标：
+
+- 按阶段 3 build plan 推进小步 5。
+- 实现房间聊天频道，让同房间玩家和观战者可发言。
+- 服务端拒绝空消息、超长消息、发送过快消息和非房间成员消息。
+- 好友房面板显示最近房间消息和发送输入框。
+
+实际完成：
+
+- `src/server/rooms.ts`：
+  - 新增 `RoomChatMessage` 和 `RoomSnapshot.chatMessages`。
+  - 新增 `RoomStore.sendRoomChat()`。
+  - 每房间保留最近 50 条内存消息。
+  - 服务端限制空消息、160 字符上限和 800ms 发送间隔。
+- `src/server/room-socket.ts`：
+  - 新增 `room:chat-send`。
+  - 聊天只广播同房间 `room:state`，不刷新 lobby 房间列表。
+- `src/server/room-socket.test.ts`：
+  - 覆盖观战者发言、房内广播、频率限制、空/超长消息和非成员拒绝。
+- `src/components/useFriendRoom.ts`、`src/components/GameShell.tsx`、`src/app/globals.css`：
+  - 好友房面板新增房间聊天区域、最近消息列表、发送输入框和发送按钮。
+- `src/i18n/dictionaries.ts`：
+  - 六语言新增房间聊天文案。
+- `tools/smoke-room-chat.ts`、`package.json`、`README.md`：
+  - 新增 `npm run smoke:room-chat` 及说明。
+
+本地验证：
+
+- `npm test`：通过，5 个测试文件、61 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3032 npm start` 后运行 `npm run smoke:room-chat -- http://127.0.0.1:3032`，通过。
+  - `PASS room chat setup - 886QF7`
+  - `PASS room chat spectator broadcast`
+  - `PASS room chat rate limit - chat-rate-limited`
+  - `PASS room chat player broadcast`
+  - `PASS empty chat rejected - chat-message-empty`
+  - `PASS long chat rejected - chat-message-too-long`
+  - `PASS stranger chat rejected - not-room-member`
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3032`，通过。
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3032`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3032`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3032`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送小步 5，等待真实服务器更新后跑 `verify:online`、`smoke:room-chat`、`smoke:lobby-ui`、`smoke:lobby`、`smoke:online-room` 和 `smoke:share-url`。

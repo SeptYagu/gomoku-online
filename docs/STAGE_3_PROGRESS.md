@@ -224,3 +224,54 @@
   - `PASS create room URL - W5H8F2`
   - `PASS copy invite - copied current URL`
   - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+
+## 小步 5：房间聊天频道
+
+状态：实现完成，本地验证通过；等待提交推送后做真实服务器验证。
+
+目标：
+
+- 同一房间内玩家和观战者可以发送房间聊天消息。
+- 非房间成员不能向房间发送聊天消息。
+- 服务端限制空消息、超长消息和发送频率。
+- 消息以纯文本进入房间 snapshot，第一版只保留短期内存历史。
+- 好友房面板显示最近房间消息和发送输入框。
+
+实现：
+
+- `src/server/rooms.ts`
+  - 新增 `RoomChatMessage` 和 `RoomSnapshot.chatMessages`。
+  - `RoomStore.sendRoomChat()` 允许房间玩家/观战者发言。
+  - 服务端限制空消息、160 字符上限、800ms 发送间隔。
+  - 每房间保留最近 50 条内存消息。
+- `src/server/room-socket.ts`
+  - 新增 `room:chat-send`。
+  - 聊天只广播 `room:state` 到同房间，不刷新 lobby 房间列表。
+- `src/components/useFriendRoom.ts`
+  - 新增 `chatText`、`setChatText()`、`sendChatMessage()`。
+- `src/components/GameShell.tsx`
+  - 好友房面板新增房间聊天区域、最近消息列表、发送输入框和发送按钮。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增房间聊天 UI 文案。
+- `tools/smoke-room-chat.ts`
+  - 覆盖玩家发言、观战者发言、房内广播、频率限制、空/超长消息和非成员拒绝。
+- `package.json`
+  - 新增 `npm run smoke:room-chat`。
+
+验证：
+
+- `npm test`：通过，5 个测试文件、61 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3032 npm start` 后运行 `npm run smoke:room-chat -- http://127.0.0.1:3032`，通过。
+  - `PASS room chat setup - 886QF7`
+  - `PASS room chat spectator broadcast`
+  - `PASS room chat rate limit - chat-rate-limited`
+  - `PASS room chat player broadcast`
+  - `PASS empty chat rejected - chat-message-empty`
+  - `PASS long chat rejected - chat-message-too-long`
+  - `PASS stranger chat rejected - not-room-member`
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3032`，通过。
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3032`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3032`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3032`，通过。

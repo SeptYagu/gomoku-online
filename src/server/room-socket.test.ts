@@ -22,6 +22,7 @@ describe("room socket handlers", () => {
       const host = await harness.connectClient();
       const guest = await harness.connectClient();
       const spectator = await harness.connectClient();
+      const stranger = await harness.connectClient();
 
       const createAck = await emitAck(host, "room:create", {
         playerId: "host-player",
@@ -68,6 +69,44 @@ describe("room socket handlers", () => {
         error: { code: "not-room-player" }
       });
       await hostSawSpectator;
+
+      const guestSawChat = waitForEventMatching<RoomSnapshot>(
+        guest,
+        "room:state",
+        (snapshot) => snapshot.chatMessages.some((message) => message.text === "hello from watcher")
+      );
+      const spectatorChatAck = await emitAck(spectator, "room:chat-send", {
+        roomCode,
+        text: " hello\nfrom   watcher "
+      });
+
+      expect(spectatorChatAck.ok ? spectatorChatAck.value.snapshot.chatMessages.at(-1) : null).toMatchObject({
+        name: "Watcher",
+        role: "spectator",
+        seat: null,
+        text: "hello from watcher"
+      });
+      expect((await guestSawChat).chatMessages.at(-1)).toMatchObject({
+        name: "Watcher",
+        role: "spectator",
+        text: "hello from watcher"
+      });
+      expect(await emitAck(spectator, "room:chat-send", { roomCode, text: "too soon" })).toMatchObject({
+        ok: false,
+        error: { code: "chat-rate-limited" }
+      });
+      expect(await emitAck(host, "room:chat-send", { roomCode, text: "   " })).toMatchObject({
+        ok: false,
+        error: { code: "chat-message-empty" }
+      });
+      expect(await emitAck(host, "room:chat-send", { roomCode, text: "x".repeat(161) })).toMatchObject({
+        ok: false,
+        error: { code: "chat-message-too-long" }
+      });
+      expect(await emitAck(stranger, "room:chat-send", { roomCode, text: "hello" })).toMatchObject({
+        ok: false,
+        error: { code: "not-room-member" }
+      });
 
       const guestSawHostReady = waitForEvent<RoomSnapshot>(guest, "room:state");
       const hostReadyAck = await emitAck(host, "room:ready", { ready: true, roomCode });

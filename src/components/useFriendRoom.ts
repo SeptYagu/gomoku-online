@@ -25,6 +25,7 @@ export type FriendRoomController = {
   canResign: boolean;
   canRestart: boolean;
   canUndo: boolean;
+  chatText: string;
   connectionStatus: "idle" | "connecting" | "connected" | "disconnected";
   copyInvite: () => void;
   copiedInvite: boolean;
@@ -45,6 +46,8 @@ export type FriendRoomController = {
   respondUndoRequest: (accepted: boolean) => void;
   restartGame: () => void;
   room: RoomClientState | null;
+  sendChatMessage: () => void;
+  setChatText: (value: string) => void;
   setJoinCode: (value: string) => void;
   setPlayerName: (value: string) => void;
   toggleReady: () => void;
@@ -63,6 +66,7 @@ export function useFriendRoom(): FriendRoomController {
   const [joinCode, setJoinCodeState] = useState(getInitialJoinCode);
   const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
   const [lobbyStatus, setLobbyStatus] = useState<FriendRoomController["lobbyStatus"]>("idle");
+  const [chatText, setChatText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
 
@@ -266,6 +270,26 @@ export function useFriendRoom(): FriendRoomController {
     ensureSocket().emit("game:restart", { roomCode: room.snapshot.code }, applyRoomAck);
   }, [applyRoomAck, ensureSocket, room]);
 
+  const sendChatMessage = useCallback(() => {
+    if (!room) {
+      return;
+    }
+
+    const text = chatText.trim();
+
+    if (!text) {
+      return;
+    }
+
+    ensureSocket().emit("room:chat-send", { roomCode: room.snapshot.code, text }, (response: RoomAck) => {
+      applyRoomAck(response);
+
+      if (response.ok) {
+        setChatText("");
+      }
+    });
+  }, [applyRoomAck, chatText, ensureSocket, room]);
+
   const leaveRoom = useCallback(() => {
     if (!room) {
       return;
@@ -280,6 +304,7 @@ export function useFriendRoom(): FriendRoomController {
       clearRoomSession();
       clearRoomUrl();
       setRoom(null);
+      setChatText("");
       setError(null);
     });
   }, [ensureSocket, room]);
@@ -353,6 +378,7 @@ export function useFriendRoom(): FriendRoomController {
     canResign,
     canRestart,
     canUndo,
+    chatText,
     connectionStatus,
     copyInvite,
     copiedInvite,
@@ -373,6 +399,8 @@ export function useFriendRoom(): FriendRoomController {
     respondUndoRequest,
     restartGame,
     room,
+    sendChatMessage,
+    setChatText,
     setJoinCode,
     setPlayerName,
     toggleReady,

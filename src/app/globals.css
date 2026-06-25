@@ -390,6 +390,79 @@ h1 {
   gap: 2px;
 }
 
+.room-chat {
+  border-top: 1px solid var(--line-strong);
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.room-chat-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.room-chat-list {
+  display: grid;
+  gap: 8px;
+  max-height: 168px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.room-chat-message {
+  border-top: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.room-chat-message:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.room-chat-meta {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.76rem;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.room-chat-meta strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.room-chat-message p {
+  font-size: 0.88rem;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.room-chat-form {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 40px;
+}
+
+.room-chat-form input {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  font: inherit;
+  min-height: 40px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
 .room-summary {
   display: grid;
   gap: 10px;

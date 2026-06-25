@@ -278,6 +278,12 @@ Custom Game：
 - 房间聊天频道：同一房间内玩家和观战者可见。
 - 服务端限制消息长度、空消息、发送频率，消息以纯文本传输。
 - 第一版只保留短期内存历史，持久化留给账号/审计阶段。
+- 当前小步 5 已实现房间聊天频道：
+  - `RoomSnapshot.chatMessages` 保存最近房间消息。
+  - `room:chat-send` 允许房间玩家和观战者发送消息。
+  - 服务端拒绝空消息、超长消息、发送过快消息和非房间成员消息。
+  - 好友房面板显示房间聊天、最近消息和发送输入框。
+  - `tools/smoke-room-chat.ts` 覆盖玩家/观战者发言、房内广播、频率限制、空/超长消息和非成员拒绝。
 
 ## 六语种文案 key
 
@@ -310,6 +316,13 @@ Custom Game：
 - `matchmakingCancel`
 - `privateRoom`
 - `publicRoom`
+
+小步 5 已新增并接入的 UI 文案 key：
+
+- `roomChat`
+- `chatPlaceholder`
+- `sendMessage`
+- `noMessages`
 
 小步 4 已新增并接入的 UI 文案 key：
 
@@ -351,6 +364,7 @@ Custom Game：
 - 密码不下发到客户端。
 - 并发两人找局不会超员。
 - 搜索无结果显示空状态。
+- 房间聊天只在同房间内广播，玩家和观战者可发言，非成员不能发言。已覆盖：`src/server/room-socket.test.ts`、`tools/smoke-room-chat.ts`。
 - 房间列表 UI 的 Join / Watch 可进入对应房间。已覆盖：`tools/smoke-lobby-ui.ts`。
 - 房间更新只增量推送。已覆盖：`src/server/room-socket.test.ts`、`tools/smoke-lobby.ts`。
 - 版本缺口触发全量同步。

@@ -12,6 +12,7 @@ import {
   LogOut,
   RefreshCw,
   RotateCcw,
+  Send,
   Undo2,
   UserRound,
   Users,
@@ -822,6 +823,8 @@ function FriendRoomControls({
         </div>
       ) : null}
 
+      {snapshot ? <RoomChatPanel dictionary={dictionary} room={room} /> : null}
+
       {snapshot ? (
         <div className="room-actions">
           {room.canReady ? (
@@ -863,6 +866,63 @@ function FriendRoomControls({
       ) : null}
       {room.error ? <p className="room-error">{room.error}</p> : null}
     </div>
+  );
+}
+
+function RoomChatPanel({
+  dictionary,
+  room
+}: {
+  dictionary: GameDictionary;
+  room: FriendRoomController;
+}) {
+  const labels = dictionary.room;
+  const messages = room.room?.snapshot.chatMessages ?? [];
+
+  return (
+    <section aria-label={labels.roomChat} className="room-chat">
+      <div className="room-chat-header">
+        <p className="metric-label">{labels.roomChat}</p>
+      </div>
+      <div aria-live="polite" className="room-chat-list" role="log">
+        {messages.length > 0 ? (
+          messages.map((message) => (
+            <div className="room-chat-message" key={message.id}>
+              <div className="room-chat-meta">
+                <strong>{message.name}</strong>
+                <span>{formatChatMessageTime(message.sentAt)}</span>
+              </div>
+              <p>{message.text}</p>
+            </div>
+          ))
+        ) : (
+          <p className="room-message">{labels.noMessages}</p>
+        )}
+      </div>
+      <form
+        className="room-chat-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          room.sendChatMessage();
+        }}
+      >
+        <input
+          maxLength={160}
+          onChange={(event) => room.setChatText(event.target.value)}
+          placeholder={labels.chatPlaceholder}
+          type="text"
+          value={room.chatText}
+        />
+        <button
+          className="icon-button"
+          disabled={!room.chatText.trim()}
+          title={labels.sendMessage}
+          type="submit"
+        >
+          <Send aria-hidden="true" focusable={false} />
+        </button>
+      </form>
+    </section>
   );
 }
 
@@ -1031,6 +1091,13 @@ function getLobbyStatusLabel(status: RoomSnapshot["status"], labels: GameDiction
   }
 
   return labels.lobbyWaiting;
+}
+
+function formatChatMessageTime(sentAt: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(sentAt));
 }
 
 function getRoomGameStatus(snapshot: RoomSnapshot | null): GameStatus {

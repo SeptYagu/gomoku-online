@@ -31,8 +31,18 @@ export type UndoRequestSnapshot = {
   targetSeat: RoomPlayerSeat;
 };
 
+export type RoomChatMessage = {
+  id: string;
+  name: string;
+  role: RoomParticipantRole;
+  seat: RoomPlayerSeat | null;
+  sentAt: number;
+  text: string;
+};
+
 export type RoomSnapshot = {
   board: Board;
+  chatMessages: RoomChatMessage[];
   code: string;
   createdAt: number;
   currentTurn: Stone;
@@ -103,6 +113,9 @@ export type MoveIntent = {
 export type RoomErrorCode =
   | "duplicate-name"
   | "duplicate-player"
+  | "chat-message-empty"
+  | "chat-message-too-long"
+  | "chat-rate-limited"
   | "game-already-started"
   | "game-not-playing"
   | "invalid-player"
@@ -143,6 +156,7 @@ type RoomPlayer = {
   disconnectDeadline: number | null;
   id: string;
   joinedAt: number;
+  lastChatSentAt: number | null;
   name: string;
   ready: boolean;
   rejectedUndoMoveSeq: number | null;
@@ -155,19 +169,22 @@ type RoomSpectator = {
   disconnectedAt: number | null;
   id: string;
   joinedAt: number;
+  lastChatSentAt: number | null;
   name: string;
 };
 
 type RoomState = {
   board: Board;
+  chatMessages: RoomChatMessage[];
   code: string;
   createdAt: number;
   currentTurn: Stone;
   hostSeat: RoomPlayerSeat;
+  nextChatMessageId: number;
+  nextStartingSeat: RoomPlayerSeat;
   moveSeq: number;
   moves: Move[];
   nextUndoRequestId: number;
-  nextStartingSeat: RoomPlayerSeat;
   listVersion: number;
   players: RoomPlayer[];
   spectators: RoomSpectator[];
@@ -194,7 +211,10 @@ const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const COMPLETED_ROOM_TTL_MS = 30 * 60 * 1000;
 const DISCONNECT_GRACE_MS = 60 * 1000;
 const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
+const MAX_ROOM_CHAT_MESSAGES = 50;
+const MAX_ROOM_CHAT_TEXT_LENGTH = 160;
 const MAX_ROOM_LIST_LIMIT = 100;
+const ROOM_CHAT_COOLDOWN_MS = 800;
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 const UNDO_REQUEST_LIMIT = 3;
 const UNDO_REQUEST_TIMEOUT_MS = 10_000;
@@ -241,6 +261,7 @@ export class RoomStore {
     const now = this.now();
     const room: RoomState = {
       board: createBoard(),
+      chatMessages: [],
       code,
       createdAt: now,
       currentTurn: "black",
@@ -254,6 +275,7 @@ export class RoomStore {
           disconnectedAt: null,
           disconnectDeadline: null,
           joinedAt: now,
+          lastChatSentAt: null,
           ready: false,
           rejectedUndoMoveSeq: null,
           undoRequestsRemaining: UNDO_REQUEST_LIMIT,
@@ -261,6 +283,7 @@ export class RoomStore {
         }
       ],
       listVersion: this.nextLobbyVersion(),
+      nextChatMessageId: 1,
       nextUndoRequestId: 1,
       nextStartingSeat: "black",
       spectators: [],
@@ -308,7 +331,8 @@ export class RoomStore {
         ...player,
         connected: true,
         disconnectedAt: null,
-        joinedAt: now
+        joinedAt: now,
+        lastChatSentAt: null
       });
       room.updatedAt = now;
       this.markRoomListed(room);
@@ -322,6 +346,7 @@ export class RoomStore {
       disconnectedAt: null,
       disconnectDeadline: null,
       joinedAt: now,
+      lastChatSentAt: null,
       ready: false,
       rejectedUndoMoveSeq: null,
       undoRequestsRemaining: UNDO_REQUEST_LIMIT,
@@ -674,6 +699,50 @@ export class RoomStore {
     }
 
     return this.markDisconnected(roomCode, playerId);
+  }
+
+  sendRoomChat(roomCode: string, playerId: string, text: string): RoomResult<RoomSnapshot> {
+    const found = this.getRoomAndParticipant(roomCode, playerId);
+
+    if (!found.ok) {
+      return found;
+    }
+
+    const normalizedText = normalizeChatText(text);
+
+    if (!normalizedText) {
+      return failure("chat-message-empty", "Enter a message.");
+    }
+
+    if ([...normalizedText].length > MAX_ROOM_CHAT_TEXT_LENGTH) {
+      return failure("chat-message-too-long", `Messages must be ${MAX_ROOM_CHAT_TEXT_LENGTH} characters or fewer.`);
+    }
+
+    const { participant, role, room } = found.value;
+    const now = this.now();
+
+    if (participant.lastChatSentAt !== null && now - participant.lastChatSentAt < ROOM_CHAT_COOLDOWN_MS) {
+      return failure("chat-rate-limited", "Please wait before sending another message.");
+    }
+
+    participant.lastChatSentAt = now;
+    room.chatMessages.push({
+      id: `${room.code}-${room.nextChatMessageId}`,
+      name: participant.name,
+      role,
+      seat: role === "player" && "seat" in participant ? participant.seat : null,
+      sentAt: now,
+      text: normalizedText
+    });
+    room.nextChatMessageId += 1;
+
+    if (room.chatMessages.length > MAX_ROOM_CHAT_MESSAGES) {
+      room.chatMessages.splice(0, room.chatMessages.length - MAX_ROOM_CHAT_MESSAGES);
+    }
+
+    room.updatedAt = now;
+
+    return success(getRoomSnapshot(room));
   }
 
   restoreConnection(roomCode: string, playerId: string): RoomResult<RoomSnapshot> {
@@ -1158,6 +1227,10 @@ function normalizeRoomCode(roomCode: string): string | null {
   return code.length > 0 ? code : null;
 }
 
+function normalizeChatText(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
 function namesMatch(first: string, second: string): boolean {
   return first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase();
 }
@@ -1165,6 +1238,7 @@ function namesMatch(first: string, second: string): boolean {
 function getRoomSnapshot(room: RoomState): RoomSnapshot {
   return {
     board: room.board.map((row) => [...row]),
+    chatMessages: room.chatMessages.map((message) => ({ ...message })),
     code: room.code,
     createdAt: room.createdAt,
     currentTurn: room.currentTurn,

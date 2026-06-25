@@ -34,6 +34,7 @@ export type GameDictionary = {
     blackSeat: string;
     allowUndo: string;
     availableRooms: string;
+    chatPlaceholder: string;
     connected: string;
     connection: string;
     copied: string;
@@ -47,6 +48,7 @@ export type GameDictionary = {
     lobbyPlaying: string;
     lobbyWaiting: string;
     noRooms: string;
+    noMessages: string;
     notInRoom: string;
     notReady: string;
     opponentTurn: string;
@@ -60,10 +62,12 @@ export type GameDictionary = {
     refreshRooms: string;
     resign: string;
     restartRoom: string;
+    roomChat: string;
     roomClosed: string;
     roomCode: string;
     roomCodePlaceholder: string;
     selfStatus: string;
+    sendMessage: string;
     spectatorSeat: string;
     spectatorStatus: string;
     spectators: string;
@@ -146,6 +150,7 @@ const en = {
       blackSeat: "Black",
       allowUndo: "Allow",
       availableRooms: "Rooms",
+      chatPlaceholder: "Message this room",
       connected: "Connected",
       connection: "Connection",
       copied: "Copied",
@@ -159,6 +164,7 @@ const en = {
       lobbyPlaying: "Playing",
       lobbyWaiting: "Waiting",
       noRooms: "No rooms open",
+      noMessages: "No messages yet",
       notInRoom: "No room joined",
       notReady: "Not ready",
       opponentTurn: "Opponent to move",
@@ -172,10 +178,12 @@ const en = {
       refreshRooms: "Refresh rooms",
       resign: "Resign",
       restartRoom: "Restart",
+      roomChat: "Room chat",
       roomClosed: "Room closed",
       roomCode: "Room code",
       roomCodePlaceholder: "Random code",
       selfStatus: "{name} is in the room.",
+      sendMessage: "Send",
       spectatorSeat: "Spectator",
       spectatorStatus: "{name} is watching.",
       spectators: "Spectators",
@@ -254,6 +262,7 @@ const zh = {
       blackSeat: "黑棋",
       allowUndo: "允许",
       availableRooms: "房间列表",
+      chatPlaceholder: "发送房间消息",
       connected: "已连接",
       connection: "连接",
       copied: "已复制",
@@ -267,6 +276,7 @@ const zh = {
       lobbyPlaying: "对局中",
       lobbyWaiting: "等待中",
       noRooms: "暂无房间",
+      noMessages: "暂无消息",
       notInRoom: "尚未加入房间",
       notReady: "未准备",
       opponentTurn: "对手回合",
@@ -280,10 +290,12 @@ const zh = {
       refreshRooms: "刷新房间",
       resign: "认输",
       restartRoom: "重开",
+      roomChat: "房间聊天",
       roomClosed: "房间已关闭",
       roomCode: "房间码",
       roomCodePlaceholder: "随机房间码",
       selfStatus: "{name} 已在房间中。",
+      sendMessage: "发送",
       spectatorSeat: "观战席",
       spectatorStatus: "{name} 正在观战。",
       spectators: "观战者",
@@ -362,6 +374,7 @@ const fr = {
       blackSeat: "Noirs",
       allowUndo: "Autoriser",
       availableRooms: "Salons",
+      chatPlaceholder: "Message du salon",
       connected: "Connecté",
       connection: "Connexion",
       copied: "Copié",
@@ -375,6 +388,7 @@ const fr = {
       lobbyPlaying: "En jeu",
       lobbyWaiting: "En attente",
       noRooms: "Aucun salon ouvert",
+      noMessages: "Aucun message",
       notInRoom: "Aucun salon rejoint",
       notReady: "Pas prêt",
       opponentTurn: "À l'adversaire",
@@ -388,10 +402,12 @@ const fr = {
       refreshRooms: "Actualiser les salons",
       resign: "Abandonner",
       restartRoom: "Recommencer",
+      roomChat: "Chat du salon",
       roomClosed: "Salon fermé",
       roomCode: "Code du salon",
       roomCodePlaceholder: "Code aléatoire",
       selfStatus: "{name} est dans le salon.",
+      sendMessage: "Envoyer",
       spectatorSeat: "Spectateur",
       spectatorStatus: "{name} regarde la partie.",
       spectators: "Spectateurs",
@@ -470,6 +486,7 @@ const es = {
       blackSeat: "Negras",
       allowUndo: "Permitir",
       availableRooms: "Salas",
+      chatPlaceholder: "Mensaje de sala",
       connected: "Conectado",
       connection: "Conexión",
       copied: "Copiado",
@@ -483,6 +500,7 @@ const es = {
       lobbyPlaying: "En juego",
       lobbyWaiting: "Esperando",
       noRooms: "No hay salas",
+      noMessages: "Sin mensajes",
       notInRoom: "Sin sala",
       notReady: "No listo",
       opponentTurn: "Turno del rival",
@@ -496,10 +514,12 @@ const es = {
       refreshRooms: "Actualizar salas",
       resign: "Rendirse",
       restartRoom: "Reiniciar",
+      roomChat: "Chat de sala",
       roomClosed: "Sala cerrada",
       roomCode: "Código",
       roomCodePlaceholder: "Código aleatorio",
       selfStatus: "{name} está en la sala.",
+      sendMessage: "Enviar",
       spectatorSeat: "Espectador",
       spectatorStatus: "{name} está mirando.",
       spectators: "Espectadores",
@@ -578,6 +598,7 @@ const ru = {
       blackSeat: "Черные",
       allowUndo: "Разрешить",
       availableRooms: "Комнаты",
+      chatPlaceholder: "Сообщение в комнату",
       connected: "Подключен",
       connection: "Связь",
       copied: "Скопировано",
@@ -591,6 +612,7 @@ const ru = {
       lobbyPlaying: "Идет игра",
       lobbyWaiting: "Ожидание",
       noRooms: "Нет открытых комнат",
+      noMessages: "Сообщений пока нет",
       notInRoom: "Комната не выбрана",
       notReady: "Не готов",
       opponentTurn: "Ход соперника",
@@ -604,10 +626,12 @@ const ru = {
       refreshRooms: "Обновить комнаты",
       resign: "Сдаться",
       restartRoom: "Заново",
+      roomChat: "Чат комнаты",
       roomClosed: "Комната закрыта",
       roomCode: "Код комнаты",
       roomCodePlaceholder: "Случайный код",
       selfStatus: "{name} в комнате.",
+      sendMessage: "Отправить",
       spectatorSeat: "Зритель",
       spectatorStatus: "{name} наблюдает за игрой.",
       spectators: "Зрители",
@@ -686,6 +710,7 @@ const ar = {
       blackSeat: "الأسود",
       allowUndo: "السماح",
       availableRooms: "الغرف",
+      chatPlaceholder: "رسالة الغرفة",
       connected: "متصل",
       connection: "الاتصال",
       copied: "تم النسخ",
@@ -699,6 +724,7 @@ const ar = {
       lobbyPlaying: "قيد اللعب",
       lobbyWaiting: "انتظار",
       noRooms: "لا توجد غرف مفتوحة",
+      noMessages: "لا توجد رسائل بعد",
       notInRoom: "لا توجد غرفة",
       notReady: "غير جاهز",
       opponentTurn: "دور الخصم",
@@ -712,10 +738,12 @@ const ar = {
       refreshRooms: "تحديث الغرف",
       resign: "استسلام",
       restartRoom: "إعادة",
+      roomChat: "دردشة الغرفة",
       roomClosed: "الغرفة مغلقة",
       roomCode: "رمز الغرفة",
       roomCodePlaceholder: "رمز عشوائي",
       selfStatus: "{name} داخل الغرفة.",
+      sendMessage: "إرسال",
       spectatorSeat: "مشاهد",
       spectatorStatus: "{name} يشاهد المباراة.",
       spectators: "المشاهدون",

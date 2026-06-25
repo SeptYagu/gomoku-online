@@ -29,6 +29,10 @@ export type ClientToServerEvents = {
   "lobby:join": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:leave": (payload: undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:list": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
+  "room:chat-send": (
+    payload: { roomCode: string; text: string },
+    ack: (response: RoomAck) => void
+  ) => void;
   "room:create": (payload: { playerId: string; playerName: string }, ack: (response: RoomAck) => void) => void;
   "room:join": (
     payload: { playerId: string; playerName: string; roomCode: string },
@@ -230,6 +234,16 @@ export function registerRoomSocketHandlers(
       );
     });
 
+    socket.on("room:chat-send", (payload, ack) => {
+      acknowledgeAndBroadcastRoomOnly(
+        socket,
+        runForCurrentMember(socket, roomStore, payload.roomCode, (playerId) =>
+          roomStore.sendRoomChat(payload.roomCode, playerId, payload.text)
+        ),
+        ack
+      );
+    });
+
     socket.on("room:leave", (payload, ack) => {
       acknowledgeAndBroadcast(
         io,
@@ -412,6 +426,17 @@ function acknowledgeAndBroadcast(
 
   socket.to(response.value.snapshot.code).emit("room:state", response.value.snapshot);
   broadcastLobbyRoomChange(io, roomStore, response.value.snapshot.code);
+}
+
+function acknowledgeAndBroadcastRoomOnly(socket: RoomSocket, response: RoomAck, ack: (response: RoomAck) => void) {
+  ack(response);
+
+  if (!response.ok) {
+    socket.emit("room:error", response.error);
+    return;
+  }
+
+  socket.to(response.value.snapshot.code).emit("room:state", response.value.snapshot);
 }
 
 function acknowledgeLobbyList(
