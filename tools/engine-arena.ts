@@ -14,6 +14,7 @@ type Outcome = EngineId | "draw";
 type EngineOptions = {
   difficulty: Difficulty;
   moves: Move[];
+  timeLimitMs?: number;
 };
 
 type AiMoveResult = {
@@ -51,6 +52,7 @@ type CliOptions = {
   randomOpeningPlies: number;
   recordedOpeningPlies: number;
   maxMoves: number;
+  timeLimitMs?: number;
 };
 
 type PlayerAssignment = Record<Stone, Engine>;
@@ -218,7 +220,8 @@ function parseArgs(args: string[]): CliOptions {
     seed: readInteger(values, "seed", 20_260_625, 0),
     randomOpeningPlies: readInteger(values, "random-openings", 0, 0, 12),
     recordedOpeningPlies: readInteger(values, "opening-plies", 8, 1, 30),
-    maxMoves: readInteger(values, "max-moves", BOARD_SIZE * BOARD_SIZE, 1, BOARD_SIZE * BOARD_SIZE)
+    maxMoves: readInteger(values, "max-moves", BOARD_SIZE * BOARD_SIZE, 1, BOARD_SIZE * BOARD_SIZE),
+    timeLimitMs: readOptionalInteger(values, "time-limit-ms", 0)
   };
 }
 
@@ -242,6 +245,19 @@ function readInteger(
   }
 
   return parsed;
+}
+
+function readOptionalInteger(
+  values: Map<string, string>,
+  key: string,
+  min: number,
+  max = Number.MAX_SAFE_INTEGER
+): number | undefined {
+  if (!values.has(key)) {
+    return undefined;
+  }
+
+  return readInteger(values, key, 0, min, max);
 }
 
 function readDifficulty(value: string): Difficulty {
@@ -389,7 +405,8 @@ function playGame({
     const engine = players[stone];
     const move = chooseEngineMove(engine, board, stone, {
       difficulty: options.difficulty,
-      moves
+      moves,
+      timeLimitMs: options.timeLimitMs
     });
 
     if (!move || !isValidMove(board, move)) {
@@ -664,6 +681,7 @@ Options:
   --random-openings <n>   Seeded central opening plies before engines move. Default: 0
   --opening-plies <n>     Winner opening plies recorded in the report. Default: 8
   --seed <n>              Deterministic seed. Default: 20260625
+  --time-limit-ms <n>     Optional per-move engine budget override. Default: difficulty budget
   --output <path>         JSON report path. Default: .arena-results/latest.json
   --max-moves <n>         Max plies before adjudicating draw. Default: 225`);
 }

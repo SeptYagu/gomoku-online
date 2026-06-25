@@ -57,6 +57,12 @@ npm run arena -- --games 100 --baseline HEAD^ --candidate current --difficulty i
 npm run arena -- --games 10 --baseline 09ea4e5 --candidate current-parallel --difficulty insane
 ```
 
+随机开局会更早进入搜索，完整 30 秒疯狂档可能跑很久；需要快速采样时可以显式给每步设置评测预算：
+
+```bash
+npm run arena -- --games 20 --baseline 09ea4e5 --candidate current-parallel --difficulty insane --random-openings 2 --time-limit-ms 250
+```
+
 结果会写入 `.arena-results/latest.json`。报告包含总胜率、先后手胜负、每盘棋谱，以及胜方前 8 手开局线的中心相对坐标汇总，可用于判断优化是否有效并沉淀自有开局库。
 
 默认不预置随机开局，让双方自然使用自己的开局库。需要扩大样本时可以加 `--random-openings 2`，但这会让早盘更早进入搜索，疯狂档耗时会明显增加。
