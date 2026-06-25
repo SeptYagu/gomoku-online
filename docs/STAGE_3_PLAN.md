@@ -139,6 +139,8 @@ PlayOK 当前 gomoku 页面列出的成熟能力包括 live opponents、game roo
 10. 排行榜。
 11. 可选账号登录。
 
+执行进度见 `docs/STAGE_3_PROGRESS.md`。
+
 每个小步都必须：
 
 - 更新相关文档。

@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
 import type { RoomAck, RoomClientState } from "@/server/room-contract";
 import type { RoomSnapshot } from "@/server/rooms";
+import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
 
 type RoomSocket = {
   disconnect: () => void;
@@ -77,7 +78,7 @@ export function useFriendRoom(): FriendRoomController {
       return "";
     }
 
-    return `${window.location.origin}${window.location.pathname}?room=${room.snapshot.code}`;
+    return getRoomUrl(room.snapshot.code);
   }, [room]);
 
   const ensureSocket = useCallback((): RoomSocket => {
@@ -123,6 +124,7 @@ export function useFriendRoom(): FriendRoomController {
     setError(null);
     setRoom(response.value);
     setJoinCodeState(response.value.snapshot.code);
+    syncRoomUrl(response.value.snapshot.code);
     persistRoomSession({
       playerId: response.value.playerId,
       playerName: acknowledgedPlayerName,
@@ -235,18 +237,38 @@ export function useFriendRoom(): FriendRoomController {
       }
 
       clearRoomSession();
+      clearRoomUrl();
       setRoom(null);
       setError(null);
     });
   }, [ensureSocket, room]);
 
   const copyInvite = useCallback(() => {
-    if (!inviteUrl || !navigator.clipboard) {
+    if (!room || typeof window === "undefined") {
       return;
     }
 
-    void navigator.clipboard.writeText(inviteUrl).then(() => setCopiedInvite(true));
-  }, [inviteUrl]);
+    const currentInviteUrl = syncRoomUrl(room.snapshot.code);
+
+    if (!navigator.clipboard) {
+      if (copyTextWithFallback(currentInviteUrl)) {
+        setCopiedInvite(true);
+        setError(null);
+        return;
+      }
+
+      setError(`Copy this link: ${currentInviteUrl}`);
+      return;
+    }
+
+    void navigator.clipboard
+      .writeText(currentInviteUrl)
+      .then(() => {
+        setCopiedInvite(true);
+        setError(null);
+      })
+      .catch(() => setError(`Copy this link: ${currentInviteUrl}`));
+  }, [room]);
 
   const setPlayerName = useCallback((value: string) => {
     setPlayerNameState(value);
@@ -371,6 +393,65 @@ function normalizePlayerName(name: string): string {
 
 function normalizeRoomCode(roomCode: string): string {
   return roomCode.trim().toUpperCase();
+}
+
+function getRoomUrl(roomCode: string): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const url = new URL(window.location.href);
+  return getRoomUrlFromHref(url.toString(), roomCode);
+}
+
+function syncRoomUrl(roomCode: string): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const nextUrl = getRoomUrl(roomCode);
+
+  if (nextUrl && window.location.href !== nextUrl) {
+    window.history.replaceState(window.history.state, "", nextUrl);
+  }
+
+  return window.location.href;
+}
+
+function clearRoomUrl() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const nextUrl = clearRoomUrlFromHref(window.location.href);
+
+  if (window.location.href !== nextUrl) {
+    window.history.replaceState(window.history.state, "", nextUrl);
+  }
+}
+
+function copyTextWithFallback(text: string): boolean {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
 }
 
 function persistPlayerName(playerName: string) {

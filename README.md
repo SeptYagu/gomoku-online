@@ -106,6 +106,12 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
 ```
 
+分享链接改动可用系统 Chrome 做真实页面冒烟：
+
+```bash
+npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net
+```
+
 ## 验证命令
 
 ```bash
@@ -181,6 +187,7 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/STAGE_1_REPORT.md`：阶段 1 本地可玩增强执行报告。
 - `docs/STAGE_2_REPORT.md`：阶段 2 好友房在线对战执行报告。
 - `docs/STAGE_3_PLAN.md`：阶段 3 大厅、观战、聊天、随机匹配、排行榜计划。
+- `docs/STAGE_3_PROGRESS.md`：阶段 3 小步骤进度记录。
 - `docs/M3_PUBLIC_TEST_PLAN.md`：M3 公开测试执行清单。
 - `docs/M3_PUBLIC_TEST_LOG.md`：M3 公开测试问题记录。
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`：以后参考项目研究和子代理分工的标准流程。

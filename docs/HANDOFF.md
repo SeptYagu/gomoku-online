@@ -1389,3 +1389,70 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 ```text
 待提交后推送到 origin/main。
 ```
+
+## 28. 2026-06-25 阶段 3 小步 1：真实分享链接
+
+本轮目标：
+
+- 开始实现阶段 3。
+- 第一小步修正分享链接：
+  - 创建房间成功后 URL 带 room code。
+  - 加入房间成功后 URL 带 room code。
+  - 刷新恢复房间时 URL 与房间一致。
+  - 分享按钮复制当前浏览器地址。
+  - 离开房间成功后清理 URL 上的 `room` 参数。
+
+实际完成：
+
+- `src/components/useFriendRoom.ts`：
+  - `applyRoomAck` 成功后同步 `window.history`，把当前地址更新为 `?room=<code>`。
+  - `copyInvite` 先同步当前房间 URL，再复制 `window.location.href`。
+  - clipboard 不可用或失败时，把可复制链接写入页面错误提示。
+  - `leaveRoom` 成功后清理 URL 上的 `room` 参数。
+- 新增 `src/components/room-url.ts`：
+  - `getRoomUrlFromHref`。
+  - `clearRoomUrlFromHref`。
+- 新增 `src/components/room-url.test.ts`：
+  - 覆盖添加房间号、替换已有房间号、保留其他查询参数、清理房间号。
+- 新增 `tools/smoke-share-url.ts`：
+  - 使用系统 Chrome 和 Chrome DevTools Protocol 打开真实页面。
+  - 验证进入 Friend room、Create room 后 URL 出现 room code。
+  - 验证 Copy invite 报告复制成功。
+  - 验证 Leave 后 URL 清理 room 参数。
+- 新增 `docs/STAGE_3_PROGRESS.md`，记录阶段 3 小步骤进度。
+- 更新 `README.md` 文档索引。
+- 更新 `docs/STAGE_3_PLAN.md`，指向进度文档。
+
+修改文件：
+
+- `README.md`
+- `docs/HANDOFF.md`
+- `docs/STAGE_3_PLAN.md`
+- `docs/STAGE_3_PROGRESS.md`
+- `src/components/room-url.test.ts`
+- `src/components/room-url.ts`
+- `src/components/useFriendRoom.ts`
+- `tools/smoke-share-url.ts`
+
+验证命令和结果：
+
+- `npm test`：通过，5 个测试文件、57 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3028 npm start` 后运行 `npm run smoke:share-url -- http://127.0.0.1:3028`，通过。
+  - `PASS create room URL - 5ZDTN5`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://127.0.0.1:3028/en`
+- 推送并部署后运行 `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
