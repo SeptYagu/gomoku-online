@@ -1257,3 +1257,77 @@ M3 当前剩余外部项：
 - 真实服务器三局好友房冒烟。
 - 两台真实电脑手动走完好友房流程。
 - 手机竖屏误触和弹框遮挡检查。
+
+## 26. 2026-06-25 阶段 3 范围补充：分享、观战、聊天、房间列表
+
+本轮目标：
+
+- 按用户要求，把以下问题全部纳入 build plan 阶段 3：
+  - 分享按钮不能是假的。
+  - 创建/加入房间后 URL 应该变成带房间号的可分享地址。
+  - 分享按钮复制当前 URL 到剪贴板。
+  - 超过两人加入同一房间时，第三人及之后进入观战席。
+  - 增加房间聊天频道。
+  - 增加公共聊天频道。
+  - 增加房间列表，让玩家看到当前谁在开房间。
+  - 参考 PlayOK 的大厅、房间、聊天、排行榜等成熟产品方向。
+- 记录新流程：每次推送 GitHub 后，等待 60 秒再检查线上服务器版本。
+
+参考资料：
+
+- PlayOK gomoku 页面：记录其公开展示的 live opponents、game rooms、rankings、stats、profiles、contacts、private messaging、game records、mobile support。
+- PlayOK 社交结构研究资料：记录大厅中的活动桌列表、房间在线用户列表和文本聊天；进桌后有成员列表、玩家位和聊天区。
+
+实际完成：
+
+- 新增 `docs/STAGE_3_PLAN.md`：
+  - 明确阶段 3 先做分享链接、观战席、房间列表、房间聊天、公共聊天，再做随机匹配、对局持久化、排行榜和账号。
+  - 把每个功能拆成验收标准。
+  - 写入每个小步都要文档、验证、提交推送，推送后 sleep 60 秒再检查线上版本。
+- 更新 `WEBSITE_BUILD_PLAN.md`：
+  - 阶段 3 标题改为“大厅、观战、聊天、随机匹配与账号/排行榜”。
+  - 新增真实分享链接、观战席、房间列表/大厅、房间聊天、公共聊天。
+  - 阶段 3 指向 `docs/STAGE_3_PLAN.md`。
+- 更新 `docs/logic/lobby-matchmaking-module.md`：
+  - 增加 PlayOK 参考边界。
+  - 增加分享、观战、房间列表、聊天的阶段 3 结构设计。
+  - 增加相关六语言文案 key。
+- 更新 `README.md` 和 `docs/M3_PUBLIC_TEST_PLAN.md`：
+  - 写入推送 GitHub 后等待 60 秒再检查线上版本。
+  - README 文档索引加入阶段 3 计划。
+
+修改文件：
+
+- `README.md`
+- `WEBSITE_BUILD_PLAN.md`
+- `docs/HANDOFF.md`
+- `docs/M3_PUBLIC_TEST_PLAN.md`
+- `docs/STAGE_3_PLAN.md`
+- `docs/logic/lobby-matchmaking-module.md`
+
+验证命令和结果：
+
+- `git diff --check`：通过。
+- 本轮是阶段计划和文档更新，不改运行时代码。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
+
+下一步建议：
+
+- 推送后 sleep 60 秒，再运行：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
+```
+
+- 若真实服务器仍未更新，记录为部署等待；不进入误判。

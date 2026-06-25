@@ -5,6 +5,8 @@
 ## 参考来源
 
 - `minh100/Gomoku`：无仓库级 LICENSE，只参考大厅、房间列表、私密房和随机找局流程。
+- PlayOK gomoku 页面：只参考 live opponents、game rooms、rankings、stats、profiles、contacts、private messaging、game records、mobile support 等产品方向。
+- PlayOK 社交结构研究资料：只参考大厅活动桌列表、房间在线用户列表、公共聊天、单桌成员/玩家位/聊天区这些结构性概念。
 
 ## 关键文件和证据
 
@@ -236,10 +238,46 @@ Custom Game：
 - 每个事件带 `roomId`、`version`、`updatedAt`。
 - 客户端发现版本缺口时 full resync。
 
+### 阶段 3 补充：分享、观战和聊天
+
+分享链接：
+
+- 创建或加入房间成功后，客户端用 History API 把当前地址更新为含 room code 的 URL，例如 `/en?room=ABC123`。
+- 分享按钮复制当前浏览器地址，避免复制和实际地址不一致。
+- 离开房间后清理 URL 上的 room 参数。
+
+观战席：
+
+- 黑白两名玩家之外的加入者进入 spectators。
+- 观战者可看棋盘、玩家列表、胜负、重开状态和房间聊天。
+- 观战者不能 ready、落子、认输、请求或响应悔棋。
+- 未来如允许观战者入座，必须使用明确 `room:sit` 动作。
+
+大厅/房间列表：
+
+- 大厅展示公开 waiting 房和可观战 playing 房。
+- 每项显示房主昵称、房间码、状态、玩家数、观战人数、创建时间或最近活动。
+- waiting 房提供 Join，playing 房提供 Watch。
+
+聊天：
+
+- 公共聊天频道：大厅范围。
+- 房间聊天频道：同一房间内玩家和观战者可见。
+- 服务端限制消息长度、空消息、发送频率，消息以纯文本传输。
+- 第一版只保留短期内存历史，持久化留给账号/审计阶段。
+
 ## 六语种文案 key
 
 大厅与匹配至少需要：
 
+- `copyCurrentUrl`
+- `shareRoom`
+- `watch`
+- `spectators`
+- `publicChat`
+- `roomChat`
+- `messageTooLong`
+- `messageRateLimited`
 - `findGame`
 - `customGame`
 - `createGame`

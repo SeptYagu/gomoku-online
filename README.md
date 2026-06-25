@@ -92,7 +92,7 @@ location / {
 }
 ```
 
-部署后可用同一条命令确认真实服务器页面、`/api/version`、Socket.IO polling 入口和 WebSocket upgrade：
+推送 GitHub 后等待 60 秒，再用同一条命令确认真实服务器页面、`/api/version`、Socket.IO polling 入口和 WebSocket upgrade：
 
 ```bash
 npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
@@ -180,6 +180,7 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/STAGE_0_REPORT.md`：阶段 0 执行报告。
 - `docs/STAGE_1_REPORT.md`：阶段 1 本地可玩增强执行报告。
 - `docs/STAGE_2_REPORT.md`：阶段 2 好友房在线对战执行报告。
+- `docs/STAGE_3_PLAN.md`：阶段 3 大厅、观战、聊天、随机匹配、排行榜计划。
 - `docs/M3_PUBLIC_TEST_PLAN.md`：M3 公开测试执行清单。
 - `docs/M3_PUBLIC_TEST_LOG.md`：M3 公开测试问题记录。
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`：以后参考项目研究和子代理分工的标准流程。
