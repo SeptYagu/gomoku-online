@@ -16,7 +16,7 @@ M3 的目标是把好友房 MVP 放到真实服务器和真实设备上试跑，
 http://gomoku.yagu.ddns-ip.net
 ```
 
-每次推送 GitHub 后，等待 60 秒再检查真实服务器版本。每次部署后必须先确认实装版本：
+每次推送 GitHub 后，等待 90 秒再检查真实服务器版本。每次部署后必须先确认实装版本：
 
 ```bash
 npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>

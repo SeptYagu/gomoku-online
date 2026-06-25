@@ -1331,3 +1331,61 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 ```
 
 - 若真实服务器仍未更新，记录为部署等待；不进入误判。
+
+## 27. 2026-06-25 阶段 3 范围补充：用户状态、Profile、Ranking、Game records 和棋谱提交
+
+本轮目标：
+
+- 按用户要求，阶段 3 继续补齐 PlayOK 同类平台能力：
+  - 用户状态。
+  - Profile。
+  - Ranking。
+  - Game records。
+  - 每一局在线玩家对局结束后提交棋谱到服务器。
+  - 胜负双方都提交，双方都收到后服务端去重。
+  - 注册玩家可通过个人游戏记录回看。
+  - 游客棋谱也要提交服务器。
+- 将推送后线上版本等待时间从 60 秒改为 90 秒。
+
+实际完成：
+
+- 更新 `docs/STAGE_3_PLAN.md`：
+  - 增加用户状态、Profile、Ranking、Game records。
+  - 增加在线棋谱提交、去重、partial / verified / conflicted 状态。
+  - 明确注册玩家棋谱进入个人 Profile / Game records。
+  - 明确游客棋谱也提交服务器，保存为匿名/guest game record，进入服务器棋谱池，用于后续离线分析、开局库生成和总体统计；默认不挂到公开 Profile，不进入正式注册用户 Ranking。
+  - 每个小步推送后等待 90 秒再查线上版本。
+- 更新 `WEBSITE_BUILD_PLAN.md`：
+  - 阶段 3 功能范围加入用户状态、Profile、Game records、在线棋谱提交/去重/保存/回看。
+  - 技术任务加入 `GameRecord`、`GameRecordSubmission` 和提交去重 API。
+- 更新 `docs/logic/rating-leaderboard-module.md`：
+  - 增加 Profile、状态、Game records 和棋谱提交设计。
+  - 增加游客棋谱保存策略。
+- 更新 `README.md` 和 `docs/M3_PUBLIC_TEST_PLAN.md`：
+  - 推送 GitHub 后等待 90 秒再检查线上版本。
+
+修改文件：
+
+- `README.md`
+- `WEBSITE_BUILD_PLAN.md`
+- `docs/HANDOFF.md`
+- `docs/M3_PUBLIC_TEST_PLAN.md`
+- `docs/STAGE_3_PLAN.md`
+- `docs/logic/rating-leaderboard-module.md`
+
+验证命令和结果：
+
+- `git diff --check`：通过。
+- 本轮是阶段计划和文档更新，不改运行时代码。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```

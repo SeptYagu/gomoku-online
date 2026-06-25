@@ -6,7 +6,7 @@
 
 ## 参考方向
 
-PlayOK 当前 gomoku 页面列出的成熟能力包括 live opponents、game rooms、rankings、stats、profiles、contacts、private messaging、game records 和 mobile support。关于 PlayOK 社交结构的研究资料还描述了大厅房间里的活动桌列表、房间在线用户列表、公共文本聊天，以及单桌内的成员列表、玩家座位和桌内聊天。
+PlayOK 当前 gomoku 页面列出的成熟能力包括 live opponents、game rooms、rankings、stats、profiles、contacts、private messaging、game records 和 mobile support。阶段 3 要覆盖这些平台能力里的核心路径：用户状态、Profile、Ranking、Game records、房间列表、观战和聊天。关于 PlayOK 社交结构的研究资料还描述了大厅房间里的活动桌列表、房间在线用户列表、公共文本聊天，以及单桌内的成员列表、玩家座位和桌内聊天。
 
 本项目只参考产品结构和交互边界，不复制 PlayOK 的 UI、代码、文案或数据。
 
@@ -96,9 +96,34 @@ PlayOK 当前 gomoku 页面列出的成熟能力包括 live opponents、game roo
 排行榜和账号仍属于阶段 3，但排在大厅、观战、聊天、匹配之后：
 
 - 第一版继续允许游客完整游玩。
-- 正式排行榜只统计登录用户或可信 guest session。
+- 正式排行榜只统计注册用户或可信 guest session，具体范围要在 UI 上明确。
 - ELO、每日胜场、连胜榜需要服务端权威结算。
 - 过短对局、同设备刷分、高频重复匹配要过滤。
+- 用户状态需要展示在线、游戏中、观战中、离线等基础状态。
+- 注册玩家拥有 Profile，可展示昵称、头像、Rating、统计、最近对局和 Game records。
+- Ranking 页面展示总榜、每日榜、连胜榜，并支持从榜单进入 Profile。
+
+### 7. 棋谱提交、去重和回看
+
+每一局在线玩家对局结束后都要提交棋谱到服务器，注册玩家和游客都提交：
+
+- 对局结束时，胜负双方客户端各自向服务器提交一份 game record。
+- 服务器用 `roomId/gameId + moveSeq + final board/result` 或服务端签名的 `gameRecordId` 做幂等键。
+- 如果只收到一方提交，先保存为 `partial`。
+- 如果双方都提交，执行去重和一致性校验；一致则合并为一份 `verified` game record。
+- 如果双方提交不一致，以服务端权威房间快照为准，并把冲突标记为 `conflicted` 供后续审计。
+- 注册玩家的棋谱进入个人 Game records，可从 Profile 回看。
+- 游客棋谱也提交并保存为匿名/guest game record，进入服务器棋谱池，用于后续离线分析、开局库生成和总体统计；默认不提供个人云端回看，不挂到公开 Profile，也不进入正式注册玩家 Ranking。
+- 棋谱保存格式优先使用 SGF 或可无损转换为 SGF 的结构化 JSON；后续开局库生成以服务器保存棋谱为输入。
+- 隐私上不保存不必要的 IP 明文；如需反作弊，只保存最小化 hash/设备指纹并在隐私说明中披露。
+
+验收：
+
+- 注册玩家对局结束后，两端都提交棋谱，服务器最终只保留一份 verified 记录。
+- 游客对局结束后也提交棋谱，服务器保存匿名记录，用于后续离线分析和开局库生成。
+- 重复提交同一局不会产生重复 game record。
+- 注册玩家可在自己的 Profile / Game records 中回看棋谱。
+- 开局库工具能从保存的 game records 中读取候选棋谱。
 
 ## 建议小步顺序
 
@@ -109,13 +134,14 @@ PlayOK 当前 gomoku 页面列出的成熟能力包括 live opponents、game roo
 5. 房间聊天频道。
 6. 公共聊天频道。
 7. 随机匹配。
-8. 对局结果持久化。
-9. 排行榜。
-10. 可选账号登录。
+8. 在线棋谱提交、去重和匿名/注册记录保存。
+9. 注册玩家 Profile 和 Game records 回看。
+10. 排行榜。
+11. 可选账号登录。
 
 每个小步都必须：
 
 - 更新相关文档。
 - 通过 `npm test`、`npm run lint`、`npm run build`。
 - 提交并推送 GitHub。
-- 推送后等待 60 秒，再运行线上版本检查。
+- 推送后等待 90 秒，再运行线上版本检查。

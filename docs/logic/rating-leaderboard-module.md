@@ -251,6 +251,25 @@ K 值：
 - 游客用 `guestId/session` 维护临时 rating 与昵称。
 - 游客默认不进入注册用户总榜。
 - 游客数据可设置过期时间。
+- 游客在线对局棋谱也提交服务器，保存为匿名/guest game record；进入服务器棋谱池，用于后续离线分析、开局库生成和总体统计，但默认不展示在公开注册用户 Profile。
+
+### Profile、状态和 Game Records
+
+阶段 3 需要覆盖 PlayOK 同类产品的 Profile、Ranking、Game records 和用户状态能力：
+
+- 用户状态：online、in_room、playing、spectating、offline。
+- Profile：昵称、头像、Rating、胜负统计、最近对局、Game records 入口。
+- Ranking：总榜、每日榜、连胜榜，榜单行可进入 Profile。
+- Game records：注册玩家可查看自己的历史在线对局棋谱；游客记录以匿名/guest 方式保存。
+
+在线对局棋谱提交：
+
+- 对局结束后，胜负双方客户端都提交 game record。
+- 服务端使用 `gameId` / `roomId` / 服务端签名 record id 进行幂等去重。
+- 只收到一方时保存 partial。
+- 双方都收到时进行一致性校验，合并为 verified。
+- 双方不一致时以服务端权威快照为准，标记 conflicted。
+- 保存格式需要能无损转成 SGF，便于后续开局库生成和玩家回看。
 
 ### 排行榜 API
 
@@ -329,6 +348,7 @@ Game 增加：
 ## 实现任务清单
 
 - 设计 `UserRating`、`RatingEvent`、`LeaderboardSnapshot`。
+- 设计 `UserProfile`、`UserPresence`、`GameRecord`、`GameRecordSubmission`。
 - 实现 ELO 计算函数。
 - 实现有效局判定。
 - 实现服务端权威结算。
@@ -337,6 +357,9 @@ Game 增加：
 - 实现 `leaderboard:ratingChanged` 增量事件。
 - 实现当前用户 rating 专属更新。
 - 实现游客 rating 池。
+- 实现在线对局棋谱提交、去重、partial/verified/conflicted 状态流。
+- 实现注册玩家 Profile 和 Game records 查询 API。
+- 实现匿名/guest game record 保存策略。
 
 ## 测试清单
 
@@ -351,6 +374,11 @@ Game 增加：
 - 排行榜分页排序稳定。
 - 搜索不泄露敏感字段。
 - 游客不进入注册用户总榜。
+- 双方重复提交同一局不会产生重复棋谱。
+- 只收到一方棋谱时记录为 partial。
+- 双方一致时记录为 verified。
+- 双方不一致时以服务端权威快照为准并标记 conflicted。
+- 游客棋谱保存但不进入公开注册用户 Profile。
 
 ## 许可证边界
 

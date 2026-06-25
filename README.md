@@ -92,7 +92,7 @@ location / {
 }
 ```
 
-推送 GitHub 后等待 60 秒，再用同一条命令确认真实服务器页面、`/api/version`、Socket.IO polling 入口和 WebSocket upgrade：
+推送 GitHub 后等待 90 秒，再用同一条命令确认真实服务器页面、`/api/version`、Socket.IO polling 入口和 WebSocket upgrade：
 
 ```bash
 npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
