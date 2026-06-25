@@ -1,18 +1,29 @@
 import type { Metadata } from "next";
-import "./globals.css";
+import { notFound } from "next/navigation";
+import { getDirection, isLocale } from "@/i18n/config";
+import "../globals.css";
 
 export const metadata: Metadata = {
   title: "Gomoku Online",
   description: "Play Gomoku online with a clean 15x15 board and fast game setup."
 };
 
-export default function RootLayout({
-  children
-}: Readonly<{
+type LocaleLayoutProps = Readonly<{
   children: React.ReactNode;
-}>) {
+  params: Promise<{
+    locale: string;
+  }>;
+}>;
+
+export default async function LocaleLayout({ children, params }: LocaleLayoutProps) {
+  const { locale } = await params;
+
+  if (!isLocale(locale)) {
+    notFound();
+  }
+
   return (
-    <html lang="en" dir="ltr" suppressHydrationWarning>
+    <html lang={locale} dir={getDirection(locale)} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{

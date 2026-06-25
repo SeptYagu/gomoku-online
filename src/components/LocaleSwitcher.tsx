@@ -11,9 +11,12 @@ type LocaleSwitcherProps = {
   label: string;
 };
 
+const localeStorageKey = "gomoku-locale";
+const localeCookieMaxAgeSeconds = 60 * 60 * 24 * 365;
+
 export function LocaleSwitcher({ currentLocale, label }: LocaleSwitcherProps) {
   useEffect(() => {
-    window.localStorage.setItem("gomoku-locale", currentLocale);
+    persistLocale(currentLocale);
   }, [currentLocale]);
 
   return (
@@ -27,7 +30,7 @@ export function LocaleSwitcher({ currentLocale, label }: LocaleSwitcherProps) {
             href={`/${locale}`}
             key={locale}
             lang={locale}
-            onClick={() => window.localStorage.setItem("gomoku-locale", locale)}
+            onClick={() => persistLocale(locale)}
           >
             {dictionaries[locale].localeName}
           </Link>
@@ -35,4 +38,14 @@ export function LocaleSwitcher({ currentLocale, label }: LocaleSwitcherProps) {
       </div>
     </div>
   );
+}
+
+function persistLocale(locale: Locale) {
+  window.localStorage.setItem(localeStorageKey, locale);
+  document.cookie = [
+    `${localeStorageKey}=${encodeURIComponent(locale)}`,
+    `Max-Age=${localeCookieMaxAgeSeconds}`,
+    "Path=/",
+    "SameSite=Lax"
+  ].join("; ");
 }

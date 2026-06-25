@@ -19,9 +19,16 @@ export type GameDictionary = {
   };
   ai: {
     difficultyLabel: string;
-    easy: string;
     normal: string;
+    hard: string;
+    expert: string;
+    insane: string;
+    firstPlayerLabel: string;
+    humanFirst: string;
+    aiFirst: string;
     playerBlackAiWhite: string;
+    playerWhiteAiBlack: string;
+    thinking: string;
   };
   board: {
     label: string;
@@ -71,9 +78,16 @@ const en = {
     },
     ai: {
       difficultyLabel: "AI difficulty",
-      easy: "Easy",
       normal: "Normal",
-      playerBlackAiWhite: "You play black. AI plays white."
+      hard: "Hard",
+      expert: "Expert",
+      insane: "Insane",
+      firstPlayerLabel: "First move",
+      humanFirst: "You first",
+      aiFirst: "AI first",
+      playerBlackAiWhite: "You play black. AI plays white.",
+      playerWhiteAiBlack: "You play white. AI plays black.",
+      thinking: "AI thinking"
     },
     board: {
       label: "15 by 15 Gomoku board",
@@ -119,9 +133,16 @@ const zh = {
     },
     ai: {
       difficultyLabel: "AI 难度",
-      easy: "简单",
       normal: "普通",
-      playerBlackAiWhite: "你执黑，AI 执白。"
+      hard: "困难",
+      expert: "专家",
+      insane: "疯狂",
+      firstPlayerLabel: "先手选择",
+      humanFirst: "玩家先手",
+      aiFirst: "AI 先手",
+      playerBlackAiWhite: "你执黑，AI 执白。",
+      playerWhiteAiBlack: "你执白，AI 执黑。",
+      thinking: "AI 思考中"
     },
     board: {
       label: "15 乘 15 五子棋棋盘",
@@ -167,9 +188,16 @@ const fr = {
     },
     ai: {
       difficultyLabel: "Difficulté de l'IA",
-      easy: "Facile",
       normal: "Normal",
-      playerBlackAiWhite: "Vous jouez les noirs. L'IA joue les blancs."
+      hard: "Difficile",
+      expert: "Expert",
+      insane: "Insane",
+      firstPlayerLabel: "Premier coup",
+      humanFirst: "Vous d'abord",
+      aiFirst: "IA d'abord",
+      playerBlackAiWhite: "Vous jouez les noirs. L'IA joue les blancs.",
+      playerWhiteAiBlack: "Vous jouez les blancs. L'IA joue les noirs.",
+      thinking: "L'IA réfléchit"
     },
     board: {
       label: "Plateau de Gomoku 15 par 15",
@@ -215,9 +243,16 @@ const es = {
     },
     ai: {
       difficultyLabel: "Dificultad de IA",
-      easy: "Fácil",
       normal: "Normal",
-      playerBlackAiWhite: "Juegas con negras. La IA juega con blancas."
+      hard: "Difícil",
+      expert: "Experto",
+      insane: "Insane",
+      firstPlayerLabel: "Primer movimiento",
+      humanFirst: "Tú primero",
+      aiFirst: "IA primero",
+      playerBlackAiWhite: "Juegas con negras. La IA juega con blancas.",
+      playerWhiteAiBlack: "Juegas con blancas. La IA juega con negras.",
+      thinking: "La IA piensa"
     },
     board: {
       label: "Tablero de Gomoku de 15 por 15",
@@ -263,9 +298,16 @@ const ru = {
     },
     ai: {
       difficultyLabel: "Сложность ИИ",
-      easy: "Легко",
       normal: "Обычно",
-      playerBlackAiWhite: "Вы играете черными. ИИ играет белыми."
+      hard: "Сложно",
+      expert: "Эксперт",
+      insane: "Insane",
+      firstPlayerLabel: "Первый ход",
+      humanFirst: "Вы первые",
+      aiFirst: "ИИ первый",
+      playerBlackAiWhite: "Вы играете черными. ИИ играет белыми.",
+      playerWhiteAiBlack: "Вы играете белыми. ИИ играет черными.",
+      thinking: "ИИ думает"
     },
     board: {
       label: "Доска гомоку 15 на 15",
@@ -311,9 +353,16 @@ const ar = {
     },
     ai: {
       difficultyLabel: "صعوبة الذكاء الاصطناعي",
-      easy: "سهل",
       normal: "عادي",
-      playerBlackAiWhite: "أنت تلعب بالأسود. الذكاء الاصطناعي يلعب بالأبيض."
+      hard: "صعب",
+      expert: "خبير",
+      insane: "Insane",
+      firstPlayerLabel: "النقلة الأولى",
+      humanFirst: "أنت أولا",
+      aiFirst: "الذكاء أولا",
+      playerBlackAiWhite: "أنت تلعب بالأسود. الذكاء الاصطناعي يلعب بالأبيض.",
+      playerWhiteAiBlack: "أنت تلعب بالأبيض. الذكاء الاصطناعي يلعب بالأسود.",
+      thinking: "الذكاء الاصطناعي يفكر"
     },
     board: {
       label: "لوحة غوموكو 15 في 15",

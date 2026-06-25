@@ -13,14 +13,20 @@
   --accent-deep: #0d5d55;
   --accent-ink: #ffffff;
   --hover: rgba(15, 95, 89, 0.25);
-  --board: #dca95d;
-  --board-line: rgba(82, 50, 18, 0.6);
-  --board-border: rgba(82, 50, 18, 0.48);
+  --board: #d9a95f;
+  --board-light: #eecb84;
+  --board-warm: #bf7d35;
+  --board-line: rgba(78, 48, 18, 0.62);
+  --board-line-soft: rgba(255, 238, 184, 0.26);
+  --board-border: rgba(83, 49, 17, 0.64);
+  --board-edge: #7f4a1e;
+  --board-edge-light: #f1cf8c;
+  --board-star: rgba(49, 28, 10, 0.82);
   --black-stone: #101827;
   --white-stone: #eef2f7;
   --white-stone-line: rgba(24, 33, 47, 0.2);
-  --last-move: #f5c542;
-  --win-line: #18a957;
+  --last-move: #ffcf44;
+  --win-line: #1bb56a;
   --ad-surface: rgba(255, 255, 255, 0.74);
   --shadow: 0 22px 70px rgba(24, 33, 47, 0.14);
   --panel-shadow: 0 14px 34px rgba(24, 33, 47, 0.08);
@@ -41,9 +47,15 @@
   --accent-deep: #7dd3c0;
   --accent-ink: #07120f;
   --hover: rgba(69, 179, 157, 0.3);
-  --board: #8f6332;
-  --board-line: rgba(247, 222, 179, 0.58);
-  --board-border: rgba(247, 222, 179, 0.42);
+  --board: #9f6b36;
+  --board-light: #c39155;
+  --board-warm: #70451f;
+  --board-line: rgba(255, 228, 181, 0.5);
+  --board-line-soft: rgba(255, 245, 220, 0.12);
+  --board-border: rgba(247, 222, 179, 0.46);
+  --board-edge: #4a2c17;
+  --board-edge-light: #d0a76c;
+  --board-star: rgba(255, 231, 185, 0.78);
   --black-stone: #05070a;
   --white-stone: #f8fafc;
   --white-stone-line: rgba(255, 255, 255, 0.42);
@@ -102,7 +114,7 @@ a {
 
 .game-stage {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
   gap: 18px;
 }
 
@@ -276,38 +288,179 @@ h1 {
 }
 
 .board-wrap {
-  aspect-ratio: 1;
-  max-height: min(76vh, 760px);
-  max-width: min(100%, 760px);
-  padding: clamp(10px, 2.2vw, 20px);
+  max-width: 100%;
+  padding: clamp(8px, 1.6vw, 18px);
   position: relative;
   touch-action: manipulation;
+  width: min(100%, 820px, 78vh);
+}
+
+.board-frame {
+  --coord-size: clamp(16px, 2.4vw, 26px);
+  aspect-ratio: 1;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.24), transparent 32%),
+    linear-gradient(315deg, rgba(43, 22, 6, 0.18), transparent 38%),
+    repeating-linear-gradient(
+      8deg,
+      rgba(255, 255, 255, 0.1) 0,
+      rgba(255, 255, 255, 0.1) 2px,
+      transparent 2px,
+      transparent 11px
+    ),
+    linear-gradient(135deg, var(--board-edge-light), var(--board-edge) 72%);
+  border: 1px solid var(--board-border);
+  border-radius: 8px;
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -18px 34px rgba(50, 24, 4, 0.18);
+  direction: ltr;
+  display: grid;
+  grid-template-areas:
+    ". files-top ."
+    "ranks-left board ranks-right"
+    ". files-bottom .";
+  grid-template-columns: var(--coord-size) minmax(0, 1fr) var(--coord-size);
+  grid-template-rows: var(--coord-size) minmax(0, 1fr) var(--coord-size);
+  padding: clamp(8px, 1.6vw, 16px);
+  position: relative;
   width: 100%;
 }
 
+.board-frame::after {
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 7px;
+  content: "";
+  inset: 5px;
+  pointer-events: none;
+  position: absolute;
+}
+
+.board-coords {
+  color: rgba(45, 27, 9, 0.72);
+  font-size: clamp(0.58rem, 1.2vw, 0.76rem);
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  position: relative;
+  text-align: center;
+  user-select: none;
+  z-index: 1;
+}
+
+:root[data-theme="dark"] .board-coords {
+  color: rgba(255, 232, 194, 0.7);
+}
+
+.board-files {
+  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+}
+
+.board-files-top {
+  grid-area: files-top;
+}
+
+.board-files-bottom {
+  grid-area: files-bottom;
+}
+
+.board-ranks {
+  display: grid;
+  grid-template-rows: repeat(15, 1fr);
+  justify-items: center;
+}
+
+.board-ranks span {
+  align-items: center;
+  display: flex;
+}
+
+.board-ranks-left {
+  grid-area: ranks-left;
+}
+
+.board-ranks-right {
+  grid-area: ranks-right;
+}
+
 .gomoku-board {
+  --board-cell: calc(100% / 15);
+  --board-line-offset: calc(100% / 30);
   aspect-ratio: 1;
   background:
     linear-gradient(var(--board-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--board-line) 1px, transparent 1px),
-    radial-gradient(circle at 25% 25%, rgba(255, 255, 255, 0.3), transparent 32%),
+    linear-gradient(var(--board-line-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--board-line-soft) 1px, transparent 1px),
+    radial-gradient(circle at 23% 18%, rgba(255, 255, 255, 0.34), transparent 30%),
+    radial-gradient(circle at 84% 88%, rgba(83, 44, 12, 0.18), transparent 42%),
+    repeating-linear-gradient(
+      102deg,
+      rgba(255, 255, 255, 0.07) 0,
+      rgba(255, 255, 255, 0.07) 3px,
+      rgba(95, 50, 12, 0.06) 3px,
+      rgba(95, 50, 12, 0.06) 9px,
+      transparent 9px,
+      transparent 18px
+    ),
     var(--board);
+  background-position:
+    var(--board-line-offset) var(--board-line-offset),
+    var(--board-line-offset) var(--board-line-offset),
+    var(--board-line-offset) var(--board-line-offset),
+    var(--board-line-offset) var(--board-line-offset),
+    0 0,
+    0 0,
+    0 0,
+    0 0;
   background-size:
-    calc(100% / 14) calc(100% / 14),
-    calc(100% / 14) calc(100% / 14),
+    var(--board-cell) var(--board-cell),
+    var(--board-cell) var(--board-cell),
+    calc(100% / 3) calc(100% / 3),
+    calc(100% / 3) calc(100% / 3),
+    100% 100%,
+    100% 100%,
     100% 100%,
     100% 100%;
-  border: 2px solid var(--board-border);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
+  border: 1px solid var(--board-border);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 244, 207, 0.18),
+    inset 0 0 22px rgba(82, 44, 12, 0.24);
   display: grid;
   direction: ltr;
-  grid-template-columns: repeat(15, 1fr);
+  grid-area: board;
   grid-template-rows: repeat(15, 1fr);
   padding: 0;
   position: relative;
   touch-action: manipulation;
   width: 100%;
+  z-index: 1;
+}
+
+.board-row {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.board-star {
+  aspect-ratio: 1;
+  background: var(--board-star);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px rgba(255, 244, 211, 0.18),
+    0 1px 2px rgba(43, 23, 7, 0.28);
+  pointer-events: none;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: clamp(5px, 0.72vw, 8px);
   z-index: 1;
 }
 
@@ -324,7 +477,7 @@ h1 {
   padding: 0;
   position: relative;
   touch-action: manipulation;
-  z-index: 1;
+  z-index: 2;
 }
 
 .board-point::before {
@@ -343,9 +496,55 @@ h1 {
   width: 70%;
 }
 
-.board-point:not(:disabled):hover::before {
-  background: var(--hover);
+.board-point::after {
+  border-radius: 999px;
+  content: "";
+  inset: 15%;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translateY(4px) scale(0.84);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  z-index: 1;
+}
+
+.board-point:not(:disabled):hover::before,
+.board-point:not(:disabled):focus-visible::before {
+  background: color-mix(in srgb, var(--hover) 72%, transparent);
   transform: translate(-50%, -50%) scale(1.08);
+}
+
+.preview-black .board-point:not(:disabled):hover::after,
+.preview-black .board-point:not(:disabled):focus-visible::after {
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.22), transparent 22%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%),
+    var(--black-stone);
+  box-shadow:
+    inset -8px -10px 18px rgba(0, 0, 0, 0.35),
+    0 8px 14px rgba(0, 0, 0, 0.18);
+  opacity: 0.34;
+  transform: translateY(0) scale(1);
+}
+
+.preview-white .board-point:not(:disabled):hover::after,
+.preview-white .board-point:not(:disabled):focus-visible::after {
+  background:
+    radial-gradient(circle at 28% 22%, #fff, transparent 30%),
+    var(--white-stone);
+  border: 1px solid var(--white-stone-line);
+  box-shadow:
+    inset -8px -10px 16px rgba(102, 112, 133, 0.18),
+    0 8px 14px rgba(0, 0, 0, 0.13);
+  opacity: 0.48;
+  transform: translateY(0) scale(1);
+}
+
+.board-point:focus-visible {
+  outline: 2px solid var(--last-move);
+  outline-offset: -4px;
 }
 
 .stone {
@@ -353,25 +552,34 @@ h1 {
   border-radius: 999px;
   display: block;
   position: relative;
-  width: 74%;
-  z-index: 1;
+  transform: scale(0.96);
+  width: 76%;
+  z-index: 3;
 }
 
 .stone.black,
 .stone-preview.black {
   background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.22), transparent 21%),
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.34), transparent 18%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 34%),
     var(--black-stone);
-  box-shadow: inset -8px -10px 20px rgba(0, 0, 0, 0.35), 0 8px 18px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    inset -10px -12px 22px rgba(0, 0, 0, 0.48),
+    inset 4px 4px 10px rgba(255, 255, 255, 0.08),
+    0 9px 16px rgba(0, 0, 0, 0.24);
 }
 
 .stone.white,
 .stone-preview.white {
   background:
     radial-gradient(circle at 28% 22%, #fff, transparent 28%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.78), transparent 38%),
     var(--white-stone);
   border: 1px solid var(--white-stone-line);
-  box-shadow: inset -8px -10px 18px rgba(102, 112, 133, 0.16), 0 8px 18px rgba(0, 0, 0, 0.12);
+  box-shadow:
+    inset -9px -11px 20px rgba(102, 112, 133, 0.18),
+    inset 4px 4px 10px rgba(255, 255, 255, 0.75),
+    0 9px 16px rgba(0, 0, 0, 0.14);
 }
 
 .stone.last::after,
@@ -384,11 +592,15 @@ h1 {
 
 .stone.last::after {
   background: var(--last-move);
+  box-shadow: 0 0 0 1px rgba(37, 24, 6, 0.28), 0 0 10px rgba(255, 207, 68, 0.88);
 }
 
 .stone.winning {
-  outline: 3px solid var(--win-line);
-  outline-offset: 2px;
+  box-shadow:
+    0 0 0 3px var(--win-line),
+    0 0 0 6px color-mix(in srgb, var(--win-line) 22%, transparent),
+    0 12px 18px rgba(0, 0, 0, 0.2);
+  outline: 0;
 }
 
 .side-panel {
@@ -497,6 +709,21 @@ h1 {
   .ad-placeholder {
     grid-column: 1 / -1;
     min-height: 110px;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1400px) {
+  .app-shell {
+    gap: 18px;
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .board-wrap {
+    width: min(100%, 720px, 76vh);
+  }
+
+  .side-panel {
+    padding-block-start: 72px;
   }
 }
 
