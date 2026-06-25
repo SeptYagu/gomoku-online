@@ -146,18 +146,31 @@ h1 {
 }
 
 .icon-button {
-  aspect-ratio: 1;
   background: var(--panel);
   border-radius: 8px;
   box-shadow: var(--panel-shadow);
   color: var(--ink);
   cursor: pointer;
   flex: 0 0 auto;
-  width: 44px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  min-height: 44px;
+  min-width: 56px;
+  padding: 0 10px;
+  position: relative;
+  touch-action: manipulation;
+  z-index: 2;
 }
 
 .icon-button:hover {
   border-color: var(--accent);
+}
+
+.icon-button svg,
+.mode-pill svg,
+.locale-switcher svg {
+  flex: 0 0 auto;
+  pointer-events: none;
 }
 
 .icon-button:disabled {
@@ -176,6 +189,20 @@ h1 {
   gap: 8px;
   min-height: 44px;
   padding: 0 10px;
+  position: relative;
+  z-index: 2;
+}
+
+.icon-button svg {
+  height: 20px;
+  width: 20px;
+}
+
+.mode-pill svg,
+.locale-switcher svg {
+  color: currentColor;
+  height: 18px;
+  width: 18px;
 }
 
 .locale-links {
@@ -191,7 +218,9 @@ h1 {
   font-weight: 700;
   line-height: 1;
   padding: 7px 8px;
+  position: relative;
   text-decoration: none;
+  z-index: 1;
 }
 
 .locale-links a.active,
@@ -205,6 +234,8 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  position: relative;
+  z-index: 2;
 }
 
 .difficulty-strip {
@@ -215,9 +246,13 @@ h1 {
   background: var(--panel-soft);
   border-radius: 8px;
   color: var(--muted);
+  cursor: pointer;
   gap: 8px;
   min-height: 40px;
   padding: 0 14px;
+  position: relative;
+  touch-action: manipulation;
+  z-index: 1;
 }
 
 .mode-pill.active {
@@ -236,6 +271,8 @@ h1 {
   display: grid;
   justify-items: center;
   min-height: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .board-wrap {
@@ -243,6 +280,8 @@ h1 {
   max-height: min(76vh, 760px);
   max-width: min(100%, 760px);
   padding: clamp(10px, 2.2vw, 20px);
+  position: relative;
+  touch-action: manipulation;
   width: 100%;
 }
 
@@ -267,7 +306,9 @@ h1 {
   grid-template-rows: repeat(15, 1fr);
   padding: 0;
   position: relative;
+  touch-action: manipulation;
   width: 100%;
+  z-index: 1;
 }
 
 .board-point {
@@ -282,23 +323,29 @@ h1 {
   min-width: 0;
   padding: 0;
   position: relative;
+  touch-action: manipulation;
+  z-index: 1;
 }
 
 .board-point::before {
   background: transparent;
   border-radius: 999px;
   content: "";
-  height: 34%;
+  height: 70%;
+  left: 50%;
+  pointer-events: none;
   position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
   transition:
     background 140ms ease,
     transform 140ms ease;
-  width: 34%;
+  width: 70%;
 }
 
 .board-point:not(:disabled):hover::before {
   background: var(--hover);
-  transform: scale(1.08);
+  transform: translate(-50%, -50%) scale(1.08);
 }
 
 .stone {

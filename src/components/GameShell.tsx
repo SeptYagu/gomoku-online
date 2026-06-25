@@ -1,7 +1,7 @@
 "use client";
 
-import { Bot, CircleDot, RotateCcw, Undo2, Users, Wifi } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Bot, CircleDot, RotateCcw, Undo2, Users, Wifi } from "lucide-react";
 import { chooseAiMove, type AiDifficulty } from "@/game/ai";
 import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
@@ -162,7 +162,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
               disabled={!canUndo}
               title={dictionary.controls.undo}
             >
-              <Undo2 size={20} />
+              <Undo2 aria-hidden="true" focusable={false} />
             </button>
             <button
               className="icon-button"
@@ -171,7 +171,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
               aria-label={dictionary.controls.reset}
               title={dictionary.controls.reset}
             >
-              <RotateCcw size={20} />
+              <RotateCcw aria-hidden="true" focusable={false} />
             </button>
           </div>
         </header>
@@ -182,7 +182,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             type="button"
             onClick={() => handleModeChange("local")}
           >
-            <Users size={16} />
+            <Users aria-hidden="true" focusable={false} />
             {dictionary.modes.local}
           </button>
           <button
@@ -190,11 +190,11 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             type="button"
             onClick={() => handleModeChange("ai")}
           >
-            <Bot size={16} />
+            <Bot aria-hidden="true" focusable={false} />
             {dictionary.modes.ai}
           </button>
           <button className="mode-pill" type="button" disabled>
-            <Wifi size={16} />
+            <Wifi aria-hidden="true" focusable={false} />
             {dictionary.modes.room}
           </button>
         </div>
@@ -206,6 +206,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
               type="button"
               onClick={() => handleDifficultyChange("easy")}
             >
+              <CircleDot aria-hidden="true" focusable={false} />
               {dictionary.ai.easy}
             </button>
             <button
@@ -213,6 +214,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
               type="button"
               onClick={() => handleDifficultyChange("normal")}
             >
+              <CircleDot aria-hidden="true" focusable={false} />
               {dictionary.ai.normal}
             </button>
           </div>
@@ -235,7 +237,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       <aside className="side-panel" aria-label={dictionary.status.panelLabel}>
         <div className="status-card">
           <div className="status-title">
-            <CircleDot size={18} />
+            <CircleDot aria-hidden="true" focusable={false} />
             {dictionary.status.title}
           </div>
           <p className="status-copy">{getStatusText(status, dictionary)}</p>

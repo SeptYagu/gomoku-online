@@ -123,6 +123,9 @@ node_modules/
 - 阶段 1 已完成本地双人/AI 模式切换、Easy/Normal AI、悔棋、重开、终局锁定、六语言新增文案、黑暗模式兼容和移动端布局增强。
 - Ember 实现报告已落档：`docs/subagents/20260625-stage1-local-ai-实现-Ember.md`。
 - Atlas 独立验证兼记录已通过完整命令门禁和真实 Chrome 浏览器验收。
+- Iris 交互热修复已完成：补强按钮、棋盘点位和触控命中规则。
+- Lyra 返工已完成：恢复核心交互区 lucide SVG 图标，并保留 SVG `pointer-events: none`、`aria-hidden`、`focusable=false` 和 pointer/touch 加固。
+- Nora 最终独立验证兼记录已通过 Lyra 返工后的最终状态，确认 `/en` 桌面棋盘落子、AI 按钮、Easy/Normal、AI 不覆盖玩家、Undo/New game、lucide 图标不抢 pointer 命中，以及 `/ar` 390x844 移动端 AI 按钮和棋盘点击均可用。
 - 本轮阶段报告已落档：`docs/STAGE_1_REPORT.md`。
 - 后续仍默认使用“独立验证兼记录子代理”完成验证执行、验证报告、阶段报告和 `docs/HANDOFF.md` 的验证状态收口；该角色不能修代码，不能修改实现内容。
 
@@ -203,6 +206,18 @@ node_modules/
   - `git diff --check` 通过，仅有 LF/CRLF 工作副本提示。
   - 系统 Chrome + Playwright Core 浏览器验收覆盖 `/en` 桌面、AI 模式、终局锁定、`/ar` 移动端 RTL/LTR、浅色/黑暗模式和六语言新增文案。
   - 验证报告：`docs/subagents/20260625-stage1-local-ai-验证兼记录-Atlas.md`
+- 阶段 1 交互热修复已完成并通过最终独立验证兼记录：
+  - 实现报告：`docs/subagents/20260625-stage1-interaction-hotfix-实现-Iris.md`
+  - 返工报告：`docs/subagents/20260625-stage1-interaction-hotfix-icon-refine-返工-Lyra.md`
+  - 验证报告：`docs/subagents/20260625-stage1-interaction-hotfix-验证兼记录-Maris.md`
+  - 最终验证报告：`docs/subagents/20260625-stage1-interaction-hotfix-final-验证兼记录-Nora.md`
+  - `npm test` 通过，2 个测试文件、21 个测试用例。
+  - `npm run lint` 通过。
+  - `npm run build` 通过；Maris 复验时首次因 `.next/server/app/ar.segments` 文件锁失败，确认 3000 端口旧 `node.exe` 进程 PID `34416` 后停止该进程，重试通过；Nora 最终复验一次通过。
+  - `npm audit --omit=dev` 通过，0 vulnerabilities。
+  - `git diff --check` 通过，仅有 LF/CRLF 工作副本提示。
+  - 系统 Chrome `149.0.7827.155` + Chrome DevTools Protocol 浏览器验收覆盖 `/en` 桌面落子、AI 按钮、Easy/Normal、AI 不覆盖玩家、Undo/New game、lucide SVG 不抢 pointer 命中、`/ar` 390x844 移动端 AI 按钮和棋盘点击。
+  - 控制台未见阻断交互的 runtime/hydration/click handler 错误。
 
 ## 6. Verification Matrix
 
@@ -238,6 +253,18 @@ node_modules/
 | stage1-local-ai 独立验证兼记录 | `npm audit --omit=dev` | 通过 | Atlas 验证，0 vulnerabilities |
 | stage1-local-ai 独立验证兼记录 | `git diff --check` | 通过 | Atlas 验证，仅有 LF/CRLF 工作副本提示 |
 | stage1-local-ai 浏览器验收 | 系统 Chrome + Playwright Core | 通过 | Atlas 覆盖 `/en` 桌面本地/AI、Easy/Normal、AI 不占已有格、AI 悔棋、终局锁定、胜线/最后一步、`/ar` 390x844 RTL 且棋盘 LTR、浅色/黑暗模式和六语言新增文案；in-app Browser 插件因工具侧 `sandboxPolicy` 元数据错误不可用 |
+| stage1-interaction-hotfix 独立验证兼记录 | `npm test` | 通过 | Maris 验证，2 个测试文件、21 个测试用例 |
+| stage1-interaction-hotfix 独立验证兼记录 | `npm run lint` | 通过 | Maris 验证 |
+| stage1-interaction-hotfix 独立验证兼记录 | `npm run build` | 通过 | Maris 验证；首次 `.next/server/app/ar.segments` 文件锁失败，停止 3000 端口旧 `node.exe` 进程后重试通过 |
+| stage1-interaction-hotfix 独立验证兼记录 | `npm audit --omit=dev` | 通过 | Maris 验证，0 vulnerabilities |
+| stage1-interaction-hotfix 独立验证兼记录 | `git diff --check` | 通过 | Maris 验证，仅有 LF/CRLF 工作副本提示 |
+| stage1-interaction-hotfix 浏览器验收 | 系统 Chrome + Chrome DevTools Protocol | 通过 | Maris 覆盖 `/en` 桌面空点点击 moves 0 -> 1、AI 按钮可点击且显示 Easy/Normal、AI Easy/Normal 落子 1 黑 1 白且不覆盖玩家、Undo/New game 状态变化、`/ar` 390x844 移动端 AI 按钮和棋盘点击；控制台无阻断交互错误 |
+| stage1-interaction-hotfix-final 独立验证兼记录 | `npm test` | 通过 | Nora 验证，2 个测试文件、21 个测试用例 |
+| stage1-interaction-hotfix-final 独立验证兼记录 | `npm run lint` | 通过 | Nora 验证 |
+| stage1-interaction-hotfix-final 独立验证兼记录 | `npm run build` | 通过 | Nora 验证，Next.js 16.2.9 生产构建一次通过 |
+| stage1-interaction-hotfix-final 独立验证兼记录 | `npm audit --omit=dev` | 通过 | Nora 验证，0 vulnerabilities |
+| stage1-interaction-hotfix-final 独立验证兼记录 | `git diff --check` | 通过 | Nora 验证，仅有 LF/CRLF 工作副本提示 |
+| stage1-interaction-hotfix-final 浏览器验收 | 系统 Chrome + Chrome DevTools Protocol | 通过 | Nora 覆盖 Lyra 返工后最终状态：`/en` 桌面空点点击 moves 0 -> 1、AI 按钮可点击且显示 Easy/Normal、AI Easy/Normal 落子 1 黑 1 白且不覆盖玩家、Normal active、Undo/New game、lucide SVG 存在且不抢 pointer 命中、`/ar` 390x844 移动端 AI 按钮和棋盘点击；控制台无阻断交互错误 |
 
 代码改动后必须重新运行完整门禁。UI 改动还必须做真实浏览器检查。
 
@@ -336,6 +363,8 @@ AI Worker 与设置持久化：
 
 - Ember 已完成本地双人/AI 模式切换、Easy/Normal AI、悔棋、重开和终局锁定。
 - Atlas 已完成独立验证兼记录，确认 `/en` 桌面、`/ar` 移动端、六语言文案和浅色/黑暗模式通过。
+- Iris 已完成交互热修复，Maris 已复验通过，确认“无法落子、AI 按钮点不动”在生产服务真实 Chrome 点击路径下不再复现。
+- Lyra 已完成图标返工，Nora 已最终复验通过，确认恢复 lucide 图标后“无法落子、AI 按钮点不动”仍不复现，且图标不抢 pointer 命中。
 - in-app Browser 插件本轮不可用，已用系统 Chrome + Playwright Core 完成真实浏览器验收。
 
 ## 10. 下一步派发表
@@ -368,6 +397,7 @@ AI Worker 与设置持久化：
 | 共享文件并行冲突 | major | 多代理同时改 `src/app/**`、字典、全局 CSS | 主控指定 owner，串行合并 | 全阶段 |
 | AI 棋型覆盖不足 | minor | Normal AI 后续被要求具备更稳定棋力 | 增加活二、活三、冲四、活四评分矩阵测试；Hard AI 阶段前补 Worker 设计 | AI 阶段 |
 | 构建缓存文件锁 | note | Windows/OneDrive 下 `.next` 旧缓存被进程或属性锁住 | 停止本项目 Next 进程，确认路径后清理 `.next` 生成缓存再 build | 本地验证 |
+| 旧 dev 进程/HMR 干扰交互验证 | note | 3000 端口残留旧 Next dev 进程、HMR WebSocket 异常或 Fast Refresh 状态异常 | 记录旧进程 PID 和启动时间；优先使用生产服务复验；必要时停止本项目旧 Next 进程后重试 | 本地验证 |
 
 ## 12. Do / Do Not
 
@@ -419,6 +449,10 @@ stage1-local-ai：
 
 - `docs/subagents/20260625-stage1-local-ai-实现-Ember.md`
 - `docs/subagents/20260625-stage1-local-ai-验证兼记录-Atlas.md`
+- `docs/subagents/20260625-stage1-interaction-hotfix-实现-Iris.md`
+- `docs/subagents/20260625-stage1-interaction-hotfix-验证兼记录-Maris.md`
+- `docs/subagents/20260625-stage1-interaction-hotfix-icon-refine-返工-Lyra.md`
+- `docs/subagents/20260625-stage1-interaction-hotfix-final-验证兼记录-Nora.md`
 - `docs/STAGE_1_REPORT.md`
 
 ## 14. 交接更新模板

@@ -1,7 +1,7 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
 import { useSyncExternalStore } from "react";
+import { Moon, Sun } from "lucide-react";
 import { themeStorageKey, type ThemeMode } from "@/lib/theme";
 
 type ThemeToggleProps = {
@@ -80,7 +80,11 @@ export function ThemeToggle({ labels }: ThemeToggleProps) {
       title={labels.theme}
       type="button"
     >
-      {isDark ? <Sun size={20} /> : <Moon size={20} />}
+      {isDark ? (
+        <Sun aria-hidden="true" focusable={false} suppressHydrationWarning />
+      ) : (
+        <Moon aria-hidden="true" focusable={false} suppressHydrationWarning />
+      )}
     </button>
   );
 }

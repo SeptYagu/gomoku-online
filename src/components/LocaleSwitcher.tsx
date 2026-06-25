@@ -1,8 +1,8 @@
 "use client";
 
-import { Languages } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
+import { Languages } from "lucide-react";
 import { dictionaries } from "@/i18n/dictionaries";
 import { type Locale, locales } from "@/i18n/config";
 
@@ -18,7 +18,7 @@ export function LocaleSwitcher({ currentLocale, label }: LocaleSwitcherProps) {
 
   return (
     <div className="locale-switcher" aria-label={label}>
-      <Languages size={18} aria-hidden="true" />
+      <Languages aria-hidden="true" focusable={false} />
       <div className="locale-links">
         {locales.map((locale) => (
           <Link
