@@ -10,14 +10,22 @@ type AiWorkerRequest = {
 };
 
 type AiWorkerResponse = {
+  type: "best" | "done";
   point: Point | null;
 };
 
 self.onmessage = (event: MessageEvent<AiWorkerRequest>) => {
   const { board, moves, aiStone, difficulty, timeLimitMs } = event.data;
-  const point = chooseAiMove(board, aiStone, { difficulty, moves, timeLimitMs });
+  const point = chooseAiMove(board, aiStone, {
+    difficulty,
+    moves,
+    timeLimitMs,
+    onBestMove: (bestMove) => {
+      self.postMessage({ type: "best", point: bestMove } satisfies AiWorkerResponse);
+    }
+  });
 
-  self.postMessage({ point } satisfies AiWorkerResponse);
+  self.postMessage({ type: "done", point } satisfies AiWorkerResponse);
 };
 
 export {};

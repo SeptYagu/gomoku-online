@@ -16,6 +16,7 @@ type ChooseAiMoveOptions = {
   difficulty: AiDifficulty;
   moves?: Move[];
   timeLimitMs?: number;
+  onBestMove?: (point: Point) => void;
 };
 
 type SearchProfile = {
@@ -334,7 +335,7 @@ const WINDOWS_BY_CELL = createWindowsByCell(SEARCH_WINDOWS);
 export function chooseAiMove(
   board: Board,
   aiStone: Stone,
-  { difficulty, moves, timeLimitMs }: ChooseAiMoveOptions
+  { difficulty, moves, timeLimitMs, onBestMove }: ChooseAiMoveOptions
 ): Point | null {
   const profile = SEARCH_PROFILES[difficulty];
   const deadline = createSearchDeadline(getAiTimeLimitMs(difficulty, timeLimitMs));
@@ -348,6 +349,8 @@ export function chooseAiMove(
     return null;
   }
 
+  reportBestMove(onBestMove, candidates[0]);
+
   if (candidates.length === 1) {
     return candidates[0];
   }
@@ -356,18 +359,21 @@ export function chooseAiMove(
   const winningMove = chooseBestMove(board, findWinningMoves(board, candidates, aiStone), aiStone);
 
   if (winningMove) {
+    reportBestMove(onBestMove, winningMove);
     return winningMove;
   }
 
   const blockingMove = chooseBestMove(board, findWinningMoves(board, candidates, opponent), aiStone);
 
   if (blockingMove) {
+    reportBestMove(onBestMove, blockingMove);
     return blockingMove;
   }
 
   const bookMove = chooseOpeningBookMove(board, candidatePool, aiStone, difficulty, moves);
 
   if (bookMove) {
+    reportBestMove(onBestMove, bookMove);
     return bookMove;
   }
 
@@ -377,6 +383,7 @@ export function chooseAiMove(
     findForcedThreatMove(board, boardHash, aiStone, profile, "vct", deadline);
 
   if (forcedThreatMove) {
+    reportBestMove(onBestMove, forcedThreatMove);
     return forcedThreatMove;
   }
 
@@ -389,6 +396,7 @@ export function chooseAiMove(
     findForcedThreatMove(board, boardHash, opponent, profile, "vct", deadline);
 
   if (opponentThreatMove && isValidMove(board, opponentThreatMove)) {
+    reportBestMove(onBestMove, opponentThreatMove);
     return opponentThreatMove;
   }
 
@@ -399,16 +407,18 @@ export function chooseAiMove(
   const forcingMove = findBestForkMove(board, candidates, aiStone, aiStone);
 
   if (forcingMove) {
+    reportBestMove(onBestMove, forcingMove);
     return forcingMove;
   }
 
   const forkBlock = findBestForkMove(board, candidates, opponent, aiStone);
 
   if (forkBlock) {
+    reportBestMove(onBestMove, forkBlock);
     return forkBlock;
   }
 
-  return chooseSearchMove(board, candidates, aiStone, profile, deadline);
+  return chooseSearchMove(board, candidates, aiStone, profile, deadline, onBestMove);
 }
 
 export function getAiTimeLimitMs(difficulty: AiDifficulty, overrideMs?: number): number {
@@ -439,6 +449,10 @@ function hasSearchTimedOut(deadline: SearchDeadline): boolean {
   }
 
   return deadline.timedOut;
+}
+
+function reportBestMove(onBestMove: ((point: Point) => void) | undefined, point: Point): void {
+  onBestMove?.({ row: point.row, col: point.col });
 }
 
 export function scoreAiMove(board: Board, point: Point, aiStone: Stone): number {
@@ -872,7 +886,8 @@ function chooseSearchMove(
   candidates: Point[],
   aiStone: Stone,
   profile: SearchProfile,
-  deadline: SearchDeadline
+  deadline: SearchDeadline,
+  onBestMove?: (point: Point) => void
 ): Point {
   const initialMoves = orderCandidateMoves(board, candidates, aiStone, aiStone).slice(0, profile.rootCandidates);
   const position = new SearchPosition(board);
@@ -887,6 +902,7 @@ function chooseSearchMove(
   let bestMove = initialMoves[0];
   let bestScore = Number.NEGATIVE_INFINITY;
   const startDepth = profile.iterativeDeepening ? 1 : profile.depth;
+  reportBestMove(onBestMove, bestMove);
 
   for (let searchDepth = startDepth; searchDepth <= profile.depth; searchDepth += 1) {
     searchState.age += 1;
@@ -931,6 +947,7 @@ function chooseSearchMove(
       ) {
         iterationBestScore = adjustedScore;
         iterationBestMove = point;
+        reportBestMove(onBestMove, iterationBestMove);
       }
 
       if (searchState.nodes >= profile.maxNodes || hasSearchTimedOut(deadline)) {
@@ -941,6 +958,7 @@ function chooseSearchMove(
     if (searchedMoves > 0) {
       bestScore = iterationBestScore;
       bestMove = iterationBestMove;
+      reportBestMove(onBestMove, bestMove);
     }
 
     if (!profile.iterativeDeepening || bestScore >= WIN_SCORE || searchState.nodes >= profile.maxNodes || deadline.timedOut) {

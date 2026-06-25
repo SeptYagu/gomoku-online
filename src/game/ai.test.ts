@@ -228,16 +228,20 @@ describe("ai", () => {
       ["black", 7, 7],
       ["white", 5, 5]
     ]);
+    const reportedMoves: Point[] = [];
     const started = performance.now();
     const move = chooseAiMove(detachedOpening.board, "black", {
       difficulty: "insane",
       moves: detachedOpening.moves,
-      timeLimitMs: 5
+      timeLimitMs: 5,
+      onBestMove: (point) => reportedMoves.push(point)
     });
     const duration = performance.now() - started;
 
     expect(move).not.toBeNull();
     expect(getLegalMoves(detachedOpening.board)).toContainEqual(move);
+    expect(reportedMoves.length).toBeGreaterThan(0);
+    expect(getLegalMoves(detachedOpening.board)).toContainEqual(reportedMoves.at(-1));
     expect(duration).toBeLessThan(1_000);
   });
 });

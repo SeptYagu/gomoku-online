@@ -27,6 +27,7 @@ type GameSnapshot = {
 };
 
 type AiWorkerResponse = {
+  type: "best" | "done";
   point: Point | null;
 };
 
@@ -228,48 +229,53 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     return new Promise((resolve) => {
       aiWorkerRef.current?.terminate();
       clearAiWorkerTimeout();
+      let latestBestMove: Point | null = null;
+      let settled = false;
 
       const worker = new Worker(new URL("../game/ai-worker.ts", import.meta.url), {
         type: "module"
       });
       aiWorkerRef.current = worker;
-      aiWorkerTimeoutRef.current = window.setTimeout(() => {
+
+      const finishAiRequest = (point: Point | null) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
         worker.terminate();
 
         if (aiWorkerRef.current === worker) {
           aiWorkerRef.current = null;
         }
 
-        aiWorkerTimeoutRef.current = null;
-        resolve(
-          chooseAiMove(currentBoard, aiStone, {
-            difficulty,
-            moves: currentMoves,
-            timeLimitMs: AI_EMERGENCY_TIME_LIMIT_MS
-          })
-        );
+        clearAiWorkerTimeout();
+        resolve(point);
+      };
+
+      const getEmergencyMove = () =>
+        latestBestMove ??
+        chooseAiMove(currentBoard, aiStone, {
+          difficulty,
+          moves: currentMoves,
+          timeLimitMs: AI_EMERGENCY_TIME_LIMIT_MS
+        });
+
+      aiWorkerTimeoutRef.current = window.setTimeout(() => {
+        finishAiRequest(getEmergencyMove());
       }, timeLimitMs + AI_WORKER_TIMEOUT_GRACE_MS);
 
       worker.onmessage = (event: MessageEvent<AiWorkerResponse>) => {
-        clearAiWorkerTimeout();
-        worker.terminate();
-
-        if (aiWorkerRef.current === worker) {
-          aiWorkerRef.current = null;
+        if (event.data.type === "best") {
+          latestBestMove = event.data.point;
+          return;
         }
 
-        resolve(event.data.point);
+        finishAiRequest(event.data.point ?? latestBestMove);
       };
 
       worker.onerror = () => {
-        clearAiWorkerTimeout();
-        worker.terminate();
-
-        if (aiWorkerRef.current === worker) {
-          aiWorkerRef.current = null;
-        }
-
-        resolve(chooseAiMove(currentBoard, aiStone, { difficulty, moves: currentMoves, timeLimitMs }));
+        finishAiRequest(getEmergencyMove());
       };
 
       worker.postMessage({ board: currentBoard, moves: currentMoves, aiStone, difficulty, timeLimitMs });
