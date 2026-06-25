@@ -118,6 +118,12 @@ npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net
 ```
 
+房间列表 UI 可用系统 Chrome 做真实页面冒烟，确认列表里的 Join / Watch 按钮能进入对应房间：
+
+```bash
+npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net
+```
+
 ## 验证命令
 
 ```bash

@@ -783,6 +783,59 @@ npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net
 - 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
 - 下一步：小步 4，房间列表 UI：Join / Watch。
 
+## 37. 2026-06-25 阶段 3 小步 4：房间列表 UI Join / Watch
+
+本轮目标：
+
+- 按阶段 3 build plan 推进小步 4。
+- 在好友房面板中显示房间列表。
+- waiting 房显示 Join，点击后加入为第二名玩家。
+- playing 或满员房显示 Watch，点击后进入观战席。
+- 列表随 lobby 增量事件更新。
+
+实际完成：
+
+- `src/components/useFriendRoom.ts`：
+  - 新增 `lobbyRooms`、`lobbyStatus`、`refreshLobby()`、`joinListedRoom(roomCode)`。
+  - 监听 `lobby:room-updated` / `lobby:room-deleted` 并更新列表。
+  - `refreshLobby()` 通过 `lobby:join` 获取初始列表。
+- `src/components/GameShell.tsx`：
+  - 新增 `RoomLobbyList`。
+  - 列表行显示房主、房间号、状态、玩家数和观战人数。
+  - 根据 `canJoin` / `canWatch` 显示 Join 或 Watch。
+- `src/i18n/dictionaries.ts`：
+  - 六语言新增房间列表 UI 文案。
+- `src/app/globals.css`：
+  - 新增房间列表布局和移动端单列布局。
+- `tools/smoke-lobby-ui.ts`：
+  - 新增系统 Chrome 冒烟，预置 waiting / playing 两个房间，验证列表 Join 和 Watch。
+- `package.json`、`README.md`、`docs/STAGE_3_PROGRESS.md`、`docs/logic/lobby-matchmaking-module.md`：
+  - 记录小步 4 脚本、能力和验证结果。
+
+验证命令和结果：
+
+- `npm test`：通过，5 个测试文件、61 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3031 npm start` 后运行 `npm run smoke:lobby-ui -- http://127.0.0.1:3031`，通过。
+  - `PASS lobby waiting row join - 9T5GXQ`
+  - `PASS lobby playing row watch - Z6WZUB`
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3031`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3031`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3031`，通过。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
+
 ## 32. 2026-06-25 阶段 3 小步 2 线上验证补记
 
 本轮目标：
@@ -1800,3 +1853,40 @@ b6faf9e
 - 小步 2：观战席，完成并通过真实服务器验证。
 - 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
 - 下一步：小步 4，房间列表 UI：Join / Watch。
+
+## 39. 2026-06-25 阶段 3 小步 4 本地完成与末尾追加校正
+
+本轮目标：
+
+- 保持 handoff 后续交接记录只从文件末尾追加。
+- 补记小步 4 的真实本地完成状态，避免只看文件末尾时漏掉小步 4。
+- 按用户澄清修正“本地分析”口径：服务器收集棋谱池，后续用户把收集来的棋谱导出到本地/离线流程，用于分析和开局库；不是浏览器本地保存或浏览器内分析。
+
+实际完成：
+
+- 阶段 3 小步 4 房间列表 UI Join / Watch 已实现。
+- 好友房面板新增房间列表，初次挂载通过 `lobby:join` 取初始列表。
+- 前端监听 `lobby:room-updated` / `lobby:room-deleted`，列表可随服务端增量事件更新。
+- waiting 房显示 Join，点击后以第二名玩家加入。
+- playing / 满员房显示 Watch，点击后进入观战席。
+- 新增六语种房间列表文案和移动端单列布局。
+- 新增 `tools/smoke-lobby-ui.ts` 和 `npm run smoke:lobby-ui`，用系统 Chrome 验证列表 Join / Watch。
+- `docs/STAGE_3_PROGRESS.md`、`docs/STAGE_3_PLAN.md`、`docs/logic/lobby-matchmaking-module.md`、`docs/logic/rating-leaderboard-module.md` 已记录小步 4 和“本地分析”口径。
+
+本地验证：
+
+- `npm test`：通过，5 个测试文件、61 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3031 npm start` 后运行 `npm run smoke:lobby-ui -- http://127.0.0.1:3031`，通过。
+  - `PASS lobby waiting row join - 9T5GXQ`
+  - `PASS lobby playing row watch - Z6WZUB`
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3031`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3031`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3031`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送小步 4，等待真实服务器更新后跑 `verify:online`、`smoke:lobby-ui`、`smoke:lobby`、`smoke:online-room` 和 `smoke:share-url`。

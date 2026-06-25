@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
-import type { RoomAck, RoomClientState } from "@/server/room-contract";
-import type { RoomSnapshot } from "@/server/rooms";
+import type { RoomAck, RoomClientState, RoomListAck } from "@/server/room-contract";
+import type { LobbyRoomDeletedEvent, LobbyRoomUpdatedEvent, RoomListItem, RoomSnapshot } from "@/server/rooms";
 import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
 
 type RoomSocket = {
@@ -32,11 +32,15 @@ export type FriendRoomController = {
   error: string | null;
   inviteUrl: string;
   joinCode: string;
+  joinListedRoom: (roomCode: string) => void;
   joinRoom: () => void;
   leaveRoom: () => void;
+  lobbyRooms: RoomListItem[];
+  lobbyStatus: "idle" | "loading" | "ready" | "error";
   playerName: string;
   playMove: (point: Point) => void;
   ready: boolean;
+  refreshLobby: () => void;
   resignGame: () => void;
   respondUndoRequest: (accepted: boolean) => void;
   restartGame: () => void;
@@ -57,6 +61,8 @@ export function useFriendRoom(): FriendRoomController {
   const [room, setRoom] = useState<RoomClientState | null>(null);
   const [playerName, setPlayerNameState] = useState(getInitialPlayerName);
   const [joinCode, setJoinCodeState] = useState(getInitialJoinCode);
+  const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
+  const [lobbyStatus, setLobbyStatus] = useState<FriendRoomController["lobbyStatus"]>("idle");
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
 
@@ -108,6 +114,18 @@ export function useFriendRoom(): FriendRoomController {
         setRoom((currentRoom) => (currentRoom ? { ...currentRoom, snapshot } : currentRoom));
       }
     });
+    socket.on("lobby:room-updated", (event: unknown) => {
+      if (isLobbyRoomUpdatedEvent(event)) {
+        setLobbyRooms((currentRooms) => sortLobbyRooms(upsertLobbyRoom(currentRooms, event.room)));
+        setLobbyStatus("ready");
+      }
+    });
+    socket.on("lobby:room-deleted", (event: unknown) => {
+      if (isLobbyRoomDeletedEvent(event)) {
+        setLobbyRooms((currentRooms) => currentRooms.filter((candidate) => candidate.code !== event.code));
+        setLobbyStatus("ready");
+      }
+    });
 
     socketRef.current = socket;
 
@@ -143,11 +161,11 @@ export function useFriendRoom(): FriendRoomController {
     socket.emit("room:create", { playerId: nextPlayerId, playerName: nextPlayerName }, applyRoomAck);
   }, [applyRoomAck, ensureSocket, playerName]);
 
-  const joinRoom = useCallback(() => {
+  const joinRoomByCode = useCallback((roomCode: string) => {
     const socket = ensureSocket();
     const nextPlayerId = getOrCreatePlayerId();
     const nextPlayerName = normalizePlayerName(playerName);
-    const nextRoomCode = normalizeRoomCode(joinCode);
+    const nextRoomCode = normalizeRoomCode(roomCode);
 
     if (!nextRoomCode) {
       setError("Enter a room code.");
@@ -162,7 +180,29 @@ export function useFriendRoom(): FriendRoomController {
       { playerId: nextPlayerId, playerName: nextPlayerName, roomCode: nextRoomCode },
       applyRoomAck
     );
-  }, [applyRoomAck, ensureSocket, joinCode, playerName]);
+  }, [applyRoomAck, ensureSocket, playerName]);
+
+  const joinRoom = useCallback(() => {
+    joinRoomByCode(joinCode);
+  }, [joinCode, joinRoomByCode]);
+
+  const joinListedRoom = useCallback((roomCode: string) => {
+    joinRoomByCode(roomCode);
+  }, [joinRoomByCode]);
+
+  const refreshLobby = useCallback(() => {
+    setLobbyStatus("loading");
+    ensureSocket().emit("lobby:join", { limit: 20 }, (response: RoomListAck) => {
+      if (!response.ok) {
+        setLobbyStatus("error");
+        setError(response.error.message);
+        return;
+      }
+
+      setLobbyRooms(response.value.rooms);
+      setLobbyStatus("ready");
+    });
+  }, [ensureSocket]);
 
   const toggleReady = useCallback(() => {
     if (!room) {
@@ -320,11 +360,15 @@ export function useFriendRoom(): FriendRoomController {
     error,
     inviteUrl,
     joinCode,
+    joinListedRoom,
     joinRoom,
     leaveRoom,
+    lobbyRooms,
+    lobbyStatus,
     playerName,
     playMove,
     ready,
+    refreshLobby,
     resignGame,
     respondUndoRequest,
     restartGame,
@@ -350,6 +394,33 @@ function isRoomErrorLike(value: unknown): value is { message: string } {
 
 function isRoomSnapshot(value: unknown): value is RoomSnapshot {
   return typeof value === "object" && value !== null && "code" in value && "board" in value && "players" in value;
+}
+
+function isLobbyRoomUpdatedEvent(value: unknown): value is LobbyRoomUpdatedEvent {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "room" in value &&
+    typeof value.room === "object" &&
+    value.room !== null &&
+    "code" in value.room
+  );
+}
+
+function isLobbyRoomDeletedEvent(value: unknown): value is LobbyRoomDeletedEvent {
+  return typeof value === "object" && value !== null && "code" in value && typeof value.code === "string";
+}
+
+function upsertLobbyRoom(rooms: RoomListItem[], room: RoomListItem): RoomListItem[] {
+  const nextRooms = rooms.filter((candidate) => candidate.code !== room.code);
+
+  nextRooms.push(room);
+
+  return nextRooms;
+}
+
+function sortLobbyRooms(rooms: RoomListItem[]): RoomListItem[] {
+  return [...rooms].sort((first, second) => second.updatedAt - first.updatedAt || first.code.localeCompare(second.code));
 }
 
 function getInitialPlayerName(): string {

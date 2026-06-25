@@ -17,6 +17,7 @@
     "opening-book": "tsx tools/generate-opening-book.ts",
     "smoke:share-url": "tsx tools/smoke-share-url.ts",
     "smoke:lobby": "tsx tools/smoke-lobby.ts",
+    "smoke:lobby-ui": "tsx tools/smoke-lobby-ui.ts",
     "smoke:online-room": "tsx tools/smoke-online-room.ts",
     "verify:online": "tsx tools/verify-online-server.ts"
   },

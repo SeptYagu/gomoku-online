@@ -4,7 +4,7 @@
 
 本文件记录阶段 3 的小步骤进度。每个小步骤都必须完成实现、文档、验证、GitHub 推送，并在推送后等待 90 秒检查线上版本。
 
-阶段 3 的棋谱数据口径：注册玩家和游客的在线对局棋谱都提交服务器，形成服务器棋谱池。后续“本地分析”指把收集来的棋谱导出到本地/离线分析流程，用于统计、筛选和生成自有开局库，不是只保存在游客浏览器本地。
+阶段 3 的棋谱数据口径：注册玩家和游客的在线对局棋谱都提交服务器，形成服务器棋谱池。后续“本地分析”指用户把服务器收集来的棋谱导出到本地/离线分析流程，用于统计、筛选和生成自有开局库；不是只保存在游客浏览器本地，也不是当前阶段要在浏览器里做分析。
 
 ## 小步 1：真实分享链接
 
@@ -162,3 +162,47 @@
   - `PASS REST room list hides finished room`
 - 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过。
 - 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
+
+## 小步 4：房间列表 UI：Join / Watch
+
+状态：实现完成，本地验证通过；等待提交推送后做真实服务器验证。
+
+目标：
+
+- 在好友房面板中显示房间列表。
+- 列表读取小步 3 的 REST / lobby socket 数据。
+- waiting 房显示 Join，点击后加入为第二名玩家。
+- playing 或满员房显示 Watch，点击后进入观战席。
+- 列表能随 lobby 增量事件更新。
+
+实现：
+
+- `src/components/useFriendRoom.ts`
+  - 新增 `lobbyRooms`、`lobbyStatus`、`refreshLobby()`、`joinListedRoom(roomCode)`。
+  - 监听 `lobby:room-updated` / `lobby:room-deleted` 并更新本地列表。
+  - `refreshLobby()` 通过 `lobby:join` 获取初始列表。
+- `src/components/GameShell.tsx`
+  - 好友房面板新增 `RoomLobbyList`。
+  - 列表行显示房主、房间号、waiting/playing 状态、玩家数、观战人数。
+  - 根据 `canJoin` / `canWatch` 显示 Join 或 Watch。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增房间列表 UI 文案。
+- `src/app/globals.css`
+  - 新增房间列表布局和移动端单列布局。
+- `tools/smoke-lobby-ui.ts`
+  - 使用 Socket.IO 预置一个 waiting 房和一个 playing 房。
+  - 使用系统 Chrome 打开真实页面，点击列表中的 Join 和 Watch，并验证 URL 与 Spectator 状态。
+- `package.json`
+  - 新增 `npm run smoke:lobby-ui`。
+
+验证：
+
+- `npm test`：通过，5 个测试文件、61 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3031 npm start` 后运行 `npm run smoke:lobby-ui -- http://127.0.0.1:3031`，通过。
+  - `PASS lobby waiting row join - 9T5GXQ`
+  - `PASS lobby playing row watch - Z6WZUB`
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3031`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3031`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3031`，通过。

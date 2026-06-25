@@ -258,6 +258,13 @@ Custom Game：
 - 大厅展示公开 waiting 房和可观战 playing 房。
 - 每项显示房主昵称、房间码、状态、玩家数、观战人数、创建时间或最近活动。
 - waiting 房提供 Join，playing 房提供 Watch。
+- 当前小步 4 已实现前端入口：
+  - 好友房面板内显示大厅房间列表。
+  - 列表初次挂载时通过 `lobby:join` 读取初始房间。
+  - 列表通过 `lobby:room-updated` / `lobby:room-deleted` 自动更新。
+  - waiting 房显示 Join，点击后作为第二名玩家进入。
+  - playing / 满员房显示 Watch，点击后作为观战者进入。
+  - `tools/smoke-lobby-ui.ts` 使用系统 Chrome 验证列表 Join 和 Watch。
 - 当前小步 3 已实现服务端能力：
   - `RoomListItem` / `RoomListQuery` / `RoomListSnapshot` / lobby 增量事件类型。
   - `GET /api/rooms?limit=20&status=waiting|playing|finished|all`。
@@ -304,6 +311,17 @@ Custom Game：
 - `privateRoom`
 - `publicRoom`
 
+小步 4 已新增并接入的 UI 文案 key：
+
+- `availableRooms`
+- `refreshRooms`
+- `loadingRooms`
+- `noRooms`
+- `lobbyWaiting`
+- `lobbyPlaying`
+- `playersCount`
+- `watchRoom`
+
 语言集合必须使用项目要求：
 
 - `en`
@@ -333,6 +351,7 @@ Custom Game：
 - 密码不下发到客户端。
 - 并发两人找局不会超员。
 - 搜索无结果显示空状态。
+- 房间列表 UI 的 Join / Watch 可进入对应房间。已覆盖：`tools/smoke-lobby-ui.ts`。
 - 房间更新只增量推送。已覆盖：`src/server/room-socket.test.ts`、`tools/smoke-lobby.ts`。
 - 版本缺口触发全量同步。
 - 六种语言下字段不溢出。

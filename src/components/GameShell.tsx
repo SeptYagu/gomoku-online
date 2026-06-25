@@ -1,7 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Check, CircleDot, Copy, Flag, LogOut, RotateCcw, Undo2, UserRound, Users, Wifi, X } from "lucide-react";
+import {
+  Bot,
+  Check,
+  CircleDot,
+  Copy,
+  Eye,
+  Flag,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  RotateCcw,
+  Undo2,
+  UserRound,
+  Users,
+  Wifi,
+  X
+} from "lucide-react";
 import {
   chooseAiMove,
   getAiTimeLimitMs,
@@ -732,6 +748,8 @@ function FriendRoomControls({
         ) : null}
       </div>
 
+      <RoomLobbyList dictionary={dictionary} room={room} />
+
       {snapshot ? (
         <div className="room-summary">
           <div>
@@ -848,6 +866,74 @@ function FriendRoomControls({
   );
 }
 
+function RoomLobbyList({
+  dictionary,
+  room
+}: {
+  dictionary: GameDictionary;
+  room: FriendRoomController;
+}) {
+  const labels = dictionary.room;
+  const { refreshLobby } = room;
+
+  useEffect(() => {
+    refreshLobby();
+  }, [refreshLobby]);
+
+  return (
+    <div className="room-lobby">
+      <div className="room-lobby-header">
+        <p className="metric-label">{labels.availableRooms}</p>
+        <button className="icon-button" onClick={room.refreshLobby} title={labels.refreshRooms} type="button">
+          <RefreshCw aria-hidden="true" focusable={false} />
+        </button>
+      </div>
+      {room.lobbyStatus === "loading" && room.lobbyRooms.length === 0 ? (
+        <p className="room-message">{labels.loadingRooms}</p>
+      ) : room.lobbyRooms.length > 0 ? (
+        <div className="room-lobby-list">
+          {room.lobbyRooms.map((lobbyRoom) => {
+            const actionLabel = lobbyRoom.canJoin ? labels.joinRoom : labels.watchRoom;
+            const isCurrentRoom = room.room?.snapshot.code === lobbyRoom.code;
+
+            return (
+              <div className="room-lobby-item" key={lobbyRoom.code}>
+                <div>
+                  <strong>{lobbyRoom.hostName}</strong>
+                  <p>
+                    {lobbyRoom.code}
+                    {" · "}
+                    {getLobbyStatusLabel(lobbyRoom.status, labels)}
+                  </p>
+                </div>
+                <div className="room-lobby-metrics">
+                  <span>{labels.playersCount.replace("{count}", String(lobbyRoom.playerCount))}</span>
+                  <span>{`${labels.spectators}: ${lobbyRoom.spectatorCount}`}</span>
+                </div>
+                <button
+                  className="mode-pill"
+                  disabled={isCurrentRoom || (!lobbyRoom.canJoin && !lobbyRoom.canWatch)}
+                  onClick={() => room.joinListedRoom(lobbyRoom.code)}
+                  type="button"
+                >
+                  {lobbyRoom.canJoin ? (
+                    <LogIn aria-hidden="true" focusable={false} />
+                  ) : (
+                    <Eye aria-hidden="true" focusable={false} />
+                  )}
+                  {actionLabel}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="room-message">{labels.noRooms}</p>
+      )}
+    </div>
+  );
+}
+
 function RoomUndoRequestOverlay({
   dictionary,
   room
@@ -933,6 +1019,18 @@ function RoomUndoRequestDialog({
       </div>
     </div>
   );
+}
+
+function getLobbyStatusLabel(status: RoomSnapshot["status"], labels: GameDictionary["room"]): string {
+  if (status === "playing") {
+    return labels.lobbyPlaying;
+  }
+
+  if (status === "finished") {
+    return labels.roomClosed;
+  }
+
+  return labels.lobbyWaiting;
 }
 
 function getRoomGameStatus(snapshot: RoomSnapshot | null): GameStatus {

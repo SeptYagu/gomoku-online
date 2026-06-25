@@ -33,6 +33,7 @@ export type GameDictionary = {
   room: {
     blackSeat: string;
     allowUndo: string;
+    availableRooms: string;
     connected: string;
     connection: string;
     copied: string;
@@ -42,15 +43,21 @@ export type GameDictionary = {
     disconnected: string;
     joinRoom: string;
     leaveRoom: string;
+    loadingRooms: string;
+    lobbyPlaying: string;
+    lobbyWaiting: string;
+    noRooms: string;
     notInRoom: string;
     notReady: string;
     opponentTurn: string;
     panelLabel: string;
     playerName: string;
     playerNamePlaceholder: string;
+    playersCount: string;
     ready: string;
     readyAction: string;
     readyToStart: string;
+    refreshRooms: string;
     resign: string;
     restartRoom: string;
     roomClosed: string;
@@ -68,6 +75,7 @@ export type GameDictionary = {
     rejectUndo: string;
     waitingForOpponent: string;
     waitingForReady: string;
+    watchRoom: string;
     whiteSeat: string;
     you: string;
     yourSeat: string;
@@ -137,6 +145,7 @@ const en = {
     room: {
       blackSeat: "Black",
       allowUndo: "Allow",
+      availableRooms: "Rooms",
       connected: "Connected",
       connection: "Connection",
       copied: "Copied",
@@ -146,15 +155,21 @@ const en = {
       disconnected: "Disconnected",
       joinRoom: "Join room",
       leaveRoom: "Leave",
+      loadingRooms: "Loading rooms",
+      lobbyPlaying: "Playing",
+      lobbyWaiting: "Waiting",
+      noRooms: "No rooms open",
       notInRoom: "No room joined",
       notReady: "Not ready",
       opponentTurn: "Opponent to move",
       panelLabel: "Friend room",
       playerName: "Name",
       playerNamePlaceholder: "Player 1234",
+      playersCount: "Players {count}/2",
       ready: "Ready",
       readyAction: "Ready",
       readyToStart: "Both players ready",
+      refreshRooms: "Refresh rooms",
       resign: "Resign",
       restartRoom: "Restart",
       roomClosed: "Room closed",
@@ -172,6 +187,7 @@ const en = {
       rejectUndo: "Reject ({seconds})",
       waitingForOpponent: "Waiting for opponent",
       waitingForReady: "Waiting for ready",
+      watchRoom: "Watch",
       whiteSeat: "White",
       you: "(you)",
       yourSeat: "Your seat",
@@ -237,6 +253,7 @@ const zh = {
     room: {
       blackSeat: "黑棋",
       allowUndo: "允许",
+      availableRooms: "房间列表",
       connected: "已连接",
       connection: "连接",
       copied: "已复制",
@@ -246,15 +263,21 @@ const zh = {
       disconnected: "已断开",
       joinRoom: "加入房间",
       leaveRoom: "离开",
+      loadingRooms: "正在加载房间",
+      lobbyPlaying: "对局中",
+      lobbyWaiting: "等待中",
+      noRooms: "暂无房间",
       notInRoom: "尚未加入房间",
       notReady: "未准备",
       opponentTurn: "对手回合",
       panelLabel: "好友房",
       playerName: "昵称",
       playerNamePlaceholder: "Player 1234",
+      playersCount: "玩家 {count}/2",
       ready: "已准备",
       readyAction: "准备",
       readyToStart: "双方已准备",
+      refreshRooms: "刷新房间",
       resign: "认输",
       restartRoom: "重开",
       roomClosed: "房间已关闭",
@@ -272,6 +295,7 @@ const zh = {
       rejectUndo: "拒绝（{seconds}）",
       waitingForOpponent: "等待对手加入",
       waitingForReady: "等待准备",
+      watchRoom: "观战",
       whiteSeat: "白棋",
       you: "（你）",
       yourSeat: "你的座位",
@@ -337,6 +361,7 @@ const fr = {
     room: {
       blackSeat: "Noirs",
       allowUndo: "Autoriser",
+      availableRooms: "Salons",
       connected: "Connecté",
       connection: "Connexion",
       copied: "Copié",
@@ -346,15 +371,21 @@ const fr = {
       disconnected: "Déconnecté",
       joinRoom: "Rejoindre",
       leaveRoom: "Quitter",
+      loadingRooms: "Chargement des salons",
+      lobbyPlaying: "En jeu",
+      lobbyWaiting: "En attente",
+      noRooms: "Aucun salon ouvert",
       notInRoom: "Aucun salon rejoint",
       notReady: "Pas prêt",
       opponentTurn: "À l'adversaire",
       panelLabel: "Salon ami",
       playerName: "Nom",
       playerNamePlaceholder: "Player 1234",
+      playersCount: "Joueurs {count}/2",
       ready: "Prêt",
       readyAction: "Prêt",
       readyToStart: "Deux joueurs prêts",
+      refreshRooms: "Actualiser les salons",
       resign: "Abandonner",
       restartRoom: "Recommencer",
       roomClosed: "Salon fermé",
@@ -372,6 +403,7 @@ const fr = {
       rejectUndo: "Refuser ({seconds})",
       waitingForOpponent: "En attente d'un adversaire",
       waitingForReady: "En attente des joueurs",
+      watchRoom: "Regarder",
       whiteSeat: "Blancs",
       you: "(vous)",
       yourSeat: "Votre couleur",
@@ -437,6 +469,7 @@ const es = {
     room: {
       blackSeat: "Negras",
       allowUndo: "Permitir",
+      availableRooms: "Salas",
       connected: "Conectado",
       connection: "Conexión",
       copied: "Copiado",
@@ -446,15 +479,21 @@ const es = {
       disconnected: "Desconectado",
       joinRoom: "Unirse",
       leaveRoom: "Salir",
+      loadingRooms: "Cargando salas",
+      lobbyPlaying: "En juego",
+      lobbyWaiting: "Esperando",
+      noRooms: "No hay salas",
       notInRoom: "Sin sala",
       notReady: "No listo",
       opponentTurn: "Turno del rival",
       panelLabel: "Sala de amigos",
       playerName: "Nombre",
       playerNamePlaceholder: "Player 1234",
+      playersCount: "Jugadores {count}/2",
       ready: "Listo",
       readyAction: "Listo",
       readyToStart: "Ambos listos",
+      refreshRooms: "Actualizar salas",
       resign: "Rendirse",
       restartRoom: "Reiniciar",
       roomClosed: "Sala cerrada",
@@ -472,6 +511,7 @@ const es = {
       rejectUndo: "Rechazar ({seconds})",
       waitingForOpponent: "Esperando rival",
       waitingForReady: "Esperando listos",
+      watchRoom: "Mirar",
       whiteSeat: "Blancas",
       you: "(tú)",
       yourSeat: "Tu color",
@@ -537,6 +577,7 @@ const ru = {
     room: {
       blackSeat: "Черные",
       allowUndo: "Разрешить",
+      availableRooms: "Комнаты",
       connected: "Подключен",
       connection: "Связь",
       copied: "Скопировано",
@@ -546,15 +587,21 @@ const ru = {
       disconnected: "Отключен",
       joinRoom: "Войти",
       leaveRoom: "Выйти",
+      loadingRooms: "Загрузка комнат",
+      lobbyPlaying: "Идет игра",
+      lobbyWaiting: "Ожидание",
+      noRooms: "Нет открытых комнат",
       notInRoom: "Комната не выбрана",
       notReady: "Не готов",
       opponentTurn: "Ход соперника",
       panelLabel: "Комната друга",
       playerName: "Имя",
       playerNamePlaceholder: "Player 1234",
+      playersCount: "Игроки {count}/2",
       ready: "Готов",
       readyAction: "Готов",
       readyToStart: "Оба готовы",
+      refreshRooms: "Обновить комнаты",
       resign: "Сдаться",
       restartRoom: "Заново",
       roomClosed: "Комната закрыта",
@@ -572,6 +619,7 @@ const ru = {
       rejectUndo: "Отклонить ({seconds})",
       waitingForOpponent: "Ожидание соперника",
       waitingForReady: "Ожидание готовности",
+      watchRoom: "Смотреть",
       whiteSeat: "Белые",
       you: "(вы)",
       yourSeat: "Ваш цвет",
@@ -637,6 +685,7 @@ const ar = {
     room: {
       blackSeat: "الأسود",
       allowUndo: "السماح",
+      availableRooms: "الغرف",
       connected: "متصل",
       connection: "الاتصال",
       copied: "تم النسخ",
@@ -646,15 +695,21 @@ const ar = {
       disconnected: "غير متصل",
       joinRoom: "انضمام",
       leaveRoom: "مغادرة",
+      loadingRooms: "جار تحميل الغرف",
+      lobbyPlaying: "قيد اللعب",
+      lobbyWaiting: "انتظار",
+      noRooms: "لا توجد غرف مفتوحة",
       notInRoom: "لا توجد غرفة",
       notReady: "غير جاهز",
       opponentTurn: "دور الخصم",
       panelLabel: "غرفة صديق",
       playerName: "الاسم",
       playerNamePlaceholder: "Player 1234",
+      playersCount: "اللاعبون {count}/2",
       ready: "جاهز",
       readyAction: "جاهز",
       readyToStart: "اللاعبان جاهزان",
+      refreshRooms: "تحديث الغرف",
       resign: "استسلام",
       restartRoom: "إعادة",
       roomClosed: "الغرفة مغلقة",
@@ -672,6 +727,7 @@ const ar = {
       rejectUndo: "رفض ({seconds})",
       waitingForOpponent: "بانتظار الخصم",
       waitingForReady: "بانتظار الجاهزية",
+      watchRoom: "مشاهدة",
       whiteSeat: "الأبيض",
       you: "(أنت)",
       yourSeat: "لونك",
