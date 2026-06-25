@@ -22,9 +22,9 @@
 
 下一轮建议：
 
-- 进入公开测试准备：部署测试站、邀请试玩、记录移动端误触和断线恢复问题。
+- 继续公开测试准备：邀请试玩，记录移动端误触、断线恢复和在线服务稳定性问题。
 - 补多语言 metadata、canonical/alternate 和 sitemap 基础 SEO。
-- 为在线房间补 TTL、超时判负、Redis Adapter 和更稳固的重连 token。
+- 为在线房间继续补 Redis Adapter、更稳固的重连 token 和多实例共享状态。
 - 继续细化移动端好友房手感和小屏视觉回归。
 
 ## 本地开发
@@ -91,6 +91,14 @@ location / {
   proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
+
+部署后可用同一条命令确认真实服务器页面、`/api/version`、Socket.IO polling 入口和 WebSocket upgrade：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
+```
+
+其中 `<expected-version>` 是页面底部 `version:` 后面的短提交号；也可以省略，只检查当前线上能否返回版本。
 
 ## 验证命令
 

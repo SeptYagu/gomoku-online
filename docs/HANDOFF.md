@@ -974,3 +974,83 @@ opening-book-runtime：
 
 - 房间生命周期仍是单进程内存实现；服务重启仍会丢房间。
 - lifecycle sweep 是进程内定时器；多实例部署前必须接 Redis Adapter 或持久层，否则不同实例间不会共享房间状态。
+
+## 22. 2026-06-25 M3 小步 1：断线 60 秒与线上验证入口
+
+本轮目标：
+
+- 先完成 M3 公开测试准备，再进入 build plan 阶段 3。
+- 按用户要求将联机断线宽限期从 2 分钟改为 60 秒。
+- 补一个可重复执行的真实服务器验证入口，方便每次部署后确认版本、Socket.IO polling 和 WebSocket upgrade。
+
+实际完成：
+
+- `src/server/rooms.ts` 默认 `DISCONNECT_GRACE_MS` 改为 `60 * 1000`。
+- 新增 `tools/verify-online-server.ts`：
+  - 默认真实站点为 `http://gomoku.yagu.ddns-ip.net`。
+  - 检查 `/en` 页面是否可访问。
+  - 检查 `/api/version` 返回的部署版本，可传 `<expected-version>` 校验是否实装到指定提交。
+  - 检查 `/socket.io/?EIO=4&transport=polling` 是否返回 sid。
+  - 强制 `transports: ["websocket"]` 连接，确认反向代理 WebSocket upgrade 可用。
+- 新增 `npm run verify:online`。
+- 新增 `src/app/api/version/route.ts`，返回当前 `NEXT_PUBLIC_APP_VERSION` / `APP_VERSION`，避免只依赖客户端渲染 footer。
+- 更新 `README.md`、`docs/STAGE_2_REPORT.md`、`docs/logic/realtime-room-module.md` 和 `WEBSITE_BUILD_PLAN.md`。
+
+修改文件：
+
+- `README.md`
+- `WEBSITE_BUILD_PLAN.md`
+- `docs/HANDOFF.md`
+- `docs/STAGE_2_REPORT.md`
+- `docs/logic/realtime-room-module.md`
+- `package.json`
+- `src/app/api/version/route.ts`
+- `src/server/rooms.ts`
+- `tools/verify-online-server.ts`
+
+验证命令和结果：
+
+- `npm test`：通过，4 个测试文件、54 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过，产物包含 `/api/version`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net`：
+  - page：通过。
+  - version：失败，当前真实服务器尚未部署带 `/api/version` 的本轮提交，也没有可从静态 HTML 读取的版本 footer。
+  - Socket.IO polling：通过，返回 sid。
+  - Socket.IO websocket：通过，强制 WebSocket transport 连接成功。
+
+真实服务器当前判断：
+
+- `http://gomoku.yagu.ddns-ip.net` 的 Socket.IO polling 和 WebSocket upgrade 当前都可用。
+- 下一次用户部署本轮提交后，先运行：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
+```
+
+未验证项及原因：
+
+- 本轮 60 秒断线规则尚未在真实服务器验证，因为需要用户先部署最新版。
+- `/api/version` 也需要部署后才能在线上通过。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
+
+下一步建议：
+
+- M3 小步 2：补公开测试清单和问题记录模板，重点覆盖两台电脑、手机浏览器、移动端误触、断线/重连、ready 自动开局、联机悔棋弹框。
+- 完成 M3 后再进入 build plan 阶段 3：随机匹配、账号/游客身份、排行榜和离开惩罚。
+
+风险变化：
+
+- 线上代理层已从“只确认 polling”推进到“强制 WebSocket 也已确认可连”。
+- 版本确认入口从页面 footer 扩展为 `/api/version`，后续部署检查更稳定。

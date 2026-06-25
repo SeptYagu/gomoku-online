@@ -8,7 +8,7 @@
 
 - 新增 Socket.IO 依赖，并提供带实时服务的自定义 Next server。当前 `npm run dev` / `npm start` 默认使用该服务，`dev:next` / `start:next` 只保留给纯 Next 调试。
 - 新增 `src/server/online-server.ts` 和 `src/server/room-socket.ts`，Socket handler 只调用 `RoomStore`，不信任客户端棋盘或胜负结果。
-- 扩展 `src/server/rooms.ts`：支持同 `playerId` 重连、查询座位、双方 ready 自动开局、联机悔棋请求确认、断线宽限期、超时判负、房间 TTL、空房清理、房主终局后重开。
+- 扩展 `src/server/rooms.ts`：支持同 `playerId` 重连、查询座位、双方 ready 自动开局、联机悔棋请求确认、60 秒断线宽限期、超时判负、房间 TTL、空房清理、房主终局后重开。
 - 新增 `src/server/room-contract.ts`，共享客户端房间状态和 ack 类型。
 - 新增 `src/components/useFriendRoom.ts`，封装创建、加入、重连、准备、自动开局、落子、悔棋请求/响应、认输、重开、离开、邀请链接和 localStorage session。
 - `src/components/GameShell.tsx` 接入好友房模式，房间状态驱动棋盘、状态栏、按钮可用性和当前回合。
@@ -39,6 +39,12 @@ http://gomoku.yagu.ddns-ip.net
 ```
 
 生产服务器必须用 `npm run build && npm start` 启动当前版本。若使用 `next start` 或反向代理没有把 `/socket.io/` 转发到 Node 进程，好友房会出现 `xhr poll error` 或 `/socket.io` 404。
+
+部署后可用脚本确认真实服务器页面、`/api/version`、Socket.IO polling 入口和 WebSocket upgrade：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
+```
 
 验收环境：
 
@@ -74,7 +80,7 @@ http://gomoku.yagu.ddns-ip.net
 ## 当前限制
 
 - 房间状态仍为单进程内存，服务重启会丢房间。
-- 断线后已能标记座位，并通过同 `playerId` 在宽限期内刷新恢复；宽限期倒计时尚未在 UI 上展示，正式 reconnect token 未实现。
+- 断线后已能标记座位，并通过同 `playerId` 在 60 秒宽限期内刷新恢复；宽限期倒计时尚未在 UI 上展示，正式 reconnect token 未实现。
 - 尚未接 Redis Adapter，多实例部署时 Socket.IO room 映射和房间状态不会共享。
 - 房间 TTL、空房清理、断线超时判负已完成单进程基础版；多实例共享仍需 Redis/持久层。
 - 好友房没有密码、观战、聊天、棋谱保存、排行榜结算或账号绑定。

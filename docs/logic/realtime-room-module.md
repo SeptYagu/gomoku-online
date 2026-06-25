@@ -281,7 +281,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `game:resign` 的核心状态操作已实现：对局中认输后直接 finished，胜方为对手。
 - `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready。
 - 断线/重连的核心连接状态标记已实现；刷新恢复通过 localStorage `playerId` + `roomCode` 完成。
-- 断线宽限期和超时判负已完成基础版：playing 中断线会设置 `disconnectDeadline`，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned。
+- 断线宽限期和超时判负已完成基础版：playing 中断线会设置 `disconnectDeadline`，默认宽限期 60 秒，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned。
 - 正式 reconnect token 仍未做。
 - 多实例上线前接 Redis Adapter。
 
