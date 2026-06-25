@@ -48,6 +48,42 @@ export type RoomSnapshot = {
   winLine: Point[];
 };
 
+export type RoomListStatus = Extract<RoomStatus, "waiting" | "playing" | "finished">;
+
+export type RoomListItem = {
+  canJoin: boolean;
+  canWatch: boolean;
+  code: string;
+  createdAt: number;
+  hostName: string;
+  playerCount: number;
+  spectatorCount: number;
+  status: RoomStatus;
+  updatedAt: number;
+  version: number;
+};
+
+export type RoomListQuery = {
+  limit?: number;
+  status?: RoomListStatus | "all";
+};
+
+export type RoomListSnapshot = {
+  generatedAt: number;
+  rooms: RoomListItem[];
+  version: number;
+};
+
+export type LobbyRoomUpdatedEvent = {
+  room: RoomListItem;
+  version: number;
+};
+
+export type LobbyRoomDeletedEvent = {
+  code: string;
+  version: number;
+};
+
 export type CreateRoomInput = {
   playerId: string;
   playerName: string;
@@ -132,6 +168,7 @@ type RoomState = {
   moves: Move[];
   nextUndoRequestId: number;
   nextStartingSeat: RoomPlayerSeat;
+  listVersion: number;
   players: RoomPlayer[];
   spectators: RoomSpectator[];
   status: RoomStatus;
@@ -157,6 +194,7 @@ const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const COMPLETED_ROOM_TTL_MS = 30 * 60 * 1000;
 const DISCONNECT_GRACE_MS = 60 * 1000;
 const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
+const MAX_ROOM_LIST_LIMIT = 100;
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 const UNDO_REQUEST_LIMIT = 3;
 const UNDO_REQUEST_TIMEOUT_MS = 10_000;
@@ -171,6 +209,7 @@ type RoomLifecycleLimits = {
 export class RoomStore {
   private readonly codeGenerator: () => string;
   private readonly lifecycleLimits: RoomLifecycleLimits;
+  private lobbyVersion = 0;
   private readonly now: () => number;
   private readonly rooms = new Map<string, RoomState>();
 
@@ -221,6 +260,7 @@ export class RoomStore {
           seat: "black"
         }
       ],
+      listVersion: this.nextLobbyVersion(),
       nextUndoRequestId: 1,
       nextStartingSeat: "black",
       spectators: [],
@@ -271,6 +311,7 @@ export class RoomStore {
         joinedAt: now
       });
       room.updatedAt = now;
+      this.markRoomListed(room);
       return success(getRoomSnapshot(room));
     }
 
@@ -287,6 +328,7 @@ export class RoomStore {
       seat
     });
     updateRoomStatus(room, now);
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -319,6 +361,7 @@ export class RoomStore {
     }
 
     room.updatedAt = this.now();
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -338,6 +381,7 @@ export class RoomStore {
 
     player.ready = ready;
     updateRoomStatus(room, this.now());
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -362,6 +406,7 @@ export class RoomStore {
     room.status = "playing";
     room.currentTurn = room.nextStartingSeat;
     room.updatedAt = this.now();
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -411,6 +456,7 @@ export class RoomStore {
     }
     applyGameResult(room, result);
     room.updatedAt = this.now();
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -433,6 +479,7 @@ export class RoomStore {
     room.winner = getOpponent(player.seat);
     room.winLine = [];
     room.updatedAt = this.now();
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -484,6 +531,7 @@ export class RoomStore {
     };
     room.nextUndoRequestId += 1;
     room.updatedAt = now;
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -525,6 +573,7 @@ export class RoomStore {
 
     if (!accepted || now >= undoRequest.expiresAt) {
       markUndoRequestRejected(room, undoRequest, now);
+      this.markRoomListed(room);
       return success(getRoomSnapshot(room));
     }
 
@@ -539,6 +588,7 @@ export class RoomStore {
     }
 
     undoLatestMove(room, now);
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -578,6 +628,7 @@ export class RoomStore {
     }
 
     updateRoomStatus(room, this.now());
+    this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -601,6 +652,7 @@ export class RoomStore {
     }
 
     found.value.room.updatedAt = now;
+    this.markRoomListed(found.value.room);
 
     return success(getRoomSnapshot(found.value.room));
   }
@@ -617,6 +669,7 @@ export class RoomStore {
     if (spectatorIndex >= 0) {
       room.spectators.splice(spectatorIndex, 1);
       room.updatedAt = this.now();
+      this.markRoomListed(room);
       return success(getRoomSnapshot(room));
     }
 
@@ -638,6 +691,7 @@ export class RoomStore {
     }
 
     found.value.room.updatedAt = this.now();
+    this.markRoomListed(found.value.room);
 
     return success(getRoomSnapshot(found.value.room));
   }
@@ -656,6 +710,41 @@ export class RoomStore {
     }
 
     return success(getRoomSnapshot(room));
+  }
+
+  listRooms(query: RoomListQuery = {}): RoomListSnapshot {
+    const now = this.now();
+    const deletedRoomCodes: string[] = [];
+
+    for (const [code, room] of this.rooms) {
+      const changed = advanceRoomLifecycle(room, now, this.lifecycleLimits);
+
+      if (changed) {
+        this.markRoomListed(room);
+      }
+
+      if (this.deleteIfExpired(room, now)) {
+        deletedRoomCodes.push(code);
+      }
+    }
+
+    if (deletedRoomCodes.length > 0) {
+      this.nextLobbyVersion();
+    }
+
+    const limit = clampRoomListLimit(query.limit);
+    const status = query.status ?? "all";
+    const rooms = Array.from(this.rooms.values())
+      .filter((room) => isRoomVisibleInLobby(room, status))
+      .sort((first, second) => second.updatedAt - first.updatedAt || first.code.localeCompare(second.code))
+      .slice(0, limit)
+      .map(getRoomListItem);
+
+    return {
+      generatedAt: now,
+      rooms,
+      version: this.lobbyVersion
+    };
   }
 
   getPlayerSeat(roomCode: string, playerId: string): RoomPlayerSeat | null {
@@ -699,15 +788,31 @@ export class RoomStore {
 
       if (this.deleteIfExpired(room, now)) {
         deletedRoomCodes.push(code);
+        this.nextLobbyVersion();
         continue;
       }
 
       if (changed) {
+        this.markRoomListed(room);
         updatedSnapshots.push(getRoomSnapshot(room));
       }
     }
 
     return { deletedRoomCodes, updatedSnapshots };
+  }
+
+  getLobbyVersion(): number {
+    return this.lobbyVersion;
+  }
+
+  getRoomListItem(roomCode: string): RoomListItem | null {
+    const room = this.getRoom(roomCode);
+
+    if (!room) {
+      return null;
+    }
+
+    return getRoomListItem(room);
   }
 
   private getRoom(roomCode: string): RoomState | null {
@@ -809,6 +914,15 @@ export class RoomStore {
 
     return true;
   }
+
+  private markRoomListed(room: RoomState): void {
+    room.listVersion = this.nextLobbyVersion();
+  }
+
+  private nextLobbyVersion(): number {
+    this.lobbyVersion += 1;
+    return this.lobbyVersion;
+  }
 }
 
 export function createRoomCode(length = DEFAULT_ROOM_CODE_LENGTH): string {
@@ -846,6 +960,49 @@ function updateRoomStatus(room: RoomState, now: number) {
   room.status = room.players.length === 2 && room.players.every((player) => player.ready) ? "playing" : "waiting";
   room.currentTurn = room.status === "playing" ? room.nextStartingSeat : room.currentTurn;
   room.updatedAt = now;
+}
+
+function getRoomListItem(room: RoomState): RoomListItem {
+  const host = room.players.find((player) => player.seat === room.hostSeat) ?? room.players[0] ?? null;
+  const playerCount = room.players.length;
+  const spectatorCount = room.spectators.length;
+
+  return {
+    canJoin: room.status === "waiting" && playerCount < 2,
+    canWatch: room.status === "playing" || playerCount >= 2,
+    code: room.code,
+    createdAt: room.createdAt,
+    hostName: host?.name ?? "Player",
+    playerCount,
+    spectatorCount,
+    status: room.status,
+    updatedAt: room.updatedAt,
+    version: room.listVersion
+  };
+}
+
+function isRoomVisibleInLobby(room: RoomState, status: RoomListQuery["status"] = "all"): boolean {
+  if (room.status === "abandoned") {
+    return false;
+  }
+
+  if (status && status !== "all" && room.status !== status) {
+    return false;
+  }
+
+  if (!status || status === "all") {
+    return room.status === "waiting" || room.status === "playing";
+  }
+
+  return true;
+}
+
+function clampRoomListLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return 50;
+  }
+
+  return Math.min(MAX_ROOM_LIST_LIMIT, Math.max(1, Math.floor(limit)));
 }
 
 function advanceRoomLifecycle(room: RoomState, now: number, limits: RoomLifecycleLimits): boolean {

@@ -100,3 +100,53 @@
   - `PASS create room URL - WEV6FZ`
   - `PASS copy invite - copied current URL`
   - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+
+## 小步 3：房间列表 API 和 lobby socket channel
+
+状态：实现完成，本地验证通过；等待提交推送后做真实服务器验证。
+
+目标：
+
+- 提供公开房间列表 REST API，供后续大厅 UI 读取。
+- 提供 lobby socket channel，客户端可加入大厅并接收房间列表增量更新。
+- 房间列表显示 waiting 房和可观战 playing 房。
+- 每项至少包含房主昵称、房间号、状态、玩家数、观战人数、创建时间、最近活动时间和 Join / Watch 能力。
+- 房间创建、加入、ready 开局、结束或隐藏时，大厅收到增量事件。
+
+实现：
+
+- `src/server/room-store.ts`
+  - 新增共享 `roomStore`，让自定义在线服务器的 REST API 和 Socket.IO 共用同一份房间状态。
+- `src/server/rooms.ts`
+  - 新增 `RoomListItem`、`RoomListQuery`、`RoomListSnapshot`、`LobbyRoomUpdatedEvent`、`LobbyRoomDeletedEvent`。
+  - RoomStore 新增 `listRooms()`、`getRoomListItem()` 和 lobby version。
+  - 房间创建、加入、ready、开局、落子、认输、重开、断线、观战离开、生命周期清理时更新列表版本。
+  - 默认列表只展示 `waiting` / `playing`，`finished` 可通过 `status=finished` 查询。
+- `src/server/online-server.ts`
+  - 拦截 `GET /api/rooms`，返回当前 `roomStore.listRooms()`。
+  - 保持 Socket.IO 与 REST 使用同一个 `roomStore`。
+- `src/server/room-socket.ts`
+  - 新增 `lobby:join`、`lobby:list`、`lobby:leave`。
+  - 新增 `lobby:room-updated`、`lobby:room-deleted`。
+  - 房间状态变化后向 lobby channel 广播增量事件。
+- `tools/smoke-lobby.ts`
+  - 覆盖 REST 初始列表、lobby 初始列表、创建房间增量、REST 包含新房间、加入更新、ready 开局更新、结束隐藏和 REST 隐藏 finished 房。
+- `package.json`
+  - 新增 `npm run smoke:lobby`。
+
+验证：
+
+- `npm test`：通过，5 个测试文件、61 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3030 npm start` 后运行 `npm run smoke:lobby -- http://127.0.0.1:3030`，通过。
+  - `PASS REST room list - version 0`
+  - `PASS lobby:join - 0 rooms`
+  - `PASS lobby room created - AMW5XG`
+  - `PASS REST room list includes created room`
+  - `PASS lobby room joined - player count updated`
+  - `PASS lobby room playing - status updated`
+  - `PASS lobby room deleted - finished room hidden`
+  - `PASS REST room list hides finished room`
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3030`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3030`，通过。

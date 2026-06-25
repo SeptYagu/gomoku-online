@@ -113,6 +113,59 @@ describe("RoomStore", () => {
     expect(expectOk(store.leaveRoom(room.code, "spectator-1")).spectators).toEqual([]);
   });
 
+  it("exposes lobby room list summaries for waiting and watchable games", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    let lobby = store.listRooms();
+
+    expect(lobby.version).toBeGreaterThan(0);
+    expect(lobby.rooms).toEqual([
+      expect.objectContaining({
+        canJoin: true,
+        canWatch: false,
+        code: created.code,
+        hostName: "Alice",
+        playerCount: 1,
+        spectatorCount: 0,
+        status: "waiting"
+      })
+    ]);
+
+    expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
+    expectOk(store.joinRoom(created.code, { playerId: "spectator-1", playerName: "Cara" }));
+
+    lobby = store.listRooms();
+
+    expect(lobby.rooms[0]).toMatchObject({
+      canJoin: false,
+      canWatch: true,
+      code: created.code,
+      hostName: "Alice",
+      playerCount: 2,
+      spectatorCount: 1,
+      status: "waiting"
+    });
+
+    expectOk(store.setPlayerReady(created.code, "player-1"));
+    expectOk(store.setPlayerReady(created.code, "player-2"));
+
+    expect(store.listRooms({ status: "playing" }).rooms[0]).toMatchObject({
+      canJoin: false,
+      canWatch: true,
+      code: created.code,
+      status: "playing"
+    });
+
+    expectOk(store.resignGame(created.code, "player-2"));
+
+    expect(store.listRooms().rooms).toEqual([]);
+    expect(store.listRooms({ status: "finished" }).rooms[0]).toMatchObject({
+      code: created.code,
+      status: "finished"
+    });
+  });
+
   it("starts automatically when both players are ready", () => {
     const store = createTestRoomStore(["ROOM01"]);
     const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));

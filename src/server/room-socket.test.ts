@@ -2,9 +2,9 @@ import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Server } from "socket.io";
 import { describe, expect, it } from "vitest";
-import type { RoomAck } from "./room-contract";
+import type { RoomAck, RoomListAck } from "./room-contract";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
-import { RoomStore, type RoomSnapshot } from "./rooms";
+import { RoomStore, type LobbyRoomDeletedEvent, type LobbyRoomUpdatedEvent, type RoomSnapshot } from "./rooms";
 
 type TestSocket = {
   disconnect: () => void;
@@ -193,6 +193,93 @@ describe("room socket handlers", () => {
       await harness.close();
     }
   });
+
+  it("serves lobby room lists and broadcasts room list updates", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const lobby = await harness.connectClient();
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+
+      const initialList = await emitAck<RoomListAck>(lobby, "lobby:join", { limit: 20 });
+
+      expect(initialList.ok ? initialList.value.rooms : ["unexpected"]).toEqual([]);
+
+      const lobbySawCreate = waitForEventMatching<LobbyRoomUpdatedEvent>(
+        lobby,
+        "lobby:room-updated",
+        (event) => event.room.status === "waiting" && event.room.playerCount === 1
+      );
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "host-player",
+        playerName: "Host"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+      const createdEvent = await lobbySawCreate;
+
+      expect(createdEvent.room).toMatchObject({
+        canJoin: true,
+        code: roomCode,
+        hostName: "Host",
+        spectatorCount: 0,
+        status: "waiting"
+      });
+
+      const lobbySawJoin = waitForEventMatching<LobbyRoomUpdatedEvent>(
+        lobby,
+        "lobby:room-updated",
+        (event) => event.room.code === roomCode && event.room.playerCount === 2 && event.room.canWatch
+      );
+
+      expect(
+        await emitAck(guest, "room:join", {
+          playerId: "guest-player",
+          playerName: "Guest",
+          roomCode
+        })
+      ).toMatchObject({ ok: true });
+      expect((await lobbySawJoin).room).toMatchObject({
+        canJoin: false,
+        canWatch: true,
+        playerCount: 2,
+        status: "waiting"
+      });
+
+      const lobbySawPlaying = waitForEventMatching<LobbyRoomUpdatedEvent>(
+        lobby,
+        "lobby:room-updated",
+        (event) => event.room.code === roomCode && event.room.status === "playing"
+      );
+
+      expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect((await lobbySawPlaying).room).toMatchObject({
+        canJoin: false,
+        canWatch: true,
+        status: "playing"
+      });
+
+      const lobbySawFinishedDelete = waitForEventMatching<LobbyRoomDeletedEvent>(
+        lobby,
+        "lobby:room-deleted",
+        (event) => event.code === roomCode
+      );
+
+      expect(await emitAck(host, "game:resign", { roomCode })).toMatchObject({ ok: true });
+      expect(await lobbySawFinishedDelete).toMatchObject({ code: roomCode });
+
+      const finalList = await emitAck<RoomListAck>(lobby, "lobby:list", {});
+      expect(finalList.ok ? finalList.value.rooms : ["unexpected"]).toEqual([]);
+    } finally {
+      await harness.close();
+    }
+  });
 });
 
 async function createSocketHarness(options: { lifecycleIntervalMs?: false | number; roomStore?: RoomStore } = {}) {
@@ -242,7 +329,7 @@ async function createSocketHarness(options: { lifecycleIntervalMs?: false | numb
   };
 }
 
-function emitAck(socket: TestSocket, event: string, payload: unknown): Promise<RoomAck> {
+function emitAck<T = RoomAck>(socket: TestSocket, event: string, payload: unknown): Promise<T> {
   return new Promise((resolve) => {
     socket.emit(event, payload, resolve);
   });

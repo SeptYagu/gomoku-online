@@ -258,6 +258,12 @@ Custom Game：
 - 大厅展示公开 waiting 房和可观战 playing 房。
 - 每项显示房主昵称、房间码、状态、玩家数、观战人数、创建时间或最近活动。
 - waiting 房提供 Join，playing 房提供 Watch。
+- 当前小步 3 已实现服务端能力：
+  - `RoomListItem` / `RoomListQuery` / `RoomListSnapshot` / lobby 增量事件类型。
+  - `GET /api/rooms?limit=20&status=waiting|playing|finished|all`。
+  - `lobby:join` / `lobby:list` / `lobby:leave` socket 事件。
+  - `lobby:room-updated` / `lobby:room-deleted` 增量事件。
+  - `tools/smoke-lobby.ts` 覆盖 REST 全量列表、lobby 初始列表、创建/加入/开局/结束的增量更新。
 
 聊天：
 
@@ -309,10 +315,10 @@ Custom Game：
 
 ## 实现任务清单
 
-- 定义 `RoomSummary`、`LobbyQuery`、`MatchmakingRequest` 类型。
-- 实现服务端房间列表分页 API。
-- 实现 lobby socket channel。
-- 实现 room 增量事件和版本号。
+- 定义 `RoomSummary`、`LobbyQuery`、`MatchmakingRequest` 类型。`RoomListItem` / `RoomListQuery` 已完成；`MatchmakingRequest` 留到随机匹配小步。
+- 实现服务端房间列表分页 API。已完成基础版：`GET /api/rooms` 支持 `limit` 和 `status`。
+- 实现 lobby socket channel。已完成基础版：`lobby:join` / `lobby:list` / `lobby:leave`。
+- 实现 room 增量事件和版本号。已完成基础版：`lobby:room-updated` / `lobby:room-deleted` 带全局 `version`，每个房间 item 带自身 `version`。
 - 实现服务端随机匹配。
 - 实现私密房 password hash。
 - 实现房间名/房间码服务端唯一约束。
@@ -327,7 +333,7 @@ Custom Game：
 - 密码不下发到客户端。
 - 并发两人找局不会超员。
 - 搜索无结果显示空状态。
-- 房间更新只增量推送。
+- 房间更新只增量推送。已覆盖：`src/server/room-socket.test.ts`、`tools/smoke-lobby.ts`。
 - 版本缺口触发全量同步。
 - 六种语言下字段不溢出。
 

@@ -1664,3 +1664,59 @@ b6faf9e
 - 小步 1：真实分享链接，完成并通过真实服务器验证。
 - 小步 2：观战席，完成并通过真实服务器验证。
 - 下一步：小步 3，房间列表 API 和 lobby socket channel。
+
+## 34. 2026-06-25 阶段 3 小步 3：房间列表 API 和 lobby socket channel
+
+本轮目标：
+
+- 按阶段 3 build plan 推进小步 3。
+- 提供公开房间列表 API，供后续大厅 UI 读取。
+- 提供 lobby socket channel，客户端可加入大厅并接收房间列表增量更新。
+- 房间创建、加入、ready 开局、结束或隐藏时，大厅收到增量事件。
+
+实际完成：
+
+- `src/server/room-store.ts`：
+  - 新增共享 `roomStore`，让 REST API 和 Socket.IO 共用同一份内存房间状态。
+- `src/server/rooms.ts`：
+  - 新增 `RoomListItem`、`RoomListQuery`、`RoomListSnapshot`、`LobbyRoomUpdatedEvent`、`LobbyRoomDeletedEvent`。
+  - `RoomStore` 新增 `listRooms()`、`getRoomListItem()` 和 lobby version。
+  - 默认列表展示 `waiting` / `playing` 房；`finished` 可通过 `status=finished` 查询。
+- `src/server/online-server.ts`：
+  - 新增 `GET /api/rooms`，支持 `limit` 和 `status`。
+  - Socket.IO 注册改用共享 `roomStore`。
+- `src/server/room-socket.ts`：
+  - 新增 `lobby:join`、`lobby:list`、`lobby:leave`。
+  - 新增 `lobby:room-updated`、`lobby:room-deleted`。
+  - 房间状态变化后广播 lobby 增量事件。
+- `tools/smoke-lobby.ts`：
+  - 新增 REST + lobby socket 冒烟脚本。
+- `package.json`：
+  - 新增 `npm run smoke:lobby`。
+- `README.md`、`docs/STAGE_3_PROGRESS.md`、`docs/logic/lobby-matchmaking-module.md`：
+  - 记录小步 3 能力、验证命令和当前边界。
+
+验证命令和结果：
+
+- `npm test`：通过，5 个测试文件、61 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3030 npm start` 后运行 `npm run smoke:lobby -- http://127.0.0.1:3030`，通过。
+  - REST 初始列表通过。
+  - `lobby:join` 初始列表通过。
+  - 创建房间、加入、ready 开局、结束隐藏的 lobby 增量事件均通过。
+  - REST 包含新房间、隐藏 finished 房均通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3030`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3030`，通过。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```

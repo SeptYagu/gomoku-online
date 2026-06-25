@@ -1,6 +1,17 @@
 import type { Point } from "../game/types";
-import type { RoomAck } from "./room-contract";
-import { RoomStore, type RoomError, type RoomResult, type RoomSnapshot } from "./rooms";
+import type { RoomAck, RoomListAck } from "./room-contract";
+import {
+  RoomStore,
+  type LobbyRoomDeletedEvent,
+  type LobbyRoomUpdatedEvent,
+  type RoomError,
+  type RoomListQuery,
+  type RoomListSnapshot,
+  type RoomResult,
+  type RoomSnapshot
+} from "./rooms";
+
+const LOBBY_ROOM = "lobby";
 
 export type ClientToServerEvents = {
   "game:move": (
@@ -15,6 +26,9 @@ export type ClientToServerEvents = {
     payload: { accepted: boolean; requestId: string; roomCode: string },
     ack: (response: RoomAck) => void
   ) => void;
+  "lobby:join": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
+  "lobby:leave": (payload: undefined, ack: (response: RoomListAck) => void) => void;
+  "lobby:list": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
   "room:create": (payload: { playerId: string; playerName: string }, ack: (response: RoomAck) => void) => void;
   "room:join": (
     payload: { playerId: string; playerName: string; roomCode: string },
@@ -29,6 +43,9 @@ export type ClientToServerEvents = {
 };
 
 export type ServerToClientEvents = {
+  "lobby:room-deleted": (event: LobbyRoomDeletedEvent) => void;
+  "lobby:room-updated": (event: LobbyRoomUpdatedEvent) => void;
+  "lobby:rooms": (snapshot: RoomListSnapshot) => void;
   "room:error": (error: RoomError) => void;
   "room:state": (snapshot: RoomSnapshot) => void;
 };
@@ -88,7 +105,7 @@ export function registerRoomSocketHandlers(
   io.on("connection", (socket) => {
     socket.on("room:create", (payload, ack) => {
       const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(payload), payload.playerId);
-      acknowledgeAndBroadcast(socket, response, ack);
+      acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("room:join", (payload, ack) => {
@@ -98,7 +115,7 @@ export function registerRoomSocketHandlers(
         roomStore.joinRoom(payload.roomCode, payload),
         payload.playerId
       );
-      acknowledgeAndBroadcast(socket, response, ack);
+      acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("room:rejoin", (payload, ack) => {
@@ -108,12 +125,28 @@ export function registerRoomSocketHandlers(
         roomStore.reconnectRoom(payload.roomCode, payload),
         payload.playerId
       );
-      acknowledgeAndBroadcast(socket, response, ack);
+      acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
+    });
+
+    socket.on("lobby:join", (payload, ack) => {
+      socket.join(LOBBY_ROOM);
+      acknowledgeLobbyList(roomStore, payload, ack);
+    });
+
+    socket.on("lobby:list", (payload, ack) => {
+      acknowledgeLobbyList(roomStore, payload, ack);
+    });
+
+    socket.on("lobby:leave", (_payload, ack) => {
+      socket.leave(LOBBY_ROOM);
+      acknowledgeLobbyList(roomStore, undefined, ack);
     });
 
     socket.on("room:ready", (payload, ack) => {
       acknowledgeAndBroadcast(
+        io,
         socket,
+        roomStore,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.setPlayerReady(payload.roomCode, playerId, payload.ready)
         ),
@@ -123,7 +156,9 @@ export function registerRoomSocketHandlers(
 
     socket.on("game:start", (payload, ack) => {
       acknowledgeAndBroadcast(
+        io,
         socket,
+        roomStore,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.startGame(payload.roomCode, playerId)
         ),
@@ -133,7 +168,9 @@ export function registerRoomSocketHandlers(
 
     socket.on("game:move", (payload, ack) => {
       acknowledgeAndBroadcast(
+        io,
         socket,
+        roomStore,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.applyMove(payload.roomCode, {
             expectedMoveSeq: payload.expectedMoveSeq,
@@ -147,7 +184,9 @@ export function registerRoomSocketHandlers(
 
     socket.on("game:resign", (payload, ack) => {
       acknowledgeAndBroadcast(
+        io,
         socket,
+        roomStore,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.resignGame(payload.roomCode, playerId)
         ),
@@ -157,7 +196,9 @@ export function registerRoomSocketHandlers(
 
     socket.on("game:undo-request", (payload, ack) => {
       acknowledgeAndBroadcast(
+        io,
         socket,
+        roomStore,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.requestUndo(payload.roomCode, playerId)
         ),
@@ -167,7 +208,9 @@ export function registerRoomSocketHandlers(
 
     socket.on("game:undo-respond", (payload, ack) => {
       acknowledgeAndBroadcast(
+        io,
         socket,
+        roomStore,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.respondToUndo(payload.roomCode, playerId, payload.requestId, payload.accepted)
         ),
@@ -177,7 +220,9 @@ export function registerRoomSocketHandlers(
 
     socket.on("game:restart", (payload, ack) => {
       acknowledgeAndBroadcast(
+        io,
         socket,
+        roomStore,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.restartGame(payload.roomCode, playerId)
         ),
@@ -187,7 +232,9 @@ export function registerRoomSocketHandlers(
 
     socket.on("room:leave", (payload, ack) => {
       acknowledgeAndBroadcast(
+        io,
         socket,
+        roomStore,
         runForCurrentMember(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.leaveRoom(payload.roomCode, playerId)
         ),
@@ -208,6 +255,7 @@ export function registerRoomSocketHandlers(
 
       if (result.ok) {
         socket.to(roomCode).emit("room:state", result.value);
+        broadcastLobbyRoomChange(io, roomStore, result.value.code);
       }
     });
   });
@@ -218,6 +266,14 @@ function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
 
   for (const snapshot of sweep.updatedSnapshots) {
     io.to(snapshot.code).emit("room:state", snapshot);
+    broadcastLobbyRoomChange(io, roomStore, snapshot.code);
+  }
+
+  for (const code of sweep.deletedRoomCodes) {
+    io.to(LOBBY_ROOM).emit("lobby:room-deleted", {
+      code,
+      version: roomStore.getLobbyVersion()
+    });
   }
 }
 
@@ -340,7 +396,13 @@ function runForCurrentMember(
   };
 }
 
-function acknowledgeAndBroadcast(socket: RoomSocket, response: RoomAck, ack: (response: RoomAck) => void) {
+function acknowledgeAndBroadcast(
+  io: RoomSocketServer,
+  socket: RoomSocket,
+  roomStore: RoomStore,
+  response: RoomAck,
+  ack: (response: RoomAck) => void
+) {
   ack(response);
 
   if (!response.ok) {
@@ -349,4 +411,51 @@ function acknowledgeAndBroadcast(socket: RoomSocket, response: RoomAck, ack: (re
   }
 
   socket.to(response.value.snapshot.code).emit("room:state", response.value.snapshot);
+  broadcastLobbyRoomChange(io, roomStore, response.value.snapshot.code);
+}
+
+function acknowledgeLobbyList(
+  roomStore: RoomStore,
+  payload: RoomListQuery | undefined,
+  ack: (response: RoomListAck) => void
+) {
+  ack({
+    ok: true,
+    value: roomStore.listRooms(parseRoomListQuery(payload))
+  });
+}
+
+function broadcastLobbyRoomChange(io: RoomSocketServer, roomStore: RoomStore, roomCode: string) {
+  const room = roomStore.getRoomListItem(roomCode);
+  const version = roomStore.getLobbyVersion();
+
+  if (room && (room.status === "waiting" || room.status === "playing")) {
+    io.to(LOBBY_ROOM).emit("lobby:room-updated", {
+      room,
+      version
+    });
+    return;
+  }
+
+  io.to(LOBBY_ROOM).emit("lobby:room-deleted", {
+    code: roomCode,
+    version
+  });
+}
+
+function parseRoomListQuery(payload: RoomListQuery | undefined): RoomListQuery {
+  if (!payload || typeof payload !== "object") {
+    return {};
+  }
+
+  return {
+    limit: typeof payload.limit === "number" ? payload.limit : undefined,
+    status:
+      payload.status === "waiting" ||
+      payload.status === "playing" ||
+      payload.status === "finished" ||
+      payload.status === "all"
+        ? payload.status
+        : undefined
+  };
 }

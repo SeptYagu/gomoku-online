@@ -112,6 +112,12 @@ npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net
 ```
 
+阶段 3 大厅/房间列表通道可跑 REST + Socket.IO 冒烟，确认 `/api/rooms` 和 lobby 增量事件都可用：
+
+```bash
+npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net
+```
+
 ## 验证命令
 
 ```bash
