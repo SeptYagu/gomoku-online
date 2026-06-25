@@ -685,3 +685,53 @@ opening-book-runtime：
 
 - 好友房线上失败的主要风险从代码状态机转为部署入口和反向代理配置；`/socket.io` 404 基本表示没有跑自定义 online server 或代理没转发 Socket.IO 路径。
 - 服务器未部署最新版前，线上测试仍会继续复现 `xhr poll error`。
+
+## 18. 2026-06-25 页面底部版本号
+
+本轮目标：
+
+- 在页面底部添加一行版本号，方便通过真实服务器页面确认当前实装提交。
+
+实际完成：
+
+- `next.config.ts` 在构建时读取版本号，优先级为 `NEXT_PUBLIC_APP_VERSION`、`APP_VERSION`、`VERCEL_GIT_COMMIT_SHA`、`GITHUB_SHA`，最后回退到 `git rev-parse --short HEAD`。
+- `src/components/GameShell.tsx` 在主页面底部渲染 `version: <短提交>`。
+- `src/app/globals.css` 增加底部版本号样式，保持低干扰、不遮挡棋盘。
+
+修改文件：
+
+- `next.config.ts`
+- `src/components/GameShell.tsx`
+- `src/app/globals.css`
+- `docs/HANDOFF.md`
+
+验证命令和结果：
+
+- `npm test`：通过，4 个测试文件、45 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3021 npm start` 后，浏览器访问 `http://127.0.0.1:3021/en`，页面底部显示 `version: 047d7dd`。
+
+未验证项及原因：
+
+- 未验证真实服务器页面底部版本号；服务器需要先部署包含本条改动的新提交。
+
+最新提交：
+
+```text
+随本条 handoff 追加提交一起生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
+
+下一步建议：
+
+- 部署后直接看页面底部 `version:`，或让 Codex 读取真实页面 DOM 来确认服务器实际跑到哪个提交。
+
+风险变化：
+
+- 版本号取构建时 HEAD。若服务器用环境变量覆盖 `NEXT_PUBLIC_APP_VERSION` 或 `APP_VERSION`，页面会显示覆盖值。

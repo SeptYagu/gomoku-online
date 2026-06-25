@@ -54,6 +54,7 @@ type AiWorkerDoneResult = {
 const AI_DIFFICULTIES: AiDifficulty[] = ["normal", "hard", "expert", "insane"];
 const AI_WORKER_TIMEOUT_GRACE_MS = 750;
 const AI_EMERGENCY_TIME_LIMIT_MS = 50;
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
 
 export function GameShell({ dictionary, locale }: GameShellProps) {
   const [board, setBoard] = useState<Board>(() => createBoard());
@@ -389,8 +390,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       : !isAiThinking && status.state === "playing" && !(mode === "ai" && nextPlayer !== humanStone);
 
   return (
-    <main className="app-shell">
-      <section className="game-stage" aria-label={dictionary.appName}>
+    <>
+      <main className="app-shell">
+        <section className="game-stage" aria-label={dictionary.appName}>
         <header className="top-bar">
           <div>
             <p className="eyebrow">{dictionary.appName}</p>
@@ -560,8 +562,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         <div className="ad-placeholder" aria-label={dictionary.ads.label}>
           {dictionary.ads.placeholder}
         </div>
-      </aside>
-    </main>
+        </aside>
+      </main>
+      <footer className="app-version">version: {APP_VERSION}</footer>
+    </>
   );
 }
 

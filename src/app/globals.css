@@ -107,6 +107,14 @@ a {
   padding: 24px;
 }
 
+.app-version {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  padding: 0 24px 18px;
+  text-align: center;
+}
+
 .game-stage,
 .side-panel {
   min-width: 0;
