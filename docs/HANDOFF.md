@@ -614,3 +614,74 @@ opening-book-runtime：
 - 如果过去记录有错误或已经过期，用新的更正记录说明原段落和新事实，不直接覆盖原文。
 - 每条追加记录应写清本轮目标、实际完成、修改文件、验证结果、最新提交、是否推送、下一步建议和风险变化。
 - 子代理报告路径仍必须记录在追加段落中，方便后续窗口按时间线追溯。
+
+## 17. 2026-06-25 真实服务器 Socket.IO 修复与游客随机名
+
+本轮目标：
+
+- 处理真实服务器 `gomoku.yagu.ddns-ip.net` 上创建好友房失败、浏览器提示 `xhr poll error` 的问题。
+- 给游客默认昵称改成随机 `Player ####`。
+- 明确 room code 是服务端随机生成，不显示固定示例码。
+- 记录真实测试网址和部署注意事项。
+
+实际完成：
+
+- `npm run dev` / `npm start` 默认改为启动 `src/server/online-server.ts` 自定义 Next + Socket.IO server。
+- 保留 `npm run dev:next` / `npm run start:next` 给纯 Next 调试；生产好友房不要用 `next start`。
+- `tsx` 移到生产依赖，避免服务器只安装生产依赖时 `npm start` 找不到运行器。
+- `npm run build` 加 `node --max-old-space-size=4096`，避免 TypeScript 阶段随机 OOM。
+- 新游客默认名改为随机 `Player 1000-9999`，旧缓存里的纯 `Player` 会自动升级。
+- 六语言 room code placeholder 从 `ABC123` 改为随机码含义，避免误解为固定房间码。
+- 连接失败时对 `xhr poll error` 给出部署提示：确认使用 `npm run build && npm start`，并让反向代理转发 `/socket.io/`。
+- README 和阶段 2 报告记录真实测试网址：`http://gomoku.yagu.ddns-ip.net`。
+
+修改文件：
+
+- `README.md`
+- `docs/STAGE_2_REPORT.md`
+- `package.json`
+- `package-lock.json`
+- `src/components/useFriendRoom.ts`
+- `src/i18n/dictionaries.ts`
+- `src/server/online-server.ts`
+
+验证命令和结果：
+
+- `npm test`：通过，4 个测试文件、45 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过；第一次旧脚本在 TypeScript 阶段 Node heap OOM，加入 `--max-old-space-size=4096` 后通过。
+- `npm audit --omit=dev`：通过，0 vulnerabilities。
+- `git diff --check`：通过，仅有 LF/CRLF 工作副本提示。
+- 本地生产服务：`PORT=3020 npm start` 后 `/en` 返回 200，`/socket.io/?EIO=4&transport=polling` 返回 200 和 sid。
+- 浏览器验证：`http://127.0.0.1:3020/en` 默认名为 `Player 5558` 形式，创建房间得到随机 6 位码 `NLTDJJ` 形式。
+- 真实服务器当前预更新状态：`http://gomoku.yagu.ddns-ip.net` 页面返回 200；`/socket.io/?EIO=4&transport=polling` 返回 404；HTTPS 当前 SSL 连接失败。该结果只说明服务器尚未部署本提交，不作为最新版验收。
+
+未验证项及原因：
+
+- 未对 `gomoku.yagu.ddns-ip.net` 做最终好友房验收；用户说明真实服务器必须先更新到最新版，本地代码与服务器当前不同步。
+
+最新提交：
+
+```text
+功能提交：90cdf97 Fix production room socket startup
+```
+
+是否已推送：
+
+```text
+随 handoff 追加提交一起推送到 origin/main。
+```
+
+下一步建议：
+
+- 服务器更新到 `90cdf97` 之后，运行 `npm run build && npm start`，不要使用 `next start`。
+- OpenResty/Nginx 需要确保 `/socket.io/` 代理到同一个 Node 端口，并带 WebSocket upgrade headers。
+- 部署后复测：
+  - `http://gomoku.yagu.ddns-ip.net/socket.io/?EIO=4&transport=polling` 应返回 200 和 sid。
+  - 两台电脑分别进入 `http://gomoku.yagu.ddns-ip.net/en`，创建房间、复制链接、加入、ready、start、落子同步。
+- HTTPS 目前没有通过，后续公开测试前需要配置证书或明确只用 HTTP。
+
+风险变化：
+
+- 好友房线上失败的主要风险从代码状态机转为部署入口和反向代理配置；`/socket.io` 404 基本表示没有跑自定义 online server 或代理没转发 Socket.IO 路径。
+- 服务器未部署最新版前，线上测试仍会继续复现 `xhr poll error`。
