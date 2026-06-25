@@ -1443,7 +1443,47 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
   - `PASS create room URL - 5ZDTN5`
   - `PASS copy invite - copied current URL`
   - `PASS leave room URL clear - http://127.0.0.1:3028/en`
-- 推送并部署后运行 `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`。
+- 推送 `b6faf9e` 后等待 90 秒，运行 `npm run verify:online -- http://gomoku.yagu.ddns-ip.net b6faf9e`，通过。
+- 真实服务器运行 `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS create room URL - E8VJ9U`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+
+最新提交：
+
+```text
+b6faf9e
+```
+
+是否已推送：
+
+```text
+已推送到 origin/main。
+```
+
+## 29. 2026-06-25 阶段 3 棋谱收集与本地分析口径澄清
+
+本轮目标：
+
+- 按用户澄清，明确“本地分析”的含义。
+- 保持 handoff 追加记录规则：不修改过去窗口内容，只在末尾追加本窗口记录。
+
+实际完成：
+
+- `docs/STAGE_3_PLAN.md`：
+  - 明确游客棋谱和注册玩家棋谱都进入服务器棋谱池。
+  - 明确“本地分析”是后续把服务器收集到的棋谱导出到本地/离线分析流程，用于统计、筛选、训练/评估开局线和生成自有开局库。
+  - 明确这不是只保存在游客浏览器本地。
+- `WEBSITE_BUILD_PLAN.md`：
+  - 阶段 3 棋谱提交范围补充同样的数据口径。
+- `docs/logic/rating-leaderboard-module.md`：
+  - 评分、排行榜、Game records 模块设计补充服务器棋谱池和本地/离线分析流程边界。
+- `docs/STAGE_3_PROGRESS.md`：
+  - 在阶段 3 进度文件顶部补充棋谱数据口径，避免后续小步误解。
+
+验证命令和结果：
+
+- `git diff --check`：通过，仅有 Windows 工作副本 LF/CRLF 提示。
 
 最新提交：
 

@@ -4,9 +4,11 @@
 
 本文件记录阶段 3 的小步骤进度。每个小步骤都必须完成实现、文档、验证、GitHub 推送，并在推送后等待 90 秒检查线上版本。
 
+阶段 3 的棋谱数据口径：注册玩家和游客的在线对局棋谱都提交服务器，形成服务器棋谱池。后续“本地分析”指把收集来的棋谱导出到本地/离线分析流程，用于统计、筛选和生成自有开局库，不是只保存在游客浏览器本地。
+
 ## 小步 1：真实分享链接
 
-状态：本地验证通过，等待提交、推送和真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 目标：
 
@@ -36,4 +38,8 @@
 - `npm run lint`：通过。
 - `npm run build`：通过。
 - 本地生产服务：`PORT=3028 npm start` 后运行 `npm run smoke:share-url -- http://127.0.0.1:3028`，通过。
-- `npm run smoke:share-url -- <url>`：推送并部署后在真实服务器运行。
+- 推送后等待 90 秒，`npm run verify:online -- http://gomoku.yagu.ddns-ip.net b6faf9e`：通过。
+- 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS create room URL - E8VJ9U`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
