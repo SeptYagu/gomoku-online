@@ -2,15 +2,25 @@ import type { Board, Move, Point } from "@/game/types";
 
 type GomokuBoardProps = {
   board: Board;
+  labels: {
+    board: string;
+    point: string;
+  };
   lastMove: Move | null;
   winningKey: Set<string>;
   onPointSelect: (point: Point) => void;
 };
 
-export function GomokuBoard({ board, lastMove, winningKey, onPointSelect }: GomokuBoardProps) {
+export function GomokuBoard({
+  board,
+  labels,
+  lastMove,
+  winningKey,
+  onPointSelect
+}: GomokuBoardProps) {
   return (
     <div className="board-wrap">
-      <div className="gomoku-board" role="grid" aria-label="15 by 15 Gomoku board">
+      <div className="gomoku-board" dir="ltr" role="grid" aria-label={labels.board}>
         {board.map((row, rowIndex) =>
           row.map((cell, colIndex) => {
             const key = `${rowIndex}:${colIndex}`;
@@ -19,7 +29,7 @@ export function GomokuBoard({ board, lastMove, winningKey, onPointSelect }: Gomo
 
             return (
               <button
-                aria-label={`Row ${rowIndex + 1}, column ${colIndex + 1}`}
+                aria-label={formatPointLabel(labels.point, rowIndex + 1, colIndex + 1)}
                 className="board-point"
                 disabled={cell !== null}
                 key={key}
@@ -41,4 +51,8 @@ export function GomokuBoard({ board, lastMove, winningKey, onPointSelect }: Gomo
       </div>
     </div>
   );
+}
+
+function formatPointLabel(template: string, row: number, col: number): string {
+  return template.replace("{row}", String(row)).replace("{col}", String(col));
 }

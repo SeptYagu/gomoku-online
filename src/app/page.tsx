@@ -1,5 +1,6 @@
-import { GameShell } from "@/components/GameShell";
+import { redirect } from "next/navigation";
+import { defaultLocale } from "@/i18n/config";
 
 export default function Home() {
-  return <GameShell />;
+  redirect(`/${defaultLocale}`);
 }
