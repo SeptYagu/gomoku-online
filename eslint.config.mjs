@@ -5,7 +5,7 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
-    ignores: [".next/**", ".research/**", "node_modules/**", "out/**"]
+    ignores: [".next/**", ".research/**", ".arena-cache/**", ".arena-results/**", "node_modules/**", "out/**"]
   }
 ];
 

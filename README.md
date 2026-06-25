@@ -43,6 +43,18 @@ npm run build
 npm audit --omit=dev
 ```
 
+## 引擎对战评测
+
+可以用 arena 让候选引擎和历史基线自动对弈，默认双方都使用 `insane`，并交替先后手：
+
+```bash
+npm run arena -- --games 100 --baseline HEAD^ --candidate current --difficulty insane
+```
+
+结果会写入 `.arena-results/latest.json`。报告包含总胜率、先后手胜负、每盘棋谱，以及胜方前 8 手开局线的中心相对坐标汇总，可用于判断优化是否有效并沉淀自有开局库。
+
+默认不预置随机开局，让双方自然使用自己的开局库。需要扩大样本时可以加 `--random-openings 2`，但这会让早盘更早进入搜索，疯狂档耗时会明显增加。
+
 ## 项目文档
 
 - `WEBSITE_BUILD_PLAN.md`：总体搭建计划。

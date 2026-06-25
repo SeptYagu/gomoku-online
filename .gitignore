@@ -10,3 +10,5 @@ coverage/
 *.apk
 .research/
 .next-dev*.log
+.arena-cache/
+.arena-results/
