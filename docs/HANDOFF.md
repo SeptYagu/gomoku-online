@@ -1054,3 +1054,64 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 
 - 线上代理层已从“只确认 polling”推进到“强制 WebSocket 也已确认可连”。
 - 版本确认入口从页面 footer 扩展为 `/api/version`，后续部署检查更稳定。
+
+## 23. 2026-06-25 M3 小步 2：公开测试清单与问题日志
+
+本轮目标：
+
+- 先完成 M3 公开测试准备，再进入 build plan 阶段 3。
+- 把 M3 从一句“部署测试站、邀请试玩、记录问题”拆成可执行清单。
+- 给真实服务器、两台电脑和手机测试建立统一问题记录格式。
+
+实际完成：
+
+- 新增 `docs/M3_PUBLIC_TEST_PLAN.md`：
+  - 明确 M3 与 build plan 阶段 3 的边界。
+  - 记录真实测试站 `http://gomoku.yagu.ddns-ip.net`。
+  - 定义部署验证命令：`npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>`。
+  - 列出 M3 完成门槛。
+  - 拆出设备矩阵、双电脑好友房流程、联机悔棋流程、刷新/断线流程、移动端误触流程。
+  - 定义 P0/P1/P2/P3 阻塞等级。
+  - 写明公测问题只追加记录，不删除旧记录。
+- 新增 `docs/M3_PUBLIC_TEST_LOG.md`：
+  - 提供标准问题模板。
+  - 记录已知线上观察：
+    - 当前服务器部署前缺少 `/api/version`，等待部署后复测。
+    - 当前服务器强制 WebSocket upgrade 已确认通过。
+- 更新 `README.md` 的项目文档索引。
+- 更新 `WEBSITE_BUILD_PLAN.md` 的 M3 里程碑，指向 M3 清单和日志。
+
+修改文件：
+
+- `README.md`
+- `WEBSITE_BUILD_PLAN.md`
+- `docs/HANDOFF.md`
+- `docs/M3_PUBLIC_TEST_LOG.md`
+- `docs/M3_PUBLIC_TEST_PLAN.md`
+
+验证命令和结果：
+
+- `git diff --check`：待运行。
+- 本轮为文档和流程资产变更，不需要重新跑 Next build；上一小步已完成 `npm test`、`npm run lint`、`npm run build`。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
+
+下一步建议：
+
+- M3 小步 3：按 `docs/M3_PUBLIC_TEST_PLAN.md` 执行当前可在本地/线上完成的检查；需要用户部署后才能完成的项明确标成 external pending。
+- 若用户已部署新提交，先运行 `npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>`。
+
+风险变化：
+
+- M3 的完成标准已从口头目标变成可执行 checklist。
+- 后续阶段 3 的随机匹配/排行榜不会和 M3 公测问题混在一起。

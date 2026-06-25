@@ -563,6 +563,7 @@ M2：好友房上线
 M3：公开测试
 
 - 部署测试站，邀请用户试玩，记录移动端误触和断线问题。
+- 当前执行清单见 `docs/M3_PUBLIC_TEST_PLAN.md`，问题记录见 `docs/M3_PUBLIC_TEST_LOG.md`。
 
 M4：广告审核准备
 

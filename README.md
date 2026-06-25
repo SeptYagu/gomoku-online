@@ -174,6 +174,8 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/STAGE_0_REPORT.md`：阶段 0 执行报告。
 - `docs/STAGE_1_REPORT.md`：阶段 1 本地可玩增强执行报告。
 - `docs/STAGE_2_REPORT.md`：阶段 2 好友房在线对战执行报告。
+- `docs/M3_PUBLIC_TEST_PLAN.md`：M3 公开测试执行清单。
+- `docs/M3_PUBLIC_TEST_LOG.md`：M3 公开测试问题记录。
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`：以后参考项目研究和子代理分工的标准流程。
 - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`：主控、实现子代理、验证子代理的标准开发流程。
 - `docs/HANDOFF.md`：当前任务交接文档，方便新窗口接手。
