@@ -15,6 +15,7 @@ type EngineOptions = {
   difficulty: Difficulty;
   moves: Move[];
   timeLimitMs?: number;
+  openingSeed?: number;
 };
 
 type AiMoveResult = {
@@ -406,7 +407,8 @@ function playGame({
     const move = chooseEngineMove(engine, board, stone, {
       difficulty: options.difficulty,
       moves,
-      timeLimitMs: options.timeLimitMs
+      timeLimitMs: options.timeLimitMs,
+      openingSeed
     });
 
     if (!move || !isValidMove(board, move)) {

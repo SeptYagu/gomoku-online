@@ -44,6 +44,7 @@ type ChooseAiMoveOptions = {
   timeLimitMs?: number;
   onBestMove?: (point: Point) => void;
   rootCandidateShard?: AiRootCandidateShard;
+  openingSeed?: number;
 };
 
 type SearchProfile = {
@@ -140,8 +141,17 @@ type RelativePoint = {
 };
 
 type OpeningBookLine = {
+  id: string;
+  name: string;
   minDifficulty: AiDifficulty;
+  weight: number;
   moves: RelativePoint[];
+};
+
+type OpeningBookCandidate = {
+  point: Point;
+  line: OpeningBookLine;
+  transformIndex: number;
 };
 
 const DIRECTIONS: Point[] = [
@@ -240,7 +250,10 @@ const DIFFICULTY_RANK: Record<AiDifficulty, number> = {
 
 const OPENING_BOOK_LINES: OpeningBookLine[] = [
   {
+    id: "normal-diagonal-contact",
+    name: "Diagonal contact",
     minDifficulty: "normal",
+    weight: 8,
     moves: [
       { row: 0, col: 0 },
       { row: -1, col: -1 },
@@ -253,7 +266,10 @@ const OPENING_BOOK_LINES: OpeningBookLine[] = [
     ]
   },
   {
+    id: "normal-direct-contact",
+    name: "Direct contact",
     minDifficulty: "normal",
+    weight: 7,
     moves: [
       { row: 0, col: 0 },
       { row: -1, col: 0 },
@@ -266,7 +282,10 @@ const OPENING_BOOK_LINES: OpeningBookLine[] = [
     ]
   },
   {
+    id: "hard-diagonal-balance",
+    name: "Diagonal balance",
     minDifficulty: "hard",
+    weight: 10,
     moves: [
       { row: 0, col: 0 },
       { row: -1, col: -1 },
@@ -279,7 +298,10 @@ const OPENING_BOOK_LINES: OpeningBookLine[] = [
     ]
   },
   {
+    id: "hard-direct-balance",
+    name: "Direct balance",
     minDifficulty: "hard",
+    weight: 9,
     moves: [
       { row: 0, col: 0 },
       { row: -1, col: 0 },
@@ -292,7 +314,10 @@ const OPENING_BOOK_LINES: OpeningBookLine[] = [
     ]
   },
   {
+    id: "expert-wide-diagonal",
+    name: "Wide diagonal",
     minDifficulty: "expert",
+    weight: 11,
     moves: [
       { row: 0, col: 0 },
       { row: -1, col: -2 },
@@ -305,7 +330,10 @@ const OPENING_BOOK_LINES: OpeningBookLine[] = [
     ]
   },
   {
+    id: "expert-wide-direct",
+    name: "Wide direct",
     minDifficulty: "expert",
+    weight: 10,
     moves: [
       { row: 0, col: 0 },
       { row: -2, col: 0 },
@@ -318,7 +346,10 @@ const OPENING_BOOK_LINES: OpeningBookLine[] = [
     ]
   },
   {
+    id: "insane-pincer",
+    name: "Pincer",
     minDifficulty: "insane",
+    weight: 12,
     moves: [
       { row: 0, col: 0 },
       { row: -1, col: 1 },
@@ -331,7 +362,10 @@ const OPENING_BOOK_LINES: OpeningBookLine[] = [
     ]
   },
   {
+    id: "insane-wide-pincer",
+    name: "Wide pincer",
     minDifficulty: "insane",
+    weight: 12,
     moves: [
       { row: 0, col: 0 },
       { row: -2, col: -1 },
@@ -377,7 +411,7 @@ export function chooseAiMove(
 export function chooseAiMoveResult(
   board: Board,
   aiStone: Stone,
-  { difficulty, moves, timeLimitMs, onBestMove, rootCandidateShard }: ChooseAiMoveOptions
+  { difficulty, moves, timeLimitMs, onBestMove, rootCandidateShard, openingSeed }: ChooseAiMoveOptions
 ): AiMoveResult {
   const profile = SEARCH_PROFILES[difficulty];
   const deadline = createSearchDeadline(getAiTimeLimitMs(difficulty, timeLimitMs));
@@ -412,7 +446,7 @@ export function chooseAiMoveResult(
     return createAiMoveResult(blockingMove, WIN_SCORE - 1_000 + scoreAiMove(board, blockingMove, aiStone) * 0.001, "blocking");
   }
 
-  const bookMove = chooseOpeningBookMove(board, candidatePool, aiStone, difficulty, moves);
+  const bookMove = chooseOpeningBookMove(board, candidatePool, aiStone, difficulty, moves, openingSeed);
 
   if (bookMove) {
     reportBestMove(onBestMove, bookMove);
@@ -615,7 +649,8 @@ function chooseOpeningBookMove(
   candidates: Point[],
   aiStone: Stone,
   difficulty: AiDifficulty,
-  moveHistory?: Move[]
+  moveHistory?: Move[],
+  openingSeed = 0
 ): Point | null {
   const moves = moveHistory ?? getPlacedStones(board);
   const center = getBoardCenter();
@@ -633,13 +668,15 @@ function chooseOpeningBookMove(
   }
 
   const candidateKeys = new Set(candidates.map((point) => getPointKey(point)));
+  const bookCandidates: OpeningBookCandidate[] = [];
 
   for (const line of OPENING_BOOK_LINES) {
     if (DIFFICULTY_RANK[line.minDifficulty] > DIFFICULTY_RANK[difficulty] || moves.length >= line.moves.length) {
       continue;
     }
 
-    for (const transform of RELATIVE_TRANSFORMS) {
+    for (let transformIndex = 0; transformIndex < RELATIVE_TRANSFORMS.length; transformIndex += 1) {
+      const transform = RELATIVE_TRANSFORMS[transformIndex];
       const bookMove = getBookMoveForPosition(board, line.moves, transform, moves.length);
 
       if (!bookMove) {
@@ -647,12 +684,66 @@ function chooseOpeningBookMove(
       }
 
       if (candidateKeys.has(getPointKey(bookMove)) && isValidMove(board, bookMove)) {
-        return bookMove;
+        bookCandidates.push({
+          point: bookMove,
+          line,
+          transformIndex
+        });
       }
     }
   }
 
-  return null;
+  return chooseWeightedOpeningCandidate(bookCandidates, difficulty, moves, aiStone, openingSeed);
+}
+
+function chooseWeightedOpeningCandidate(
+  candidates: OpeningBookCandidate[],
+  difficulty: AiDifficulty,
+  moves: Array<Point & { stone: Stone }>,
+  aiStone: Stone,
+  openingSeed: number
+): Point | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const preferredRank = Math.max(...candidates.map((candidate) => DIFFICULTY_RANK[candidate.line.minDifficulty]));
+  const preferredCandidates = candidates.filter(
+    (candidate) => DIFFICULTY_RANK[candidate.line.minDifficulty] === preferredRank
+  );
+  const totalWeight = preferredCandidates.reduce((sum, candidate) => sum + candidate.line.weight, 0);
+  const randomValue = getOpeningRandomValue(difficulty, moves, aiStone, openingSeed);
+  let cursor = randomValue * totalWeight;
+
+  for (const candidate of preferredCandidates) {
+    cursor -= candidate.line.weight;
+
+    if (cursor <= 0) {
+      return candidate.point;
+    }
+  }
+
+  return preferredCandidates.at(-1)?.point ?? null;
+}
+
+function getOpeningRandomValue(
+  difficulty: AiDifficulty,
+  moves: Array<Point & { stone: Stone }>,
+  aiStone: Stone,
+  openingSeed: number
+): number {
+  let hash = splitMix32(Math.floor(openingSeed) ^ (DIFFICULTY_RANK[difficulty] * 1_000_003));
+  hash = splitMix32(hash ^ (aiStone === "black" ? 0x9e3779b9 : 0x7f4a7c15));
+
+  for (const move of moves) {
+    hash = splitMix32(hash ^ getNumericPointKey(move) ^ (move.stone === "black" ? 0x85ebca6b : 0xc2b2ae35));
+  }
+
+  return (hash >>> 0) / 0x1_0000_0000;
+}
+
+function getNumericPointKey(point: Point): number {
+  return point.row * BOARD_SIZE + point.col;
 }
 
 function getPlacedStones(board: Board): Array<Point & { stone: Stone }> {

@@ -87,10 +87,10 @@ describe("ai", () => {
       ["black", 8, 8]
     ]);
 
-    expect(chooseAiMove(game.board, "white", { difficulty: "hard", moves: game.moves })).toEqual({
-      row: 6,
-      col: 7
-    });
+    expect([
+      { row: 6, col: 7 },
+      { row: 7, col: 6 }
+    ]).toContainEqual(chooseAiMove(game.board, "white", { difficulty: "hard", moves: game.moves }));
 
     game = playMoves([
       ["black", 7, 7],
@@ -119,6 +119,26 @@ describe("ai", () => {
       row: 8,
       col: 7
     });
+  });
+
+  it("varies opening book choices by game seed", () => {
+    const game = playMoves([["black", 7, 7]]);
+    const firstMove = chooseAiMove(game.board, "white", {
+      difficulty: "insane",
+      moves: game.moves,
+      openingSeed: 1
+    });
+    const secondMove = chooseAiMove(game.board, "white", {
+      difficulty: "insane",
+      moves: game.moves,
+      openingSeed: 2
+    });
+
+    expect(firstMove).not.toBeNull();
+    expect(secondMove).not.toBeNull();
+    expect(getLegalMoves(game.board)).toContainEqual(firstMove);
+    expect(getLegalMoves(game.board)).toContainEqual(secondMove);
+    expect(firstMove).not.toEqual(secondMove);
   });
 
   it("insane difficulty can block a one-ply forced win", () => {

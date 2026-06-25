@@ -65,6 +65,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const aiWorkersRef = useRef<Worker[]>([]);
   const aiWorkerTimeoutRef = useRef<number | null>(null);
   const aiRequestIdRef = useRef(0);
+  const openingSeedRef = useRef(createOpeningSeed());
 
   const winningKey = useMemo(() => {
     if (status.state !== "won") {
@@ -73,13 +74,6 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
     return new Set(status.line.map((point) => `${point.row}:${point.col}`));
   }, [status]);
-
-  useEffect(() => {
-    return () => {
-      terminateAiWorkers();
-      clearAiWorkerTimeout();
-    };
-  }, []);
 
   function resetGame({
     nextMode = mode,
@@ -91,7 +85,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     nextFirstPlayer?: FirstPlayer;
   } = {}) {
     cancelAiTurn();
-    const snapshot = createInitialGameState(nextMode, nextDifficulty, nextFirstPlayer);
+    const openingSeed = createOpeningSeed();
+    openingSeedRef.current = openingSeed;
+    const snapshot = createInitialGameState(nextMode, nextDifficulty, nextFirstPlayer, openingSeed);
 
     setBoard(snapshot.board);
     setNextPlayer(snapshot.nextPlayer);
@@ -182,7 +178,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     setIsAiThinking(true);
 
     const aiStone = getAiStone(selectedFirstPlayer);
-    const aiPoint = await requestAiMove(currentBoard, currentMoves, aiStone, difficulty);
+    const aiPoint = await requestAiMove(currentBoard, currentMoves, aiStone, difficulty, openingSeedRef.current);
 
     if (aiRequestIdRef.current !== requestId) {
       return;
@@ -238,16 +234,26 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     aiWorkerTimeoutRef.current = null;
   }
 
+  useEffect(() => {
+    return () => {
+      terminateAiWorkers();
+      clearAiWorkerTimeout();
+    };
+  }, []);
+
   function requestAiMove(
     currentBoard: Board,
     currentMoves: Move[],
     aiStone: Stone,
-    difficulty: AiDifficulty
+    difficulty: AiDifficulty,
+    openingSeed: number
   ): Promise<Point | null> {
     const timeLimitMs = getAiTimeLimitMs(difficulty);
 
     if (typeof Worker === "undefined") {
-      return Promise.resolve(chooseAiMove(currentBoard, aiStone, { difficulty, moves: currentMoves, timeLimitMs }));
+      return Promise.resolve(
+        chooseAiMove(currentBoard, aiStone, { difficulty, moves: currentMoves, timeLimitMs, openingSeed })
+      );
     }
 
     return new Promise((resolve) => {
@@ -286,7 +292,8 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         chooseAiMove(currentBoard, aiStone, {
           difficulty,
           moves: currentMoves,
-          timeLimitMs: AI_EMERGENCY_TIME_LIMIT_MS
+          timeLimitMs: AI_EMERGENCY_TIME_LIMIT_MS,
+          openingSeed
         });
 
       aiWorkerTimeoutRef.current = window.setTimeout(() => {
@@ -342,6 +349,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
           aiStone,
           difficulty,
           timeLimitMs,
+          openingSeed,
           rootCandidateShard: workerCount > 1 ? { index, total: workerCount } : undefined
         });
       });
@@ -574,7 +582,8 @@ function replayMoves(moves: Move[]): Board {
 function createInitialGameState(
   mode: GameMode,
   aiDifficulty: AiDifficulty,
-  firstPlayer: FirstPlayer
+  firstPlayer: FirstPlayer,
+  openingSeed: number
 ): GameSnapshot {
   const emptyBoard = createBoard();
 
@@ -590,7 +599,8 @@ function createInitialGameState(
   const aiStone = getAiStone(firstPlayer);
   const aiPoint = chooseAiMove(emptyBoard, aiStone, {
     difficulty: aiDifficulty,
-    timeLimitMs: getAiTimeLimitMs(aiDifficulty)
+    timeLimitMs: getAiTimeLimitMs(aiDifficulty),
+    openingSeed
   });
 
   if (!aiPoint) {
@@ -620,6 +630,10 @@ function getHumanStone(firstPlayer: FirstPlayer): Stone {
 
 function getAiStone(firstPlayer: FirstPlayer): Stone {
   return getOpponent(getHumanStone(firstPlayer));
+}
+
+function createOpeningSeed(): number {
+  return Math.floor(Math.random() * 0x1_0000_0000);
 }
 
 function getStatusText(status: GameStatus, dictionary: GameDictionary): string {

@@ -13,6 +13,7 @@ type AiWorkerRequest = {
   difficulty: AiDifficulty;
   timeLimitMs: number;
   rootCandidateShard?: AiRootCandidateShard;
+  openingSeed?: number;
 };
 
 type AiWorkerResponse = {
@@ -25,12 +26,13 @@ type AiWorkerResponse = {
 };
 
 self.onmessage = (event: MessageEvent<AiWorkerRequest>) => {
-  const { board, moves, aiStone, difficulty, timeLimitMs, rootCandidateShard } = event.data;
+  const { board, moves, aiStone, difficulty, timeLimitMs, rootCandidateShard, openingSeed } = event.data;
   const result = chooseAiMoveResult(board, aiStone, {
     difficulty,
     moves,
     timeLimitMs,
     rootCandidateShard,
+    openingSeed,
     onBestMove: (bestMove) => {
       self.postMessage({ type: "best", point: bestMove } satisfies AiWorkerResponse);
     }

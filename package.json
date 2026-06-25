@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "arena": "tsx tools/engine-arena.ts"
+    "arena": "tsx tools/engine-arena.ts",
+    "opening-book": "tsx tools/generate-opening-book.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

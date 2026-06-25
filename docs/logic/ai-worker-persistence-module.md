@@ -211,6 +211,7 @@ type AiWorkerRequest = {
   aiStone: Stone;
   difficulty: AiDifficulty;
   timeLimitMs: number;
+  openingSeed?: number;
   rootCandidateShard?: {
     index: number;
     total: number;
@@ -232,6 +233,8 @@ type AiWorkerResponse = {
 ```
 
 当前采用每次请求传完整棋盘的 stateless Worker 协议，不依赖 Worker 内部增量 watch 状态。旧请求取消通过主线程终止 Worker 池和 `aiRequestId` 双保险实现。
+
+`openingSeed` 在新局开始时生成，同一局内保持一致，用于开局库加权选择。它只影响开局库候选的选择，不改变棋盘规则。
 
 并行 Worker 池：
 
