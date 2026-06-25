@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "dev:online": "tsx src/server/online-server.ts",
-    "build": "next build",
-    "start": "next start",
+    "dev": "tsx src/server/online-server.ts --dev",
+    "dev:next": "next dev",
+    "dev:online": "tsx src/server/online-server.ts --dev",
+    "build": "node --max-old-space-size=4096 node_modules/next/dist/bin/next build",
+    "start": "tsx src/server/online-server.ts",
+    "start:next": "next start",
     "start:online": "tsx src/server/online-server.ts",
     "lint": "eslint .",
     "test": "vitest run",
@@ -20,7 +22,8 @@
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "tsx": "^4.22.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -28,7 +31,6 @@
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "16.2.9",
-    "tsx": "^4.20.5",
     "typescript": "^5.8.0",
     "vitest": "^4.1.9"
   },

@@ -34,22 +34,62 @@ npm install
 npm run dev
 ```
 
-默认单机开发地址：
+默认开发地址：
 
 ```text
 http://127.0.0.1:3000
 ```
 
-好友房需要启动带 Socket.IO 的自定义服务：
+`npm run dev` 默认启动带 Socket.IO 的自定义 Next server。只需要调试纯 Next dev server 时使用：
 
 ```bash
-npm run dev:online
+npm run dev:next
 ```
 
 PowerShell 指定端口示例：
 
 ```powershell
 $env:PORT='3010'; npm run dev:online
+```
+
+## 生产运行
+
+公开测试网址：
+
+```text
+http://gomoku.yagu.ddns-ip.net
+```
+
+生产部署必须先构建，再启动带 Socket.IO 的自定义 server：
+
+```bash
+npm run build
+npm start
+```
+
+不要用 `npm run start:next` 或直接 `next start` 部署好友房版本；这两种方式不会挂载 `/socket.io`，浏览器会出现 `xhr poll error` 或 `/socket.io` 404。
+
+如果前面有 Nginx/OpenResty 反向代理，确认 `/socket.io/` 和普通页面都代理到同一个 Node 端口，并保留 WebSocket upgrade：
+
+```nginx
+location /socket.io/ {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_read_timeout 60s;
+}
+
+location / {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
 ```
 
 ## 验证命令

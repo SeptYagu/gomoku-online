@@ -3,7 +3,7 @@ import next from "next";
 import { Server } from "socket.io";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
 
-const dev = process.env.NODE_ENV !== "production";
+const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const app = next({ dev, hostname, port });
@@ -21,5 +21,5 @@ const io = new Server(httpServer, {
 registerRoomSocketHandlers(io as RoomSocketServer);
 
 httpServer.listen(port, hostname, () => {
-  console.log(`Gomoku Online listening at http://${hostname}:${port}`);
+  console.log(`Gomoku Online listening at http://${hostname}:${port} (${dev ? "development" : "production"})`);
 });

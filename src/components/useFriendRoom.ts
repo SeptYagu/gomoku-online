@@ -88,7 +88,7 @@ export function useFriendRoom(): FriendRoomController {
     socket.on("disconnect", () => setConnectionStatus("disconnected"));
     socket.on("connect_error", (connectError: unknown) => {
       setConnectionStatus("disconnected");
-      setError(connectError instanceof Error ? connectError.message : "Connection failed.");
+      setError(formatConnectionError(connectError));
     });
     socket.on("room:error", (roomError: unknown) => {
       setError(isRoomErrorLike(roomError) ? roomError.message : "Room error.");
@@ -308,7 +308,16 @@ function getInitialPlayerName(): string {
     return "Player";
   }
 
-  return readRoomSession()?.playerName ?? window.localStorage.getItem(PLAYER_NAME_STORAGE_KEY) ?? "Player";
+  const storedPlayerName = readRoomSession()?.playerName ?? window.localStorage.getItem(PLAYER_NAME_STORAGE_KEY);
+
+  if (storedPlayerName && !isLegacyDefaultPlayerName(storedPlayerName)) {
+    return storedPlayerName;
+  }
+
+  const playerName = createGuestPlayerName();
+  persistPlayerName(playerName);
+
+  return playerName;
 }
 
 function getInitialJoinCode(): string {
@@ -335,7 +344,7 @@ function getOrCreatePlayerId(): string {
 }
 
 function normalizePlayerName(name: string): string {
-  return name.trim() || "Player";
+  return name.trim() || createGuestPlayerName();
 }
 
 function normalizeRoomCode(roomCode: string): string {
@@ -372,4 +381,36 @@ function readRoomSession(): StoredRoomSession | null {
 
 function clearRoomSession() {
   window.localStorage.removeItem(ROOM_SESSION_STORAGE_KEY);
+}
+
+function createGuestPlayerName(): string {
+  return `Player ${createRandomNumber(1000, 9999)}`;
+}
+
+function isLegacyDefaultPlayerName(playerName: string): boolean {
+  return /^(Player|玩家|Joueur|Jugador|Игрок|لاعب)$/iu.test(playerName.trim());
+}
+
+function createRandomNumber(min: number, max: number): number {
+  const span = max - min + 1;
+  const cryptoObject = globalThis.crypto;
+
+  if (cryptoObject?.getRandomValues) {
+    const values = new Uint32Array(1);
+    cryptoObject.getRandomValues(values);
+
+    return min + (values[0] % span);
+  }
+
+  return min + Math.floor(Math.random() * span);
+}
+
+function formatConnectionError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || "Connection failed.");
+
+  if (message.toLocaleLowerCase().includes("xhr poll")) {
+    return "Realtime connection failed: xhr poll error. Deploy with npm start after npm run build, and make sure /socket.io is proxied with WebSocket upgrade support.";
+  }
+
+  return `Realtime connection failed: ${message}`;
 }

@@ -6,7 +6,7 @@
 
 ## 本轮完成项
 
-- 新增 Socket.IO 依赖，并提供 `npm run dev:online` / `npm run start:online` 启动带实时服务的自定义 Next server。
+- 新增 Socket.IO 依赖，并提供带实时服务的自定义 Next server。当前 `npm run dev` / `npm start` 默认使用该服务，`dev:next` / `start:next` 只保留给纯 Next 调试。
 - 新增 `src/server/online-server.ts` 和 `src/server/room-socket.ts`，Socket handler 只调用 `RoomStore`，不信任客户端棋盘或胜负结果。
 - 扩展 `src/server/rooms.ts`：支持同 `playerId` 重连、查询座位、房主终局后重开。
 - 新增 `src/server/room-contract.ts`，共享客户端房间状态和 ack 类型。
@@ -31,6 +31,14 @@
 ```powershell
 $env:PORT='3010'; npm run dev:online
 ```
+
+公开测试网址：
+
+```text
+http://gomoku.yagu.ddns-ip.net
+```
+
+生产服务器必须用 `npm run build && npm start` 启动当前版本。若使用 `next start` 或反向代理没有把 `/socket.io/` 转发到 Node 进程，好友房会出现 `xhr poll error` 或 `/socket.io` 404。
 
 验收环境：
 
