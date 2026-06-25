@@ -118,14 +118,14 @@ node_modules/
 
 ## 4. 当前目标
 
-当前目标是收口 `20260625-001746-stage0-redo` 的阶段 0 重做结果，让阶段报告和交接文档反映实际状态：
+当前目标是在 `20260625-001746-stage0-redo` 已收口的基础上，补强标准流程文档，把验证执行、验证报告和验证状态收口合并到“独立验证兼记录子代理”：
 
 - 阶段 0 重做版已补齐默认英语、六语言路由、字典和阿拉伯语 RTL。
 - 阶段 0 重做版已补齐浅色/黑暗模式切换入口和 `localStorage` 持久化。
 - 阶段 0 重做版已补齐规则模块接口和规则测试。
 - Aster 独立验证已通过完整代码门禁和真实 Chrome/CDP 浏览器验收。
 - 文档必须明确 UI/规则/文档子代理自测边界，以及最终通过状态来自 Aster 独立验证。
-- 本轮验证后文档收口子代理不提交、不推送，不修改源码、package、workflow、git 配置或其他报告文档。
+- 后续流程默认使用“独立验证兼记录子代理”，该角色可以运行验证、写验证报告、更新验证矩阵、阶段报告和 `docs/HANDOFF.md` 中的验证状态与报告路径；但不能修代码，不能修改实现内容。
 
 ## 5. 已完成
 
@@ -166,7 +166,7 @@ node_modules/
   - `docs/STAGE_0_REPORT.md`
   - `docs/HANDOFF.md`
   - `docs/subagents/20260625-001746-stage0-redo-docs-实现-Quill.md`
-- 阶段 0 重做独立验证子代理 Aster 已完成：
+- 阶段 0 重做独立验证报告 Aster 已完成：
   - `npm test` 通过。
   - `npm run lint` 通过。
   - `npm run build` 通过。
@@ -174,10 +174,20 @@ node_modules/
   - `git diff --check` 通过，仅有 LF/CRLF 工作副本提示。
   - 真实 Chrome/CDP 浏览器验收覆盖 `/` 重定向 `/en`、六语言路由、桌面 1440x900、移动 390x844、棋盘落子、`/ar` RTL 且棋盘 LTR、主题切换和刷新持久化。
   - 验证报告：`docs/subagents/20260625-001746-stage0-redo-验证-Aster.md`
-- 阶段 0 重做验证后文档收口子代理已更新：
+- 阶段 0 重做验证兼记录口径已回填：
   - `docs/STAGE_0_REPORT.md`
   - `docs/HANDOFF.md`
   - `docs/subagents/20260625-001746-stage0-redo-verify-docs-实现-Lumen.md`
+- 流程规范已合并验证执行、验证报告和验证状态收口职责为“独立验证兼记录子代理”：
+  - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`
+  - `docs/STANDARD_RESEARCH_WORKFLOW.md`
+  - `docs/HANDOFF.md`
+  - `docs/subagents/README.md`
+  - `docs/subagents/20260625-workflow-merge-verify-docs-实现-Cedar.md`
+- workflow-merge-verify-docs 独立验证兼记录已通过：
+  - `git diff --check` 通过，仅有 LF/CRLF 工作副本提示。
+  - 关键规则文本已用 `rg` 定位核对。
+  - 验证报告：`docs/subagents/20260625-workflow-merge-verify-docs-验证兼记录-Orion.md`
 
 ## 6. Verification Matrix
 
@@ -200,7 +210,9 @@ node_modules/
 | stage0-redo 独立验证 | `npm audit --omit=dev` | 通过 | Aster 验证，0 vulnerabilities |
 | stage0-redo 独立验证 | `git diff --check` | 通过 | Aster 验证，仅有 LF/CRLF 工作副本提示 |
 | stage0-redo 浏览器验收 | 真实 Chrome/CDP 浏览器检查 | 通过 | Aster 覆盖 `/` 重定向 `/en`、六语言、RTL、浅色/黑暗、主题刷新持久化、桌面 1440x900、移动 390x844、棋盘落子 |
-| stage0-redo 验证后文档收口 | `git diff --check` | 通过 | Lumen 本轮实际运行；仅更新允许范围内文档 |
+| stage0-redo 验证兼记录收口 | `git diff --check` | 通过 | Lumen 本轮实际运行；仅更新允许范围内文档 |
+| workflow merge verify docs | `git diff --check` | 通过 | Cedar 本轮实际运行；仅有 LF/CRLF 工作副本提示 |
+| workflow merge verify docs 独立验证兼记录 | `git diff --check` + `rg` 关键规则定位 | 通过 | Orion 验证，确认验证兼记录角色合并、授权边界、返工路径、派发枚举、报告目录和 HANDOFF 收口口径均已落实 |
 
 代码改动后必须重新运行完整门禁。UI 改动还必须做真实浏览器检查。
 
@@ -307,7 +319,7 @@ AI Worker 与设置持久化：
 - 真实广告。
 - Hard AI。
 
-这些属于后续阶段。当前 stage0-redo 已完成独立验证，可以进入 SEO、Game UX 和 Easy AI 等阶段 1 工作。
+这些属于后续阶段。当前 stage0-redo 已完成独立验证；流程规范完成验证兼记录角色合并后，可以进入 SEO、Game UX 和 Easy AI 等阶段 1 工作。
 
 ## 11. Risk Register
 
@@ -329,6 +341,8 @@ AI Worker 与设置持久化：
 - 参考项目研究遵循 `docs/STANDARD_RESEARCH_WORKFLOW.md`。
 - 每次阶段完成更新本文件。
 - 每次使用子代理后，把子代理报告落到 `docs/subagents/`，并在本文件记录路径。
+- 验证通过后，由验证兼记录子代理按授权更新验证矩阵、阶段报告、`docs/HANDOFF.md` 中的验证状态和报告路径。
+- 验证失败时，验证兼记录子代理只记录问题和证据；blocker/major 由主控派返工子代理处理，复测仍由验证兼记录子代理完成。
 - 每次代码改动做测试、lint、build。
 - 每次 UI 改动做真实浏览器检查。
 - 每次提交前检查 `git status --short --branch` 和 `git diff --check`。
@@ -341,6 +355,8 @@ AI Worker 与设置持久化：
 - 不提前做排行榜或在线评分。
 - 不让客户端决定在线胜负、评分、房间状态。
 - 不把广告放在棋盘或按钮附近。
+- 不让验证兼记录子代理修代码或修改实现内容。
+- 不再默认单独派验证后的文档收口角色；验证记录和文档状态收口归入验证兼记录角色。
 
 ## 13. 本轮子代理报告
 
@@ -357,6 +373,11 @@ stage0-redo：
 
 - `docs/subagents/20260625-流程规范补强-实现-Hubble.md`
 - `docs/subagents/20260625-流程规范补强-验证-Nova.md`
+
+workflow-merge-verify-docs：
+
+- `docs/subagents/20260625-workflow-merge-verify-docs-实现-Cedar.md`
+- `docs/subagents/20260625-workflow-merge-verify-docs-验证兼记录-Orion.md`
 
 ## 14. 交接更新模板
 
