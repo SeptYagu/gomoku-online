@@ -40,6 +40,16 @@ type SocketData = {
 
 export type RoomSocketServer = {
   on: (event: "connection", listener: (socket: RoomSocket) => void) => void;
+  to: (roomCode: string) => {
+    emit: <Event extends keyof ServerToClientEvents>(
+      event: Event,
+      ...args: Parameters<ServerToClientEvents[Event]>
+    ) => void;
+  };
+};
+
+type RegisterRoomSocketOptions = {
+  lifecycleIntervalMs?: false | number;
 };
 
 type RoomSocket = {
@@ -62,7 +72,19 @@ type RoomSocket = {
   };
 };
 
-export function registerRoomSocketHandlers(io: RoomSocketServer, roomStore = new RoomStore()) {
+export function registerRoomSocketHandlers(
+  io: RoomSocketServer,
+  roomStore = new RoomStore(),
+  options: RegisterRoomSocketOptions = {}
+) {
+  const lifecycleIntervalMs = options.lifecycleIntervalMs ?? 10_000;
+
+  if (lifecycleIntervalMs !== false) {
+    const interval = setInterval(() => broadcastLifecycleSweep(io, roomStore), lifecycleIntervalMs);
+
+    interval.unref?.();
+  }
+
   io.on("connection", (socket) => {
     socket.on("room:create", (payload, ack) => {
       const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(payload), payload.playerId);
@@ -189,6 +211,14 @@ export function registerRoomSocketHandlers(io: RoomSocketServer, roomStore = new
       }
     });
   });
+}
+
+function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
+  const sweep = roomStore.sweepExpiredRooms();
+
+  for (const snapshot of sweep.updatedSnapshots) {
+    io.to(snapshot.code).emit("room:state", snapshot);
+  }
 }
 
 function handleJoinedRoom(

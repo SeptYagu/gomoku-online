@@ -18,6 +18,7 @@ describe("RoomStore", () => {
     expect(created.players).toEqual([
       {
         connected: true,
+        disconnectDeadline: null,
         name: "Alice",
         ready: false,
         seat: "black",
@@ -292,10 +293,14 @@ describe("RoomStore", () => {
     const disconnected = expectOk(store.markDisconnected(room.code, "player-2"));
 
     expect(disconnected.players.find((player) => player.seat === "white")?.connected).toBe(false);
+    expect(disconnected.players.find((player) => player.seat === "white")?.disconnectDeadline).toBeGreaterThan(
+      disconnected.updatedAt
+    );
 
     const restored = expectOk(store.restoreConnection(room.code, "player-2"));
 
     expect(restored.players.find((player) => player.seat === "white")?.connected).toBe(true);
+    expect(restored.players.find((player) => player.seat === "white")?.disconnectDeadline).toBeNull();
 
     const resigned = expectOk(store.resignGame(room.code, "player-2"));
 
@@ -325,6 +330,126 @@ describe("RoomStore", () => {
     expect(store.reconnectRoom(room.code, { playerId: "intruder", playerName: "Eve" })).toMatchObject({
       ok: false,
       error: { code: "not-room-member" }
+    });
+  });
+
+  it("finishes active games when a disconnected player misses the reconnect deadline", () => {
+    let now = 1_780_000_000_000;
+    const store = createTimedRoomStore({
+      codeGenerator: () => "ROOM01",
+      disconnectGraceMs: 1_000,
+      now: () => now
+    });
+    const started = createStartedRoomWithStore(store);
+
+    const disconnected = expectOk(store.markDisconnected(started.code, "player-2"));
+
+    expect(disconnected.status).toBe("playing");
+    expect(disconnected.players.find((player) => player.seat === "white")?.disconnectDeadline).toBe(now + 1_000);
+
+    now += 1_001;
+
+    const expired = expectOk(store.getSnapshot(started.code));
+
+    expect(expired.status).toBe("finished");
+    expect(expired.winner).toBe("black");
+    expect(expired.winLine).toEqual([]);
+    expect(store.applyMove(started.code, { playerId: "player-1", point: { row: 7, col: 7 } })).toMatchObject({
+      ok: false,
+      error: { code: "game-not-playing" }
+    });
+  });
+
+  it("keeps a disconnected player seat if they reconnect before the deadline", () => {
+    let now = 1_780_000_000_000;
+    const store = createTimedRoomStore({
+      codeGenerator: () => "ROOM01",
+      disconnectGraceMs: 1_000,
+      now: () => now
+    });
+    const started = createStartedRoomWithStore(store);
+
+    expectOk(store.markDisconnected(started.code, "player-1"));
+
+    now += 999;
+
+    const restored = expectOk(
+      store.reconnectRoom(started.code, {
+        playerId: "player-1",
+        playerName: "Alice back"
+      })
+    );
+
+    expect(restored.status).toBe("playing");
+    expect(restored.players.find((player) => player.seat === "black")).toMatchObject({
+      connected: true,
+      disconnectDeadline: null,
+      name: "Alice back"
+    });
+
+    now += 2;
+
+    expect(expectOk(store.getSnapshot(started.code)).status).toBe("playing");
+  });
+
+  it("cleans up empty waiting rooms and completed rooms after their TTLs", () => {
+    let now = 1_780_000_000_000;
+    const store = createTimedRoomStore({
+      codeGenerator: () => "ROOM01",
+      completedRoomTtlMs: 2_000,
+      emptyRoomTtlMs: 1_000,
+      now: () => now
+    });
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    expectOk(store.markDisconnected(created.code, "player-1"));
+
+    now += 1_001;
+
+    expect(store.getSnapshot(created.code)).toMatchObject({
+      ok: false,
+      error: { code: "room-not-found" }
+    });
+
+    now = 1_780_000_100_000;
+    const finishedStore = createTimedRoomStore({
+      codeGenerator: () => "ROOM02",
+      completedRoomTtlMs: 2_000,
+      now: () => now
+    });
+    const finishedRoom = createStartedRoomWithStore(finishedStore);
+
+    expectOk(finishedStore.resignGame(finishedRoom.code, "player-2"));
+
+    now += 2_001;
+
+    expect(finishedStore.getSnapshot(finishedRoom.code)).toMatchObject({
+      ok: false,
+      error: { code: "room-not-found" }
+    });
+  });
+
+  it("sweeps expired rooms and reports lifecycle updates for broadcasting", () => {
+    let now = 1_780_000_000_000;
+    const store = createTimedRoomStore({
+      codeGenerator: () => "ROOM01",
+      disconnectGraceMs: 1_000,
+      now: () => now
+    });
+    const started = createStartedRoomWithStore(store);
+
+    expectOk(store.markDisconnected(started.code, "player-2"));
+
+    now += 1_001;
+
+    const sweep = store.sweepExpiredRooms();
+
+    expect(sweep.deletedRoomCodes).toEqual([]);
+    expect(sweep.updatedSnapshots).toHaveLength(1);
+    expect(sweep.updatedSnapshots[0]).toMatchObject({
+      code: started.code,
+      status: "finished",
+      winner: "black"
     });
   });
 
@@ -371,6 +496,10 @@ function createTestRoomStore(codes: string[]): RoomStore {
   });
 }
 
+function createTimedRoomStore(options: ConstructorParameters<typeof RoomStore>[0]): RoomStore {
+  return new RoomStore(options);
+}
+
 function createReadyRoom(): { room: RoomSnapshot; store: RoomStore } {
   const store = createTestRoomStore(["ROOM01"]);
   const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
@@ -386,6 +515,15 @@ function createStartedRoom(): { room: RoomSnapshot; store: RoomStore } {
   const { room, store } = createReadyRoom();
 
   return { room, store };
+}
+
+function createStartedRoomWithStore(store: RoomStore): RoomSnapshot {
+  const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+  expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
+  expectOk(store.setPlayerReady(created.code, "player-1"));
+
+  return expectOk(store.setPlayerReady(created.code, "player-2"));
 }
 
 function playAndRejectUndo(

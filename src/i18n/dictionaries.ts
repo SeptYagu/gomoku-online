@@ -53,6 +53,7 @@ export type GameDictionary = {
     readyToStart: string;
     resign: string;
     restartRoom: string;
+    roomClosed: string;
     roomCode: string;
     roomCodePlaceholder: string;
     selfStatus: string;
@@ -153,6 +154,7 @@ const en = {
       readyToStart: "Both players ready",
       resign: "Resign",
       restartRoom: "Restart",
+      roomClosed: "Room closed",
       roomCode: "Room code",
       roomCodePlaceholder: "Random code",
       selfStatus: "{name} is in the room.",
@@ -249,6 +251,7 @@ const zh = {
       readyToStart: "双方已准备",
       resign: "认输",
       restartRoom: "重开",
+      roomClosed: "房间已关闭",
       roomCode: "房间码",
       roomCodePlaceholder: "随机房间码",
       selfStatus: "{name} 已在房间中。",
@@ -345,6 +348,7 @@ const fr = {
       readyToStart: "Deux joueurs prêts",
       resign: "Abandonner",
       restartRoom: "Recommencer",
+      roomClosed: "Salon fermé",
       roomCode: "Code du salon",
       roomCodePlaceholder: "Code aléatoire",
       selfStatus: "{name} est dans le salon.",
@@ -441,6 +445,7 @@ const es = {
       readyToStart: "Ambos listos",
       resign: "Rendirse",
       restartRoom: "Reiniciar",
+      roomClosed: "Sala cerrada",
       roomCode: "Código",
       roomCodePlaceholder: "Código aleatorio",
       selfStatus: "{name} está en la sala.",
@@ -537,6 +542,7 @@ const ru = {
       readyToStart: "Оба готовы",
       resign: "Сдаться",
       restartRoom: "Заново",
+      roomClosed: "Комната закрыта",
       roomCode: "Код комнаты",
       roomCodePlaceholder: "Случайный код",
       selfStatus: "{name} в комнате.",
@@ -633,6 +639,7 @@ const ar = {
       readyToStart: "اللاعبان جاهزان",
       resign: "استسلام",
       restartRoom: "إعادة",
+      roomClosed: "الغرفة مغلقة",
       roomCode: "رمز الغرفة",
       roomCodePlaceholder: "رمز عشوائي",
       selfStatus: "{name} داخل الغرفة.",

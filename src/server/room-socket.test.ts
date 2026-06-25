@@ -4,11 +4,12 @@ import { Server } from "socket.io";
 import { describe, expect, it } from "vitest";
 import type { RoomAck } from "./room-contract";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
-import type { RoomSnapshot } from "./rooms";
+import { RoomStore, type RoomSnapshot } from "./rooms";
 
 type TestSocket = {
   disconnect: () => void;
   emit: (event: string, ...args: unknown[]) => void;
+  off: (event: string, listener: (...args: unknown[]) => void) => void;
   on: (event: string, listener: (...args: unknown[]) => void) => void;
   once: (event: string, listener: (...args: unknown[]) => void) => void;
 };
@@ -107,16 +108,69 @@ describe("room socket handlers", () => {
       await harness.close();
     }
   });
+
+  it("broadcasts a timeout win when a disconnected player misses the reconnect deadline", async () => {
+    const harness = await createSocketHarness({
+      lifecycleIntervalMs: 25,
+      roomStore: new RoomStore({ disconnectGraceMs: 80 })
+    });
+
+    try {
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "host-player",
+        playerName: "Host"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+
+      expect(
+        await emitAck(guest, "room:join", {
+          playerId: "guest-player",
+          playerName: "Guest",
+          roomCode
+        })
+      ).toMatchObject({ ok: true });
+      expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({
+        ok: true,
+        value: { snapshot: { status: "playing" } }
+      });
+
+      const hostSawTimeout = waitForEventMatching<RoomSnapshot>(
+        host,
+        "room:state",
+        (snapshot) => snapshot.status === "finished" && snapshot.winner === "black"
+      );
+
+      guest.disconnect();
+
+      const timeoutSnapshot = await hostSawTimeout;
+
+      expect(timeoutSnapshot.players.find((player) => player.seat === "white")?.connected).toBe(false);
+      expect(timeoutSnapshot.winLine).toEqual([]);
+    } finally {
+      await harness.close();
+    }
+  });
 });
 
-async function createSocketHarness() {
+async function createSocketHarness(options: { lifecycleIntervalMs?: false | number; roomStore?: RoomStore } = {}) {
   const httpServer = createServer();
   const io = new Server(httpServer, {
     path: "/socket.io"
   });
   const clients: TestSocket[] = [];
 
-  registerRoomSocketHandlers(io as unknown as RoomSocketServer);
+  registerRoomSocketHandlers(io as unknown as RoomSocketServer, options.roomStore ?? new RoomStore(), {
+    lifecycleIntervalMs: options.lifecycleIntervalMs ?? false
+  });
 
   await new Promise<void>((resolve) => {
     httpServer.listen(0, "127.0.0.1", resolve);
@@ -163,6 +217,31 @@ function emitAck(socket: TestSocket, event: string, payload: unknown): Promise<R
 function waitForEvent<T = unknown>(socket: TestSocket, event: string): Promise<T> {
   return new Promise((resolve) => {
     socket.once(event, (payload: T) => resolve(payload));
+  });
+}
+
+function waitForEventMatching<T>(
+  socket: TestSocket,
+  event: string,
+  predicate: (payload: T) => boolean,
+  timeoutMs = 5_000
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.off(event, listener);
+      reject(new Error(`Timed out waiting for ${event}`));
+    }, timeoutMs);
+    const listener = (payload: T) => {
+      if (!predicate(payload)) {
+        return;
+      }
+
+      clearTimeout(timeout);
+      socket.off(event, listener);
+      resolve(payload);
+    };
+
+    socket.on(event, listener);
   });
 }
 

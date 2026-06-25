@@ -9,6 +9,7 @@ export type RoomPlayerSeat = Stone;
 export type RoomPlayerSnapshot = {
   name: string;
   connected: boolean;
+  disconnectDeadline: number | null;
   ready: boolean;
   seat: RoomPlayerSeat;
   undoRequestsRemaining: number;
@@ -86,8 +87,15 @@ export type RoomError = {
 
 export type RoomResult<T> = { ok: true; value: T } | { ok: false; error: RoomError };
 
+export type RoomLifecycleSweep = {
+  deletedRoomCodes: string[];
+  updatedSnapshots: RoomSnapshot[];
+};
+
 type RoomPlayer = {
   connected: boolean;
+  disconnectedAt: number | null;
+  disconnectDeadline: number | null;
   id: string;
   joinedAt: number;
   name: string;
@@ -117,22 +125,44 @@ type RoomState = {
 type RoomStoreOptions = {
   codeGenerator?: () => string;
   codeLength?: number;
+  completedRoomTtlMs?: number;
+  disconnectGraceMs?: number;
+  emptyRoomTtlMs?: number;
   now?: () => number;
+  roomTtlMs?: number;
 };
 
 const DEFAULT_ROOM_CODE_LENGTH = 6;
 const MAX_ROOM_CODE_ATTEMPTS = 50;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const COMPLETED_ROOM_TTL_MS = 30 * 60 * 1000;
+const DISCONNECT_GRACE_MS = 2 * 60 * 1000;
+const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
+const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 const UNDO_REQUEST_LIMIT = 3;
 const UNDO_REQUEST_TIMEOUT_MS = 10_000;
 
+type RoomLifecycleLimits = {
+  completedRoomTtlMs: number;
+  disconnectGraceMs: number;
+  emptyRoomTtlMs: number;
+  roomTtlMs: number;
+};
+
 export class RoomStore {
   private readonly codeGenerator: () => string;
+  private readonly lifecycleLimits: RoomLifecycleLimits;
   private readonly now: () => number;
   private readonly rooms = new Map<string, RoomState>();
 
   constructor(options: RoomStoreOptions = {}) {
     this.now = options.now ?? Date.now;
+    this.lifecycleLimits = {
+      completedRoomTtlMs: Math.max(1, options.completedRoomTtlMs ?? COMPLETED_ROOM_TTL_MS),
+      disconnectGraceMs: Math.max(1, options.disconnectGraceMs ?? DISCONNECT_GRACE_MS),
+      emptyRoomTtlMs: Math.max(1, options.emptyRoomTtlMs ?? EMPTY_ROOM_TTL_MS),
+      roomTtlMs: Math.max(1, options.roomTtlMs ?? ROOM_TTL_MS)
+    };
     this.codeGenerator =
       options.codeGenerator ?? (() => createRoomCode(options.codeLength ?? DEFAULT_ROOM_CODE_LENGTH));
   }
@@ -163,6 +193,8 @@ export class RoomStore {
         {
           ...player,
           connected: true,
+          disconnectedAt: null,
+          disconnectDeadline: null,
           joinedAt: now,
           ready: false,
           rejectedUndoMoveSeq: null,
@@ -216,6 +248,8 @@ export class RoomStore {
     room.players.push({
       ...player,
       connected: true,
+      disconnectedAt: null,
+      disconnectDeadline: null,
       joinedAt: this.now(),
       ready: false,
       rejectedUndoMoveSeq: null,
@@ -248,6 +282,8 @@ export class RoomStore {
 
     existingPlayer.name = player.name;
     existingPlayer.connected = true;
+    existingPlayer.disconnectedAt = null;
+    existingPlayer.disconnectDeadline = null;
     room.updatedAt = this.now();
 
     return success(getRoomSnapshot(room));
@@ -510,8 +546,14 @@ export class RoomStore {
       return found;
     }
 
+    const now = this.now();
+
     found.value.player.connected = false;
-    found.value.room.updatedAt = this.now();
+    found.value.player.disconnectedAt = now;
+    found.value.player.disconnectDeadline =
+      found.value.room.status === "playing" ? now + this.lifecycleLimits.disconnectGraceMs : null;
+    found.value.room.undoRequest = null;
+    found.value.room.updatedAt = now;
 
     return success(getRoomSnapshot(found.value.room));
   }
@@ -524,6 +566,8 @@ export class RoomStore {
     }
 
     found.value.player.connected = true;
+    found.value.player.disconnectedAt = null;
+    found.value.player.disconnectDeadline = null;
     found.value.room.updatedAt = this.now();
 
     return success(getRoomSnapshot(found.value.room));
@@ -536,7 +580,11 @@ export class RoomStore {
       return failure("room-not-found", "Room does not exist.");
     }
 
-    expireUndoRequest(room, this.now());
+    advanceRoomLifecycle(room, this.now(), this.lifecycleLimits);
+
+    if (this.deleteIfExpired(room, this.now())) {
+      return failure("room-not-found", "Room does not exist.");
+    }
 
     return success(getRoomSnapshot(room));
   }
@@ -547,6 +595,27 @@ export class RoomStore {
     return room?.players.find((candidate) => candidate.id === playerId)?.seat ?? null;
   }
 
+  sweepExpiredRooms(): RoomLifecycleSweep {
+    const now = this.now();
+    const deletedRoomCodes: string[] = [];
+    const updatedSnapshots: RoomSnapshot[] = [];
+
+    for (const [code, room] of this.rooms) {
+      const changed = advanceRoomLifecycle(room, now, this.lifecycleLimits);
+
+      if (this.deleteIfExpired(room, now)) {
+        deletedRoomCodes.push(code);
+        continue;
+      }
+
+      if (changed) {
+        updatedSnapshots.push(getRoomSnapshot(room));
+      }
+    }
+
+    return { deletedRoomCodes, updatedSnapshots };
+  }
+
   private getRoom(roomCode: string): RoomState | null {
     const code = normalizeRoomCode(roomCode);
 
@@ -554,7 +623,19 @@ export class RoomStore {
       return null;
     }
 
-    return this.rooms.get(code) ?? null;
+    const room = this.rooms.get(code);
+
+    if (!room) {
+      return null;
+    }
+
+    advanceRoomLifecycle(room, this.now(), this.lifecycleLimits);
+
+    if (this.deleteIfExpired(room, this.now())) {
+      return null;
+    }
+
+    return room;
   }
 
   private getRoomAndPlayer(
@@ -588,6 +669,16 @@ export class RoomStore {
     }
 
     return null;
+  }
+
+  private deleteIfExpired(room: RoomState, now: number): boolean {
+    if (!shouldDeleteRoom(room, now, this.lifecycleLimits)) {
+      return false;
+    }
+
+    this.rooms.delete(room.code);
+
+    return true;
   }
 }
 
@@ -625,6 +716,68 @@ function updateRoomStatus(room: RoomState, now: number) {
 
   room.status = room.players.length === 2 && room.players.every((player) => player.ready) ? "playing" : "waiting";
   room.currentTurn = room.status === "playing" ? "black" : room.currentTurn;
+  room.updatedAt = now;
+}
+
+function advanceRoomLifecycle(room: RoomState, now: number, limits: RoomLifecycleLimits): boolean {
+  let changed = expireUndoRequest(room, now);
+
+  if (room.status === "playing") {
+    const expiredDisconnectedPlayers = room.players.filter(
+      (player) => !player.connected && player.disconnectDeadline !== null && now >= player.disconnectDeadline
+    );
+
+    if (expiredDisconnectedPlayers.length > 0) {
+      const connectedPlayers = room.players.filter((player) => player.connected);
+
+      if (connectedPlayers.length === 1) {
+        finishRoomByDisconnect(room, connectedPlayers[0].seat, now);
+      } else {
+        abandonRoom(room, now);
+      }
+
+      return true;
+    }
+
+    if (now - room.updatedAt >= limits.roomTtlMs) {
+      abandonRoom(room, now);
+      return true;
+    }
+  }
+
+  if ((room.status === "waiting" || room.status === "ready") && now - room.updatedAt >= limits.roomTtlMs) {
+    abandonRoom(room, now);
+    changed = true;
+  }
+
+  return changed;
+}
+
+function shouldDeleteRoom(room: RoomState, now: number, limits: RoomLifecycleLimits): boolean {
+  if (room.status === "finished" || room.status === "abandoned") {
+    return now - room.updatedAt >= limits.completedRoomTtlMs;
+  }
+
+  if (room.status !== "playing" && room.players.length > 0 && room.players.every((player) => !player.connected)) {
+    return now - room.updatedAt >= limits.emptyRoomTtlMs;
+  }
+
+  return false;
+}
+
+function finishRoomByDisconnect(room: RoomState, winner: Stone, now: number) {
+  room.status = "finished";
+  room.undoRequest = null;
+  room.winner = winner;
+  room.winLine = [];
+  room.updatedAt = now;
+}
+
+function abandonRoom(room: RoomState, now: number) {
+  room.status = "abandoned";
+  room.undoRequest = null;
+  room.winner = null;
+  room.winLine = [];
   room.updatedAt = now;
 }
 
@@ -707,8 +860,9 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
     hostSeat: room.hostSeat,
     moveSeq: room.moveSeq,
     moves: room.moves.map((move) => ({ ...move })),
-    players: room.players.map(({ connected, name, ready, seat, undoRequestsRemaining }) => ({
+    players: room.players.map(({ connected, disconnectDeadline, name, ready, seat, undoRequestsRemaining }) => ({
       connected,
+      disconnectDeadline,
       name,
       ready,
       seat,

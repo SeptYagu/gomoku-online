@@ -271,7 +271,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 
 - `RoomState`、`PlayerSeat`、`MoveIntent`、`RoomSnapshot` 类型已在 `src/server/rooms.ts` 初版实现。
 - 房间码生成已实现，默认 6 位 A-Z/0-9 去歧义字符，并带冲突重试。
-- 实现房间 TTL 和空房清理。未完成，公开测试前补。
+- 实现房间 TTL 和空房清理。已完成单进程基础版：空 waiting 房清理、finished/abandoned 房延迟清理、长期无活动 playing 房 abandoned。
 - `room:create` 的核心状态操作已实现：创建房间并加入黑棋房主。
 - `room:join` 的核心状态操作已实现：容量、昵称、重复玩家校验；密码未做。
 - `room:rejoin` 已实现：同 `playerId` 可恢复原座位并刷新昵称、连接状态。
@@ -281,7 +281,8 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `game:resign` 的核心状态操作已实现：对局中认输后直接 finished，胜方为对手。
 - `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready。
 - 断线/重连的核心连接状态标记已实现；刷新恢复通过 localStorage `playerId` + `roomCode` 完成。
-- 宽限期、正式 reconnect token、房间 TTL、空房清理和超时判负仍未做。
+- 断线宽限期和超时判负已完成基础版：playing 中断线会设置 `disconnectDeadline`，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned。
+- 正式 reconnect token 仍未做。
 - 多实例上线前接 Redis Adapter。
 
 ## 测试清单
@@ -296,10 +297,10 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 非房间玩家不能开始或落子。已覆盖：`src/server/rooms.test.ts`。
 - 非当前回合不能落子。已覆盖：`src/server/rooms.test.ts`。
 - 客户端伪造 board/color 无效。当前 API 不接收客户端 board/color，只接收 `MoveIntent`；成员、回合、坐标和 `moveSeq` 校验已覆盖。
-- Socket.IO 双客户端创建、加入、ready 自动开局、落子广播、悔棋请求确认、非法连走和断线提示。已覆盖：`src/server/room-socket.test.ts`。
+- Socket.IO 双客户端创建、加入、ready 自动开局、落子广播、悔棋请求确认、非法连走、断线提示和断线超时广播。已覆盖：`src/server/room-socket.test.ts`。
 - 浏览器双上下文创建、邀请 URL 加入、实时落子、非当前回合禁点、刷新恢复和断线提示。已手动验证。
-- 断线宽限期内可恢复。基础刷新恢复已验证；正式 token + deadline 未实现。
-- 宽限期后按规则处理。未完成，公开测试前补。
+- 断线宽限期内可恢复。基础刷新恢复和 deadline 已覆盖；正式 reconnect token 未实现。
+- 宽限期后按规则处理。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`。
 
 ## 许可证边界
 

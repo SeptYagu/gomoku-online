@@ -809,13 +809,13 @@ opening-book-runtime：
 最新提交：
 
 ```text
-待本轮提交生成。
+本段记录所在提交，见 git log 最新提交。
 ```
 
 是否已推送：
 
 ```text
-待提交后推送到 origin/main。
+本段记录提交后推送到 origin/main。
 ```
 
 下一步建议：
@@ -881,3 +881,96 @@ opening-book-runtime：
 
 - 真实服务器已确认不再是 `/socket.io` 404 或旧版本问题。
 - 由于当前线上连接可用但 transport 记录为 `polling`，性能和稳定性目前足够 MVP 使用；公开测试前仍建议确认 WebSocket upgrade 是否按预期工作。
+
+## 21. 2026-06-25 M3 公开测试准备：房间生命周期加固
+
+本轮目标：
+
+- 按网站 build plan 进入 M3 公开测试准备。
+- 优先补齐公开测试前最影响线上稳定性的房间生命周期能力：房间 TTL、空房清理、断线宽限期和超时判负。
+
+实际完成：
+
+- `RoomStore` 增加房间生命周期配置：
+  - `disconnectGraceMs`：默认 2 分钟。
+  - `emptyRoomTtlMs`：默认 5 分钟。
+  - `completedRoomTtlMs`：默认 30 分钟。
+  - `roomTtlMs`：默认 2 小时。
+- 玩家快照增加 `disconnectDeadline`：
+  - playing 中断线会设置 deadline。
+  - 同 `playerId` 在 deadline 前 `room:rejoin` 可恢复座位，并清空 deadline。
+- 断线超时处理：
+  - playing 中一名玩家断线超过宽限期，在线对手自动胜，房间进入 `finished`。
+  - 若没有在线玩家可判胜，房间进入 `abandoned`。
+  - 断线会清掉挂起悔棋请求，避免请求阻塞棋局。
+- 房间清理：
+  - 空 waiting 房超过 TTL 后从内存 Map 删除。
+  - finished / abandoned 房超过 TTL 后删除。
+  - 长时间无活动 playing 房进入 `abandoned`。
+- Socket.IO 层增加轻量 lifecycle sweep：
+  - 默认每 10 秒推进一次过期状态。
+  - 发生断线超时判负时向房间广播最新 `room:state`，在线玩家无需点击任何按钮即可收到结果。
+  - 测试 harness 默认关闭 interval，专项测试用短间隔打开，避免测试挂起。
+- UI 状态补齐：
+  - 六语言字典增加 `roomClosed`。
+  - `GameShell` 对 `abandoned` 房间显示房间关闭，而不是继续显示当前回合。
+- 文档同步：
+  - 更新 `WEBSITE_BUILD_PLAN.md`，将 TTL、空房清理、断线宽限期、超时判负标为基础版完成。
+  - 更新 `docs/STAGE_2_REPORT.md`。
+  - 更新 `docs/logic/realtime-room-module.md`。
+
+修改文件：
+
+- `WEBSITE_BUILD_PLAN.md`
+- `docs/HANDOFF.md`
+- `docs/STAGE_2_REPORT.md`
+- `docs/logic/realtime-room-module.md`
+- `src/components/GameShell.tsx`
+- `src/i18n/dictionaries.ts`
+- `src/server/room-socket.test.ts`
+- `src/server/room-socket.ts`
+- `src/server/rooms.test.ts`
+- `src/server/rooms.ts`
+
+验证命令和结果：
+
+- `npm test`：通过，4 个测试文件、54 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+
+新增自动化覆盖：
+
+- 断线玩家超过 deadline 后，对手自动获胜。
+- deadline 前重连可保留座位并继续 playing。
+- 空 waiting 房 TTL 后返回 `room-not-found`。
+- finished 房 TTL 后返回 `room-not-found`。
+- `sweepExpiredRooms()` 返回需要广播的生命周期快照。
+- Socket.IO lifecycle sweep 会把断线超时胜负广播给在线玩家。
+
+未验证项及原因：
+
+- 未部署到真实服务器验证；需要用户部署本轮最新提交后再确认页面底部 version 和线上断线超时广播。
+- UI 尚未展示断线倒计时，只在快照里提供 `disconnectDeadline`。
+- 正式 reconnect token、Redis Adapter、多实例共享状态仍未实现。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
+
+下一步建议：
+
+- 部署后做两台电脑实测：一方开局后断网/关闭浏览器，等待 2 分钟，确认另一方自动看到胜负结果。
+- 下一刀可继续做线上运行说明和 WebSocket upgrade 确认，或补 SEO 基础页面。
+
+风险变化：
+
+- 房间生命周期仍是单进程内存实现；服务重启仍会丢房间。
+- lifecycle sweep 是进程内定时器；多实例部署前必须接 Redis Adapter 或持久层，否则不同实例间不会共享房间状态。

@@ -906,6 +906,10 @@ function getRoomGameStatus(snapshot: RoomSnapshot | null): GameStatus {
     return snapshot.winner ? { state: "won", winner: snapshot.winner, line: snapshot.winLine } : { state: "draw" };
   }
 
+  if (snapshot.status === "abandoned") {
+    return { state: "draw" };
+  }
+
   return { state: "playing", nextPlayer: snapshot.currentTurn };
 }
 
@@ -930,6 +934,10 @@ function getRoomStatusText(room: FriendRoomController, dictionary: GameDictionar
     }
 
     return snapshot.winner === room.room?.seat ? dictionary.room.youWin : dictionary.room.youLose;
+  }
+
+  if (snapshot.status === "abandoned") {
+    return dictionary.room.roomClosed;
   }
 
   return snapshot.currentTurn === room.room?.seat ? dictionary.room.yourTurn : dictionary.room.opponentTurn;
