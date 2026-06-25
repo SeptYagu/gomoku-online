@@ -1207,3 +1207,53 @@ npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
 
 - 重开换先已进入服务端状态机和自动化冒烟，不再只是人工测试口头要求。
 - 由于未交换玩家座位，第二局表现为白方先手；房主权限稳定保留给原房主。
+
+## 25. 2026-06-25 M3 小步 3 线上复测状态：等待部署
+
+本轮目标：
+
+- 推送 `8e17d25` 后确认真实服务器是否已经更新。
+- 若真实服务器已更新，继续运行三局线上好友房冒烟。
+
+实际结果：
+
+- 已运行：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net 8e17d25
+```
+
+- 输出摘要：
+
+```text
+PASS page - loaded
+FAIL version - found version 299fc13, expected 8e17d25
+PASS socket.io polling - handshake returned sid
+PASS socket.io websocket - connected with websocket
+```
+
+判断：
+
+- 真实服务器仍运行 `299fc13`，尚未部署 `8e17d25`。
+- 因服务器版本未对上，本轮没有运行真实站点三局冒烟，避免旧服务结果误导。
+
+下一步：
+
+- 用户部署 `8e17d25` 或后续更新提交后，先运行：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
+```
+
+- 版本通过后再运行：
+
+```bash
+npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
+```
+
+M3 当前剩余外部项：
+
+- 部署 `8e17d25` 到真实服务器。
+- 真实服务器三局好友房冒烟。
+- 两台真实电脑手动走完好友房流程。
+- 手机竖屏误触和弹框遮挡检查。
