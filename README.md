@@ -100,6 +100,12 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 
 其中 `<expected-version>` 是页面底部 `version:` 后面的短提交号；也可以省略，只检查当前线上能否返回版本。
 
+部署后也可以跑双客户端三局好友房冒烟，确认创建、加入、ready 自动开局、重开换先、落子同步、悔棋允许/拒绝/禁止连续请求和认输收尾：
+
+```bash
+npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
+```
+
 ## 验证命令
 
 ```bash

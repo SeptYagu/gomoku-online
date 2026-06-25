@@ -455,6 +455,12 @@ describe("RoomStore", () => {
 
   it("lets only the host restart a room and requires ready before replay", () => {
     const { store, room } = createStartedRoom();
+
+    expect(store.restartGame(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "game-not-playing" }
+    });
+
     expectOk(store.resignGame(room.code, "player-2"));
 
     expect(store.restartGame(room.code, "player-2")).toMatchObject({
@@ -468,12 +474,24 @@ describe("RoomStore", () => {
     expect(restarted.moveSeq).toBe(0);
     expect(restarted.winner).toBeNull();
     expect(restarted.moves).toEqual([]);
+    expect(restarted.currentTurn).toBe("white");
     expect(restarted.players.every((player) => player.ready === false)).toBe(true);
     expect(restarted.players.every((player) => player.undoRequestsRemaining === 3)).toBe(true);
     expect(store.startGame(room.code, "player-1")).toMatchObject({
       ok: false,
       error: { code: "room-not-ready" }
     });
+
+    expectOk(store.setPlayerReady(room.code, "player-1"));
+    const secondGame = expectOk(store.setPlayerReady(room.code, "player-2"));
+
+    expect(secondGame.status).toBe("playing");
+    expect(secondGame.currentTurn).toBe("white");
+
+    expectOk(store.resignGame(room.code, "player-2"));
+    const thirdReset = expectOk(store.restartGame(room.code, "player-1"));
+
+    expect(thirdReset.currentTurn).toBe("black");
   });
 
   it("retries room code collisions and exposes a compact default generator", () => {

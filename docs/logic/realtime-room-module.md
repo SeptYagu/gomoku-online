@@ -279,7 +279,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `game:move` 的核心状态操作已实现：服务端按成员、回合、坐标、占位和 moveSeq 校验，复用 `src/game/board.ts` 判定胜负。
 - `game:undo-request` / `game:undo-respond` 已实现：只允许最后一手落子者请求悔棋；对手确认后回退，拒绝或 10 秒超时后保留局面；每人每局 3 次请求机会，同一局面被拒后不能连续重发。
 - `game:resign` 的核心状态操作已实现：对局中认输后直接 finished，胜方为对手。
-- `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready。
+- `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready；每次重开都会切换下一局先手，房主权限不随先手变化。
 - 断线/重连的核心连接状态标记已实现；刷新恢复通过 localStorage `playerId` + `roomCode` 完成。
 - 断线宽限期和超时判负已完成基础版：playing 中断线会设置 `disconnectDeadline`，默认宽限期 60 秒，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned。
 - 正式 reconnect token 仍未做。

@@ -29,11 +29,30 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 - Socket.IO polling 返回 sid。
 - 强制 WebSocket transport 能连接成功。
 
+版本和连接检查通过后，再跑双客户端三局好友房冒烟：
+
+```bash
+npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
+```
+
+通过标准：
+
+- 两个 Socket.IO 客户端都用 WebSocket 连接。
+- 房主创建房间后，加入者可进入同一房间。
+- 第 1 局黑方先手，第 2 局白方先手，第 3 局黑方先手。
+- 双方 ready 后自动开局，不需要 Start。
+- 落子能同步到对手客户端。
+- 非最后落子者请求悔棋会被服务端拒绝。
+- 悔棋请求能同步到对手；允许后棋盘回退，拒绝后棋盘不变。
+- 同一局面被拒绝后，服务端拒绝连续重复悔棋请求。
+- 两名玩家都会在脚本中发起悔棋和认输，房间最终干净结束。
+
 ## M3 完成门槛
 
 M3 可以标记完成时，至少满足以下条件：
 
 - 最新 `origin/main` 已部署到真实服务器，`verify:online` 全部通过。
+- `smoke:online-room` 在真实服务器通过。
 - 两台不同电脑可以创建和加入同一好友房。
 - 双方 ready 后自动开局，不需要 Start。
 - 落子、回合切换、认输、终局重开在两端同步。
@@ -86,6 +105,8 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 6. D1 落中心点，D2 确认同一坐标出现黑棋。
 7. D2 落一手，D1 确认同步。
 8. 当前回合之外的一方尝试点击空点，应不能落子。
+9. 一局结束后由房主 Restart，双方重新 Ready。
+10. 确认下一局换另一方先手。
 
 ### 3. 联机悔棋
 

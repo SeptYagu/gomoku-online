@@ -114,6 +114,7 @@ type RoomState = {
   moveSeq: number;
   moves: Move[];
   nextUndoRequestId: number;
+  nextStartingSeat: RoomPlayerSeat;
   players: RoomPlayer[];
   status: RoomStatus;
   undoRequest: UndoRequestSnapshot | null;
@@ -203,6 +204,7 @@ export class RoomStore {
         }
       ],
       nextUndoRequestId: 1,
+      nextStartingSeat: "black",
       status: "waiting",
       undoRequest: null,
       updatedAt: now,
@@ -326,7 +328,7 @@ export class RoomStore {
     }
 
     room.status = "playing";
-    room.currentTurn = "black";
+    room.currentTurn = room.nextStartingSeat;
     room.updatedAt = this.now();
 
     return success(getRoomSnapshot(room));
@@ -518,8 +520,13 @@ export class RoomStore {
       return failure("not-room-host", "Only the room host can restart the game.");
     }
 
+    if (room.status !== "finished") {
+      return failure("game-not-playing", "Only finished games can be restarted.");
+    }
+
     room.board = createBoard();
-    room.currentTurn = "black";
+    room.nextStartingSeat = getOpponent(room.nextStartingSeat);
+    room.currentTurn = room.nextStartingSeat;
     room.moveSeq = 0;
     room.moves = [];
     room.nextUndoRequestId = 1;
@@ -715,7 +722,7 @@ function updateRoomStatus(room: RoomState, now: number) {
   }
 
   room.status = room.players.length === 2 && room.players.every((player) => player.ready) ? "playing" : "waiting";
-  room.currentTurn = room.status === "playing" ? "black" : room.currentTurn;
+  room.currentTurn = room.status === "playing" ? room.nextStartingSeat : room.currentTurn;
   room.updatedAt = now;
 }
 

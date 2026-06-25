@@ -8,7 +8,7 @@
 
 - 新增 Socket.IO 依赖，并提供带实时服务的自定义 Next server。当前 `npm run dev` / `npm start` 默认使用该服务，`dev:next` / `start:next` 只保留给纯 Next 调试。
 - 新增 `src/server/online-server.ts` 和 `src/server/room-socket.ts`，Socket handler 只调用 `RoomStore`，不信任客户端棋盘或胜负结果。
-- 扩展 `src/server/rooms.ts`：支持同 `playerId` 重连、查询座位、双方 ready 自动开局、联机悔棋请求确认、60 秒断线宽限期、超时判负、房间 TTL、空房清理、房主终局后重开。
+- 扩展 `src/server/rooms.ts`：支持同 `playerId` 重连、查询座位、双方 ready 自动开局、房主终局后重开并换先、联机悔棋请求确认、60 秒断线宽限期、超时判负、房间 TTL、空房清理。
 - 新增 `src/server/room-contract.ts`，共享客户端房间状态和 ack 类型。
 - 新增 `src/components/useFriendRoom.ts`，封装创建、加入、重连、准备、自动开局、落子、悔棋请求/响应、认输、重开、离开、邀请链接和 localStorage session。
 - `src/components/GameShell.tsx` 接入好友房模式，房间状态驱动棋盘、状态栏、按钮可用性和当前回合。

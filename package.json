@@ -15,6 +15,7 @@
     "test": "vitest run",
     "arena": "tsx tools/engine-arena.ts",
     "opening-book": "tsx tools/generate-opening-book.ts",
+    "smoke:online-room": "tsx tools/smoke-online-room.ts",
     "verify:online": "tsx tools/verify-online-server.ts"
   },
   "dependencies": {

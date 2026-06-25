@@ -1115,3 +1115,95 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 
 - M3 的完成标准已从口头目标变成可执行 checklist。
 - 后续阶段 3 的随机匹配/排行榜不会和 M3 公测问题混在一起。
+
+## 24. 2026-06-25 M3 小步 3：三局好友房冒烟与重开换先
+
+本轮目标：
+
+- 按用户要求：两个人玩的时候，一局结束后下一局换先。
+- 将 `smoke:online-room` 从单局冒烟扩展为连续三局。
+- 冒烟脚本需要覆盖换着人悔棋、换着人认输、悔棋不允许、以及同一局面被拒后不能连续悔棋。
+
+实际完成：
+
+- `RoomStore` 增加内部 `nextStartingSeat`：
+  - 初始为黑方先手。
+  - 每次 `game:restart` 后切换下一局先手。
+  - 双方 ready 自动开局时使用 `nextStartingSeat`，不再固定黑方先。
+  - 房主权限仍由 `hostSeat` 控制，不随先手变化。
+- `game:restart` 收紧为只允许 `finished` 房间调用，避免房主在对局中直接重置棋盘。
+- `src/server/rooms.test.ts` 补充重开换先断言：
+  - 第 2 局白方先。
+  - 第 3 局黑方先。
+- `tools/smoke-online-room.ts` 改为三局真实 Socket.IO 客户端冒烟：
+  - 第 1 局黑先，白方非最后落子者请求悔棋被拒，黑方请求悔棋被白方拒绝，同局面再次请求被拒，黑方认输。
+  - 第 2 局白先，黑方非最后落子者请求悔棋被拒，白方请求悔棋被黑方允许，白方重新落子后认输。
+  - 第 3 局黑先，黑白各落一手，白方请求悔棋被黑方拒绝，同局面再次请求被拒，黑方认输。
+- 更新 `README.md`、`WEBSITE_BUILD_PLAN.md`、`docs/STAGE_2_REPORT.md`、`docs/logic/realtime-room-module.md`、`docs/M3_PUBLIC_TEST_PLAN.md`、`docs/M3_PUBLIC_TEST_LOG.md`。
+
+修改文件：
+
+- `README.md`
+- `WEBSITE_BUILD_PLAN.md`
+- `docs/HANDOFF.md`
+- `docs/M3_PUBLIC_TEST_LOG.md`
+- `docs/M3_PUBLIC_TEST_PLAN.md`
+- `docs/STAGE_2_REPORT.md`
+- `docs/logic/realtime-room-module.md`
+- `package.json`
+- `src/server/rooms.test.ts`
+- `src/server/rooms.ts`
+- `tools/smoke-online-room.ts`
+
+验证命令和结果：
+
+- `npm test`：通过，4 个测试文件、54 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3025 npm start` 后运行 `npm run smoke:online-room -- http://127.0.0.1:3025`，通过。
+
+本地三局冒烟重点输出：
+
+```text
+PASS game 1 ready - black starts
+PASS game 1 white undo denied - not-last-move-player
+PASS game 1 rejected position blocks repeat - undo-request-rejected-position
+PASS restart - game 2 queued for white
+PASS game 2 ready - white starts
+PASS game 2 black accepted undo
+PASS restart - game 3 queued for black
+PASS game 3 ready - black starts
+PASS game 3 rejected position blocks repeat - undo-request-rejected-position
+```
+
+未验证项及原因：
+
+- 真实服务器三局冒烟尚未运行；需要本轮提交推送并部署后，用新版本重跑 `verify:online` 和 `smoke:online-room`。
+
+最新提交：
+
+```text
+待本轮提交生成。
+```
+
+是否已推送：
+
+```text
+待提交后推送到 origin/main。
+```
+
+下一步建议：
+
+- 提交并推送后，若真实服务器自动更新或用户部署完成，运行：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
+npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
+```
+
+- 之后继续 M3 收口：两台真实电脑和手机手动公测项仍需用户参与确认。
+
+风险变化：
+
+- 重开换先已进入服务端状态机和自动化冒烟，不再只是人工测试口头要求。
+- 由于未交换玩家座位，第二局表现为白方先手；房主权限稳定保留给原房主。
