@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chooseAiMove, chooseAiMoveResult, getAiTimeLimitMs, getAiWorkerCount, getThreatSummaryAfterMove } from "./ai";
 import { createBoard, getGameResult, getLegalMoves, placeStone } from "./board";
+import { GENERATED_OPENING_BOOK_LINES } from "./opening-book";
 import type { Board, Move, Point, Stone } from "./types";
 
 describe("ai", () => {
@@ -80,45 +81,64 @@ describe("ai", () => {
     });
   });
 
-  it("uses deeper opening book lines on stronger difficulties", () => {
-    let game = playMoves([
-      ["black", 7, 7],
-      ["white", 6, 6],
-      ["black", 8, 8]
-    ]);
+  it("gates the generated opening book depth by difficulty", () => {
+    const line = GENERATED_OPENING_BOOK_LINES.find((opening) => opening.id === "generated-d1-v1");
 
-    expect([
-      { row: 6, col: 7 },
-      { row: 7, col: 6 }
-    ]).toContainEqual(chooseAiMove(game.board, "white", { difficulty: "hard", moves: game.moves }));
+    expect(line).toBeDefined();
 
-    game = playMoves([
-      ["black", 7, 7],
-      ["white", 6, 6],
-      ["black", 8, 8],
-      ["white", 6, 7],
-      ["black", 7, 6]
-    ]);
+    let game = playRelativeMoves(line!.moves.slice(0, 3));
+    expect(
+      chooseAiMoveResult(game.board, "white", {
+        difficulty: "normal",
+        moves: game.moves,
+        openingSeed: 20260625,
+        timeLimitMs: 1
+      }).source
+    ).not.toBe("opening");
+    expect(
+      chooseAiMoveResult(game.board, "white", {
+        difficulty: "hard",
+        moves: game.moves,
+        openingSeed: 20260625,
+        timeLimitMs: 1
+      }).source
+    ).toBe("opening");
 
-    expect(chooseAiMove(game.board, "white", { difficulty: "expert", moves: game.moves })).toEqual({
-      row: 8,
-      col: 6
-    });
+    game = playRelativeMoves(line!.moves.slice(0, 5));
+    expect(
+      chooseAiMoveResult(game.board, "white", {
+        difficulty: "hard",
+        moves: game.moves,
+        openingSeed: 20260625,
+        timeLimitMs: 1
+      }).source
+    ).not.toBe("opening");
+    expect(
+      chooseAiMoveResult(game.board, "white", {
+        difficulty: "expert",
+        moves: game.moves,
+        openingSeed: 20260625,
+        timeLimitMs: 1
+      }).source
+    ).toBe("opening");
 
-    game = playMoves([
-      ["black", 7, 7],
-      ["white", 6, 6],
-      ["black", 8, 8],
-      ["white", 6, 7],
-      ["black", 7, 6],
-      ["white", 8, 6],
-      ["black", 6, 8]
-    ]);
-
-    expect(chooseAiMove(game.board, "white", { difficulty: "insane", moves: game.moves })).toEqual({
-      row: 8,
-      col: 7
-    });
+    game = playRelativeMoves(line!.moves.slice(0, 7));
+    expect(
+      chooseAiMoveResult(game.board, "white", {
+        difficulty: "expert",
+        moves: game.moves,
+        openingSeed: 20260625,
+        timeLimitMs: 1
+      }).source
+    ).not.toBe("opening");
+    expect(
+      chooseAiMoveResult(game.board, "white", {
+        difficulty: "insane",
+        moves: game.moves,
+        openingSeed: 20260625,
+        timeLimitMs: 1
+      }).source
+    ).toBe("opening");
   });
 
   it("varies opening book choices by game seed", () => {
@@ -139,6 +159,24 @@ describe("ai", () => {
     expect(getLegalMoves(game.board)).toContainEqual(firstMove);
     expect(getLegalMoves(game.board)).toContainEqual(secondMove);
     expect(firstMove).not.toEqual(secondMove);
+  });
+
+  it("loads generated SGF opening lines into the runtime book", () => {
+    const line = GENERATED_OPENING_BOOK_LINES.find((opening) => opening.id === "generated-d1-v1");
+
+    expect(line).toBeDefined();
+    expect(GENERATED_OPENING_BOOK_LINES.length).toBe(26);
+
+    const prefix = playRelativeMoves(line!.moves.slice(0, 7));
+    const expectedMove = relativeToBoardPoint(line!.moves[7]);
+
+    expect(
+      chooseAiMove(prefix.board, "white", {
+        difficulty: "insane",
+        moves: prefix.moves,
+        openingSeed: 20260625
+      })
+    ).toEqual(expectedMove);
   });
 
   it("insane difficulty can block a one-ply forced win", () => {
@@ -339,4 +377,25 @@ function playMoves(sequence: Array<[Stone, number, number]>): { board: Board; mo
     }),
     { board: createBoard(), moves: [] as Move[] }
   );
+}
+
+function playRelativeMoves(sequence: Array<{ row: number; col: number }>): { board: Board; moves: Move[] } {
+  return playMoves(
+    sequence.map((point, index) => {
+      const absolutePoint = relativeToBoardPoint(point);
+
+      return [index % 2 === 0 ? "black" : "white", absolutePoint.row, absolutePoint.col] satisfies [
+        Stone,
+        number,
+        number
+      ];
+    })
+  );
+}
+
+function relativeToBoardPoint(point: { row: number; col: number }): Point {
+  return {
+    row: 7 + point.row,
+    col: 7 + point.col
+  };
 }

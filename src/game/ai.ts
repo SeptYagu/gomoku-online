@@ -8,6 +8,7 @@ import {
   isValidMove,
   placeStone
 } from "./board";
+import { GENERATED_OPENING_BOOK_LINES } from "./opening-book";
 import type { Board, Move, Point, Stone } from "./types";
 
 export type AiDifficulty = "normal" | "hard" | "expert" | "insane";
@@ -248,136 +249,7 @@ const DIFFICULTY_RANK: Record<AiDifficulty, number> = {
   insane: 4
 };
 
-const OPENING_BOOK_LINES: OpeningBookLine[] = [
-  {
-    id: "normal-diagonal-contact",
-    name: "Diagonal contact",
-    minDifficulty: "normal",
-    weight: 8,
-    moves: [
-      { row: 0, col: 0 },
-      { row: -1, col: -1 },
-      { row: 1, col: 1 },
-      { row: -1, col: 0 },
-      { row: 0, col: -1 },
-      { row: 1, col: -1 },
-      { row: -1, col: 1 },
-      { row: 1, col: 0 }
-    ]
-  },
-  {
-    id: "normal-direct-contact",
-    name: "Direct contact",
-    minDifficulty: "normal",
-    weight: 7,
-    moves: [
-      { row: 0, col: 0 },
-      { row: -1, col: 0 },
-      { row: 1, col: 0 },
-      { row: 0, col: -1 },
-      { row: -1, col: -1 },
-      { row: 1, col: 1 },
-      { row: 0, col: 1 },
-      { row: 2, col: 0 }
-    ]
-  },
-  {
-    id: "hard-diagonal-balance",
-    name: "Diagonal balance",
-    minDifficulty: "hard",
-    weight: 10,
-    moves: [
-      { row: 0, col: 0 },
-      { row: -1, col: -1 },
-      { row: 1, col: 0 },
-      { row: 0, col: -1 },
-      { row: -1, col: 1 },
-      { row: 2, col: 0 },
-      { row: 0, col: 1 },
-      { row: -2, col: -1 }
-    ]
-  },
-  {
-    id: "hard-direct-balance",
-    name: "Direct balance",
-    minDifficulty: "hard",
-    weight: 9,
-    moves: [
-      { row: 0, col: 0 },
-      { row: -1, col: 0 },
-      { row: 0, col: 1 },
-      { row: 1, col: 0 },
-      { row: -1, col: -1 },
-      { row: 1, col: 1 },
-      { row: -2, col: 0 },
-      { row: 0, col: -1 }
-    ]
-  },
-  {
-    id: "expert-wide-diagonal",
-    name: "Wide diagonal",
-    minDifficulty: "expert",
-    weight: 11,
-    moves: [
-      { row: 0, col: 0 },
-      { row: -1, col: -2 },
-      { row: 1, col: 2 },
-      { row: -2, col: -1 },
-      { row: 2, col: 1 },
-      { row: -1, col: 1 },
-      { row: 1, col: -1 },
-      { row: 0, col: 2 }
-    ]
-  },
-  {
-    id: "expert-wide-direct",
-    name: "Wide direct",
-    minDifficulty: "expert",
-    weight: 10,
-    moves: [
-      { row: 0, col: 0 },
-      { row: -2, col: 0 },
-      { row: 1, col: 0 },
-      { row: -1, col: 1 },
-      { row: 0, col: -1 },
-      { row: 2, col: 1 },
-      { row: -2, col: -1 },
-      { row: 1, col: -1 }
-    ]
-  },
-  {
-    id: "insane-pincer",
-    name: "Pincer",
-    minDifficulty: "insane",
-    weight: 12,
-    moves: [
-      { row: 0, col: 0 },
-      { row: -1, col: 1 },
-      { row: 1, col: -1 },
-      { row: -2, col: 0 },
-      { row: 2, col: 0 },
-      { row: 0, col: 2 },
-      { row: 0, col: -2 },
-      { row: 1, col: 1 }
-    ]
-  },
-  {
-    id: "insane-wide-pincer",
-    name: "Wide pincer",
-    minDifficulty: "insane",
-    weight: 12,
-    moves: [
-      { row: 0, col: 0 },
-      { row: -2, col: -1 },
-      { row: 2, col: 1 },
-      { row: -1, col: 1 },
-      { row: 1, col: -1 },
-      { row: 0, col: -2 },
-      { row: -2, col: 1 },
-      { row: 2, col: -1 }
-    ]
-  }
-];
+const OPENING_BOOK_LINES: OpeningBookLine[] = GENERATED_OPENING_BOOK_LINES;
 
 const WIN_SCORE = 1_000_000_000;
 const FORK_SCORE = 6_000_000;

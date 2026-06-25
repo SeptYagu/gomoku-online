@@ -59,7 +59,10 @@
 - 高档位优先使用当前局面能匹配到的最高 `minDifficulty` 层，匹配不到时再降级。
 - 同一层内按 `weight` 加权选择。
 - `openingSeed` 由每局生成；同一局内保持稳定，不同新局会产生不同开局响应。
-- 没有直接使用外部开局库文件；现有运行时线仍是项目内维护的数据。
+- 已实装 `data/openings/generated/standard-26-insane-8ply-1s.sgf` 生成的 26 条 8 手线。
+- 运行时不直接解析 SGF，而是使用 `src/game/opening-book.ts` 中的 TypeScript 数据。
+- 当前运行时只使用这一套生成库，不再混入旧手写库。
+- 这套生成库对所有难度开放；Normal/Hard/Expert/Insane 分别最多使用 2/4/6/8 手。
 
 开局推演脚本：
 
@@ -68,6 +71,8 @@
 - 输出格式：SGF，不自定义棋谱语法。
 - SGF 使用 `GM[4]` 表示 Gomoku/Renju，`SZ[15]` 表示 15 路棋盘。
 - 默认从标准 26 开局前三手出发，每步用当前引擎推演，默认 1000ms/步，默认推到 8 手。
+- 当前简单库源资产：`data/openings/generated/standard-26-insane-8ply-1s.sgf`。
+- 当前简单库运行时文件：`src/game/opening-book.ts`。
 
 参考依据：
 
