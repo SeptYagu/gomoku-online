@@ -30,6 +30,42 @@ export type GameDictionary = {
     playerWhiteAiBlack: string;
     thinking: string;
   };
+  room: {
+    blackSeat: string;
+    connected: string;
+    connection: string;
+    copied: string;
+    copyInvite: string;
+    createOrJoin: string;
+    createRoom: string;
+    disconnected: string;
+    joinRoom: string;
+    leaveRoom: string;
+    notInRoom: string;
+    notReady: string;
+    opponentTurn: string;
+    panelLabel: string;
+    playerName: string;
+    playerNamePlaceholder: string;
+    ready: string;
+    readyAction: string;
+    readyToStart: string;
+    resign: string;
+    restartRoom: string;
+    roomCode: string;
+    roomCodePlaceholder: string;
+    selfStatus: string;
+    startGame: string;
+    unready: string;
+    waitingForOpponent: string;
+    waitingForReady: string;
+    whiteSeat: string;
+    you: string;
+    yourSeat: string;
+    yourTurn: string;
+    youLose: string;
+    youWin: string;
+  };
   board: {
     label: string;
     point: string;
@@ -89,6 +125,42 @@ const en = {
       playerWhiteAiBlack: "You play white. AI plays black.",
       thinking: "AI thinking"
     },
+    room: {
+      blackSeat: "Black",
+      connected: "Connected",
+      connection: "Connection",
+      copied: "Copied",
+      copyInvite: "Copy invite",
+      createOrJoin: "Create a room or enter a code.",
+      createRoom: "Create room",
+      disconnected: "Disconnected",
+      joinRoom: "Join room",
+      leaveRoom: "Leave",
+      notInRoom: "No room joined",
+      notReady: "Not ready",
+      opponentTurn: "Opponent to move",
+      panelLabel: "Friend room",
+      playerName: "Name",
+      playerNamePlaceholder: "Player",
+      ready: "Ready",
+      readyAction: "Ready",
+      readyToStart: "Both players ready",
+      resign: "Resign",
+      restartRoom: "Restart",
+      roomCode: "Room code",
+      roomCodePlaceholder: "ABC123",
+      selfStatus: "{name} is in the room.",
+      startGame: "Start",
+      unready: "Unready",
+      waitingForOpponent: "Waiting for opponent",
+      waitingForReady: "Waiting for ready",
+      whiteSeat: "White",
+      you: "(you)",
+      yourSeat: "Your seat",
+      yourTurn: "Your move",
+      youLose: "You lose",
+      youWin: "You win"
+    },
     board: {
       label: "15 by 15 Gomoku board",
       point: "Row {row}, column {col}"
@@ -143,6 +215,42 @@ const zh = {
       playerBlackAiWhite: "你执黑，AI 执白。",
       playerWhiteAiBlack: "你执白，AI 执黑。",
       thinking: "AI 思考中"
+    },
+    room: {
+      blackSeat: "黑棋",
+      connected: "已连接",
+      connection: "连接",
+      copied: "已复制",
+      copyInvite: "复制邀请",
+      createOrJoin: "创建房间或输入房间码。",
+      createRoom: "创建房间",
+      disconnected: "已断开",
+      joinRoom: "加入房间",
+      leaveRoom: "离开",
+      notInRoom: "尚未加入房间",
+      notReady: "未准备",
+      opponentTurn: "对手回合",
+      panelLabel: "好友房",
+      playerName: "昵称",
+      playerNamePlaceholder: "玩家",
+      ready: "已准备",
+      readyAction: "准备",
+      readyToStart: "双方已准备",
+      resign: "认输",
+      restartRoom: "重开",
+      roomCode: "房间码",
+      roomCodePlaceholder: "ABC123",
+      selfStatus: "{name} 已在房间中。",
+      startGame: "开始",
+      unready: "取消准备",
+      waitingForOpponent: "等待对手加入",
+      waitingForReady: "等待准备",
+      whiteSeat: "白棋",
+      you: "（你）",
+      yourSeat: "你的座位",
+      yourTurn: "轮到你落子",
+      youLose: "你输了",
+      youWin: "你赢了"
     },
     board: {
       label: "15 乘 15 五子棋棋盘",
@@ -199,6 +307,42 @@ const fr = {
       playerWhiteAiBlack: "Vous jouez les blancs. L'IA joue les noirs.",
       thinking: "L'IA réfléchit"
     },
+    room: {
+      blackSeat: "Noirs",
+      connected: "Connecté",
+      connection: "Connexion",
+      copied: "Copié",
+      copyInvite: "Copier l'invitation",
+      createOrJoin: "Créez un salon ou entrez un code.",
+      createRoom: "Créer un salon",
+      disconnected: "Déconnecté",
+      joinRoom: "Rejoindre",
+      leaveRoom: "Quitter",
+      notInRoom: "Aucun salon rejoint",
+      notReady: "Pas prêt",
+      opponentTurn: "À l'adversaire",
+      panelLabel: "Salon ami",
+      playerName: "Nom",
+      playerNamePlaceholder: "Joueur",
+      ready: "Prêt",
+      readyAction: "Prêt",
+      readyToStart: "Deux joueurs prêts",
+      resign: "Abandonner",
+      restartRoom: "Recommencer",
+      roomCode: "Code du salon",
+      roomCodePlaceholder: "ABC123",
+      selfStatus: "{name} est dans le salon.",
+      startGame: "Démarrer",
+      unready: "Annuler prêt",
+      waitingForOpponent: "En attente d'un adversaire",
+      waitingForReady: "En attente des joueurs",
+      whiteSeat: "Blancs",
+      you: "(vous)",
+      yourSeat: "Votre couleur",
+      yourTurn: "À vous de jouer",
+      youLose: "Vous perdez",
+      youWin: "Vous gagnez"
+    },
     board: {
       label: "Plateau de Gomoku 15 par 15",
       point: "Ligne {row}, colonne {col}"
@@ -253,6 +397,42 @@ const es = {
       playerBlackAiWhite: "Juegas con negras. La IA juega con blancas.",
       playerWhiteAiBlack: "Juegas con blancas. La IA juega con negras.",
       thinking: "La IA piensa"
+    },
+    room: {
+      blackSeat: "Negras",
+      connected: "Conectado",
+      connection: "Conexión",
+      copied: "Copiado",
+      copyInvite: "Copiar invitación",
+      createOrJoin: "Crea una sala o introduce un código.",
+      createRoom: "Crear sala",
+      disconnected: "Desconectado",
+      joinRoom: "Unirse",
+      leaveRoom: "Salir",
+      notInRoom: "Sin sala",
+      notReady: "No listo",
+      opponentTurn: "Turno del rival",
+      panelLabel: "Sala de amigos",
+      playerName: "Nombre",
+      playerNamePlaceholder: "Jugador",
+      ready: "Listo",
+      readyAction: "Listo",
+      readyToStart: "Ambos listos",
+      resign: "Rendirse",
+      restartRoom: "Reiniciar",
+      roomCode: "Código",
+      roomCodePlaceholder: "ABC123",
+      selfStatus: "{name} está en la sala.",
+      startGame: "Empezar",
+      unready: "No listo",
+      waitingForOpponent: "Esperando rival",
+      waitingForReady: "Esperando listos",
+      whiteSeat: "Blancas",
+      you: "(tú)",
+      yourSeat: "Tu color",
+      yourTurn: "Tu turno",
+      youLose: "Pierdes",
+      youWin: "Ganas"
     },
     board: {
       label: "Tablero de Gomoku de 15 por 15",
@@ -309,6 +489,42 @@ const ru = {
       playerWhiteAiBlack: "Вы играете белыми. ИИ играет черными.",
       thinking: "ИИ думает"
     },
+    room: {
+      blackSeat: "Черные",
+      connected: "Подключен",
+      connection: "Связь",
+      copied: "Скопировано",
+      copyInvite: "Копировать ссылку",
+      createOrJoin: "Создайте комнату или введите код.",
+      createRoom: "Создать комнату",
+      disconnected: "Отключен",
+      joinRoom: "Войти",
+      leaveRoom: "Выйти",
+      notInRoom: "Комната не выбрана",
+      notReady: "Не готов",
+      opponentTurn: "Ход соперника",
+      panelLabel: "Комната друга",
+      playerName: "Имя",
+      playerNamePlaceholder: "Игрок",
+      ready: "Готов",
+      readyAction: "Готов",
+      readyToStart: "Оба готовы",
+      resign: "Сдаться",
+      restartRoom: "Заново",
+      roomCode: "Код комнаты",
+      roomCodePlaceholder: "ABC123",
+      selfStatus: "{name} в комнате.",
+      startGame: "Старт",
+      unready: "Не готов",
+      waitingForOpponent: "Ожидание соперника",
+      waitingForReady: "Ожидание готовности",
+      whiteSeat: "Белые",
+      you: "(вы)",
+      yourSeat: "Ваш цвет",
+      yourTurn: "Ваш ход",
+      youLose: "Вы проиграли",
+      youWin: "Вы выиграли"
+    },
     board: {
       label: "Доска гомоку 15 на 15",
       point: "Строка {row}, столбец {col}"
@@ -363,6 +579,42 @@ const ar = {
       playerBlackAiWhite: "أنت تلعب بالأسود. الذكاء الاصطناعي يلعب بالأبيض.",
       playerWhiteAiBlack: "أنت تلعب بالأبيض. الذكاء الاصطناعي يلعب بالأسود.",
       thinking: "الذكاء الاصطناعي يفكر"
+    },
+    room: {
+      blackSeat: "الأسود",
+      connected: "متصل",
+      connection: "الاتصال",
+      copied: "تم النسخ",
+      copyInvite: "نسخ الدعوة",
+      createOrJoin: "أنشئ غرفة أو أدخل رمزا.",
+      createRoom: "إنشاء غرفة",
+      disconnected: "غير متصل",
+      joinRoom: "انضمام",
+      leaveRoom: "مغادرة",
+      notInRoom: "لا توجد غرفة",
+      notReady: "غير جاهز",
+      opponentTurn: "دور الخصم",
+      panelLabel: "غرفة صديق",
+      playerName: "الاسم",
+      playerNamePlaceholder: "لاعب",
+      ready: "جاهز",
+      readyAction: "جاهز",
+      readyToStart: "اللاعبان جاهزان",
+      resign: "استسلام",
+      restartRoom: "إعادة",
+      roomCode: "رمز الغرفة",
+      roomCodePlaceholder: "ABC123",
+      selfStatus: "{name} داخل الغرفة.",
+      startGame: "بدء",
+      unready: "إلغاء الجاهزية",
+      waitingForOpponent: "بانتظار الخصم",
+      waitingForReady: "بانتظار الجاهزية",
+      whiteSeat: "الأبيض",
+      you: "(أنت)",
+      yourSeat: "لونك",
+      yourTurn: "دورك",
+      youLose: "خسرت",
+      youWin: "فزت"
     },
     board: {
       label: "لوحة غوموكو 15 في 15",

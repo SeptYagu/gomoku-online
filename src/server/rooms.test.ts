@@ -187,6 +187,49 @@ describe("RoomStore", () => {
     });
   });
 
+  it("restores known players by id after disconnect", () => {
+    const { store, room } = createStartedRoom();
+    expectOk(store.markDisconnected(room.code, "player-1"));
+
+    const restored = expectOk(
+      store.reconnectRoom(room.code, {
+        playerId: "player-1",
+        playerName: "Alice reconnected"
+      })
+    );
+
+    expect(restored.players.find((player) => player.seat === "black")).toMatchObject({
+      connected: true,
+      name: "Alice reconnected"
+    });
+    expect(store.reconnectRoom(room.code, { playerId: "intruder", playerName: "Eve" })).toMatchObject({
+      ok: false,
+      error: { code: "not-room-member" }
+    });
+  });
+
+  it("lets only the host restart a room and requires ready before replay", () => {
+    const { store, room } = createStartedRoom();
+    expectOk(store.resignGame(room.code, "player-2"));
+
+    expect(store.restartGame(room.code, "player-2")).toMatchObject({
+      ok: false,
+      error: { code: "not-room-host" }
+    });
+
+    const restarted = expectOk(store.restartGame(room.code, "player-1"));
+
+    expect(restarted.status).toBe("waiting");
+    expect(restarted.moveSeq).toBe(0);
+    expect(restarted.winner).toBeNull();
+    expect(restarted.moves).toEqual([]);
+    expect(restarted.players.every((player) => player.ready === false)).toBe(true);
+    expect(store.startGame(room.code, "player-1")).toMatchObject({
+      ok: false,
+      error: { code: "room-not-ready" }
+    });
+  });
+
   it("retries room code collisions and exposes a compact default generator", () => {
     const store = createTestRoomStore(["ROOM01", "ROOM01", "ROOM02"]);
 

@@ -12,3 +12,4 @@ coverage/
 .next-dev*.log
 .arena-cache/
 .arena-results/
+.codex-logs/

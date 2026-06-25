@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
-import { createBoard, getGameResult, getOpponent, isValidMove, placeStone } from "@/game/board";
-import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
+import { createBoard, getGameResult, getOpponent, isValidMove, placeStone } from "../game/board";
+import type { Board, GameStatus, Move, Point, Stone } from "../game/types";
 
 export type RoomStatus = "waiting" | "ready" | "playing" | "finished" | "abandoned";
 
@@ -51,6 +51,7 @@ export type RoomErrorCode =
   | "game-not-playing"
   | "invalid-player"
   | "invalid-room-code"
+  | "not-room-host"
   | "move-seq-mismatch"
   | "not-room-member"
   | "not-your-turn"
@@ -196,6 +197,32 @@ export class RoomStore {
     return success(getRoomSnapshot(room));
   }
 
+  reconnectRoom(roomCode: string, input: JoinRoomInput): RoomResult<RoomSnapshot> {
+    const room = this.getRoom(roomCode);
+
+    if (!room) {
+      return failure("room-not-found", "Room does not exist.");
+    }
+
+    const player = normalizePlayerInput(input);
+
+    if (!player) {
+      return failure("invalid-player", "Player id and name are required.");
+    }
+
+    const existingPlayer = room.players.find((candidate) => candidate.id === player.id);
+
+    if (!existingPlayer) {
+      return failure("not-room-member", "Player is not in this room.");
+    }
+
+    existingPlayer.name = player.name;
+    existingPlayer.connected = true;
+    room.updatedAt = this.now();
+
+    return success(getRoomSnapshot(room));
+  }
+
   setPlayerReady(roomCode: string, playerId: string, ready = true): RoomResult<RoomSnapshot> {
     const found = this.getRoomAndPlayer(roomCode, playerId);
 
@@ -298,6 +325,36 @@ export class RoomStore {
     return success(getRoomSnapshot(room));
   }
 
+  restartGame(roomCode: string, playerId: string): RoomResult<RoomSnapshot> {
+    const found = this.getRoomAndPlayer(roomCode, playerId);
+
+    if (!found.ok) {
+      return found;
+    }
+
+    const { room, player } = found.value;
+
+    if (player.seat !== room.hostSeat) {
+      return failure("not-room-host", "Only the room host can restart the game.");
+    }
+
+    room.board = createBoard();
+    room.currentTurn = "black";
+    room.moveSeq = 0;
+    room.moves = [];
+    room.status = "waiting";
+    room.winner = null;
+    room.winLine = [];
+
+    for (const roomPlayer of room.players) {
+      roomPlayer.ready = false;
+    }
+
+    updateRoomStatus(room, this.now());
+
+    return success(getRoomSnapshot(room));
+  }
+
   markDisconnected(roomCode: string, playerId: string): RoomResult<RoomSnapshot> {
     const found = this.getRoomAndPlayer(roomCode, playerId);
 
@@ -332,6 +389,12 @@ export class RoomStore {
     }
 
     return success(getRoomSnapshot(room));
+  }
+
+  getPlayerSeat(roomCode: string, playerId: string): RoomPlayerSeat | null {
+    const room = this.getRoom(roomCode);
+
+    return room?.players.find((candidate) => candidate.id === playerId)?.seat ?? null;
   }
 
   private getRoom(roomCode: string): RoomState | null {

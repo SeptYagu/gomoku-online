@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CircleDot, RotateCcw, Undo2, UserRound, Users, Wifi } from "lucide-react";
+import { Bot, Check, CircleDot, Copy, Flag, LogOut, Play, RotateCcw, Undo2, UserRound, Users, Wifi } from "lucide-react";
 import {
   chooseAiMove,
   getAiTimeLimitMs,
@@ -13,16 +13,18 @@ import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/boar
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
+import type { RoomSnapshot } from "@/server/rooms";
 import { GomokuBoard } from "./GomokuBoard";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
+import { useFriendRoom, type FriendRoomController } from "./useFriendRoom";
 
 type GameShellProps = {
   dictionary: GameDictionary;
   locale: Locale;
 };
 
-type GameMode = "local" | "ai";
+type GameMode = "local" | "ai" | "room";
 type FirstPlayer = "human" | "ai";
 
 type GameSnapshot = {
@@ -66,14 +68,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const aiWorkerTimeoutRef = useRef<number | null>(null);
   const aiRequestIdRef = useRef(0);
   const openingSeedRef = useRef(createOpeningSeed());
-
-  const winningKey = useMemo(() => {
-    if (status.state !== "won") {
-      return new Set<string>();
-    }
-
-    return new Set(status.line.map((point) => `${point.row}:${point.col}`));
-  }, [status]);
+  const friendRoom = useFriendRoom();
 
   function resetGame({
     nextMode = mode,
@@ -96,6 +91,16 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   }
 
   function handleModeChange(nextMode: GameMode) {
+    if (nextMode === "room") {
+      cancelAiTurn();
+      setMode(nextMode);
+      return;
+    }
+
+    if (mode === "room") {
+      friendRoom.leaveRoom();
+    }
+
     setMode(nextMode);
     resetGame({ nextMode });
   }
@@ -130,6 +135,11 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   }
 
   function handlePointSelect(point: Point) {
+    if (mode === "room") {
+      friendRoom.playMove(point);
+      return;
+    }
+
     const humanStone = getHumanStone(firstPlayer);
 
     if (status.state !== "playing") {
@@ -356,10 +366,27 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     });
   }
 
-  const lastMove = moves.at(-1) ?? null;
+  const roomSnapshot = friendRoom.room?.snapshot ?? null;
+  const activeBoard = mode === "room" && roomSnapshot ? roomSnapshot.board : board;
+  const activeMoves = mode === "room" && roomSnapshot ? roomSnapshot.moves : moves;
+  const activeStatus = mode === "room" ? getRoomGameStatus(roomSnapshot) : status;
+  const activeNextPlayer =
+    activeStatus.state === "playing" ? activeStatus.nextPlayer : (activeMoves.at(-1)?.stone ?? "black");
+  const winningKey = useMemo(() => {
+    if (activeStatus.state !== "won") {
+      return new Set<string>();
+    }
+
+    return new Set(activeStatus.line.map((point) => `${point.row}:${point.col}`));
+  }, [activeStatus]);
+  const lastMove = activeMoves.at(-1) ?? null;
   const humanStone = getHumanStone(firstPlayer);
-  const canUndo = !isAiThinking && (mode === "ai" && firstPlayer === "ai" ? moves.length > 1 : moves.length > 0);
-  const canPlayPoint = !isAiThinking && status.state === "playing" && !(mode === "ai" && nextPlayer !== humanStone);
+  const canUndo =
+    mode !== "room" && !isAiThinking && (mode === "ai" && firstPlayer === "ai" ? moves.length > 1 : moves.length > 0);
+  const canPlayPoint =
+    mode === "room"
+      ? friendRoom.canPlay
+      : !isAiThinking && status.state === "playing" && !(mode === "ai" && nextPlayer !== humanStone);
 
   return (
     <main className="app-shell">
@@ -391,8 +418,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             <button
               className="icon-button"
               type="button"
-              onClick={() => resetGame()}
+              onClick={mode === "room" ? friendRoom.restartGame : () => resetGame()}
               aria-label={dictionary.controls.reset}
+              disabled={mode === "room" && !friendRoom.canRestart}
               title={dictionary.controls.reset}
             >
               <RotateCcw aria-hidden="true" focusable={false} />
@@ -419,7 +447,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             <Bot aria-hidden="true" focusable={false} />
             {dictionary.modes.ai}
           </button>
-          <button className="mode-pill" type="button" disabled>
+          <button
+            className={`mode-pill ${mode === "room" ? "active" : ""}`}
+            type="button"
+            onClick={() => handleModeChange("room")}
+            disabled={isAiThinking}
+          >
             <Wifi aria-hidden="true" focusable={false} />
             {dictionary.modes.room}
           </button>
@@ -465,16 +498,18 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
           </div>
         ) : null}
 
+        {mode === "room" ? <FriendRoomControls dictionary={dictionary} room={friendRoom} /> : null}
+
         <div className="play-area">
           <GomokuBoard
-            board={board}
+            board={activeBoard}
             isInteractive={canPlayPoint}
             labels={{
               board: dictionary.board.label,
               point: dictionary.board.point
             }}
             lastMove={lastMove}
-            previewStone={nextPlayer}
+            previewStone={activeNextPlayer}
             winningKey={winningKey}
             onPointSelect={handlePointSelect}
           />
@@ -487,9 +522,17 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             <CircleDot aria-hidden="true" focusable={false} />
             {dictionary.status.title}
           </div>
-          <p className="status-copy">{isAiThinking ? dictionary.ai.thinking : getStatusText(status, dictionary)}</p>
+          <p className="status-copy">
+            {mode === "room"
+              ? getRoomStatusText(friendRoom, dictionary)
+              : isAiThinking
+                ? dictionary.ai.thinking
+                : getStatusText(status, dictionary)}
+          </p>
           <p className="status-note">
-            {mode === "ai"
+            {mode === "room"
+              ? getRoomStatusNote(friendRoom, dictionary)
+              : mode === "ai"
               ? humanStone === "black"
                 ? dictionary.ai.playerBlackAiWhite
                 : dictionary.ai.playerWhiteAiBlack
@@ -498,12 +541,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
           <div className="stone-row">
             <span
               aria-label={dictionary.status.blackStone}
-              className={`stone-preview black ${nextPlayer === "black" ? "active" : ""}`}
+              className={`stone-preview black ${activeNextPlayer === "black" ? "active" : ""}`}
               role="img"
             />
             <span
               aria-label={dictionary.status.whiteStone}
-              className={`stone-preview white ${nextPlayer === "white" ? "active" : ""}`}
+              className={`stone-preview white ${activeNextPlayer === "white" ? "active" : ""}`}
               role="img"
             />
           </div>
@@ -511,7 +554,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
         <div className="status-card compact">
           <p className="metric-label">{dictionary.status.moves}</p>
-          <strong>{moves.length}</strong>
+          <strong>{activeMoves.length}</strong>
         </div>
 
         <div className="ad-placeholder" aria-label={dictionary.ads.label}>
@@ -634,6 +677,180 @@ function getAiStone(firstPlayer: FirstPlayer): Stone {
 
 function createOpeningSeed(): number {
   return Math.floor(Math.random() * 0x1_0000_0000);
+}
+
+function FriendRoomControls({
+  dictionary,
+  room
+}: {
+  dictionary: GameDictionary;
+  room: FriendRoomController;
+}) {
+  const labels = dictionary.room;
+  const snapshot = room.room?.snapshot ?? null;
+  const selfPlayer = room.room ? snapshot?.players.find((player) => player.seat === room.room?.seat) : null;
+
+  return (
+    <div className="room-panel" aria-label={labels.panelLabel}>
+      <div className="room-fields">
+        <label className="room-field">
+          <span>{labels.playerName}</span>
+          <input
+            maxLength={24}
+            onChange={(event) => room.setPlayerName(event.target.value)}
+            placeholder={labels.playerNamePlaceholder}
+            type="text"
+            value={room.playerName}
+          />
+        </label>
+        <label className="room-field">
+          <span>{labels.roomCode}</span>
+          <input
+            maxLength={8}
+            onChange={(event) => room.setJoinCode(event.target.value)}
+            placeholder={labels.roomCodePlaceholder}
+            type="text"
+            value={room.joinCode}
+          />
+        </label>
+      </div>
+
+      <div className="room-actions">
+        <button className="mode-pill" onClick={room.createRoom} type="button">
+          <Wifi aria-hidden="true" focusable={false} />
+          {labels.createRoom}
+        </button>
+        <button className="mode-pill" onClick={room.joinRoom} type="button">
+          <LogOut aria-hidden="true" focusable={false} />
+          {labels.joinRoom}
+        </button>
+        {snapshot ? (
+          <button className="mode-pill" onClick={room.copyInvite} type="button">
+            <Copy aria-hidden="true" focusable={false} />
+            {room.copiedInvite ? labels.copied : labels.copyInvite}
+          </button>
+        ) : null}
+      </div>
+
+      {snapshot ? (
+        <div className="room-summary">
+          <div>
+            <p className="metric-label">{labels.roomCode}</p>
+            <strong>{snapshot.code}</strong>
+          </div>
+          <div>
+            <p className="metric-label">{labels.yourSeat}</p>
+            <strong>{room.room?.seat === "black" ? labels.blackSeat : labels.whiteSeat}</strong>
+          </div>
+          <div>
+            <p className="metric-label">{labels.connection}</p>
+            <strong>{room.connectionStatus === "connected" ? labels.connected : labels.disconnected}</strong>
+          </div>
+        </div>
+      ) : null}
+
+      {snapshot ? (
+        <div className="room-players">
+          {snapshot.players.map((player) => (
+            <div className="room-player" key={player.seat}>
+              <span
+                aria-label={player.seat === "black" ? dictionary.status.blackStone : dictionary.status.whiteStone}
+                className={`stone-preview ${player.seat}`}
+                role="img"
+              />
+              <div>
+                <strong>
+                  {player.name}
+                  {player.seat === room.room?.seat ? ` ${labels.you}` : ""}
+                </strong>
+                <p>
+                  {player.ready ? labels.ready : labels.notReady}
+                  {" · "}
+                  {player.connected ? labels.connected : labels.disconnected}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {snapshot ? (
+        <div className="room-actions">
+          <button className="mode-pill" disabled={!room.canReady} onClick={room.toggleReady} type="button">
+            <Check aria-hidden="true" focusable={false} />
+            {room.ready ? labels.unready : labels.readyAction}
+          </button>
+          <button className="mode-pill" disabled={!room.canStart} onClick={room.startGame} type="button">
+            <Play aria-hidden="true" focusable={false} />
+            {labels.startGame}
+          </button>
+          <button className="mode-pill" disabled={!room.canResign} onClick={room.resignGame} type="button">
+            <Flag aria-hidden="true" focusable={false} />
+            {labels.resign}
+          </button>
+          <button className="mode-pill" disabled={!room.canRestart} onClick={room.restartGame} type="button">
+            <RotateCcw aria-hidden="true" focusable={false} />
+            {labels.restartRoom}
+          </button>
+          <button className="mode-pill" onClick={room.leaveRoom} type="button">
+            <LogOut aria-hidden="true" focusable={false} />
+            {labels.leaveRoom}
+          </button>
+        </div>
+      ) : null}
+
+      {selfPlayer ? <p className="room-message">{labels.selfStatus.replace("{name}", selfPlayer.name)}</p> : null}
+      {room.error ? <p className="room-error">{room.error}</p> : null}
+    </div>
+  );
+}
+
+function getRoomGameStatus(snapshot: RoomSnapshot | null): GameStatus {
+  if (!snapshot) {
+    return { state: "playing", nextPlayer: "black" };
+  }
+
+  if (snapshot.status === "finished") {
+    return snapshot.winner ? { state: "won", winner: snapshot.winner, line: snapshot.winLine } : { state: "draw" };
+  }
+
+  return { state: "playing", nextPlayer: snapshot.currentTurn };
+}
+
+function getRoomStatusText(room: FriendRoomController, dictionary: GameDictionary): string {
+  const snapshot = room.room?.snapshot;
+
+  if (!snapshot) {
+    return dictionary.room.notInRoom;
+  }
+
+  if (snapshot.status === "waiting") {
+    return snapshot.players.length < 2 ? dictionary.room.waitingForOpponent : dictionary.room.waitingForReady;
+  }
+
+  if (snapshot.status === "ready") {
+    return dictionary.room.readyToStart;
+  }
+
+  if (snapshot.status === "finished") {
+    if (!snapshot.winner) {
+      return dictionary.status.draw;
+    }
+
+    return snapshot.winner === room.room?.seat ? dictionary.room.youWin : dictionary.room.youLose;
+  }
+
+  return snapshot.currentTurn === room.room?.seat ? dictionary.room.yourTurn : dictionary.room.opponentTurn;
+}
+
+function getRoomStatusNote(room: FriendRoomController, dictionary: GameDictionary): string {
+  const snapshot = room.room?.snapshot;
+
+  if (!snapshot) {
+    return dictionary.room.createOrJoin;
+  }
+
+  return `${dictionary.room.roomCode}: ${snapshot.code}`;
 }
 
 function getStatusText(status: GameStatus, dictionary: GameDictionary): string {

@@ -17,14 +17,15 @@
 - 浏览器端强档 AI 使用 Worker 根候选分片并行搜索，超时返回 best-so-far。
 - 当前运行时开局库来自 `data/openings/generated/standard-26-insane-8ply-1s.sgf`，覆盖标准 26 开局、每条 8 手。
 - `tools/engine-arena.ts` 可用于引擎对战评测，`tools/generate-opening-book.ts` 可用于生成 SGF 开局库。
+- 好友房 MVP 已接入 Socket.IO：支持创建房间、邀请链接、加入房间、双方准备、实时落子、认输、断线提示、刷新恢复和房主重开。
+- 好友房对局使用服务端权威状态机，客户端只提交落子坐标和上一手 `moveSeq`。
 
 下一轮建议：
 
+- 进入公开测试准备：部署测试站、邀请试玩、记录移动端误触和断线恢复问题。
 - 补多语言 metadata、canonical/alternate 和 sitemap 基础 SEO。
-- 生成并筛选 16 手、每标准开局多变体的强开局库。
-- 增加 SGF 校验和 SGF 转运行时数据的可重复脚本。
-- 补强 AI 棋型矩阵、超时路径和 Worker 分片回归测试。
-- 继续细化移动端手感和小屏视觉回归。
+- 为在线房间补 TTL、超时判负、Redis Adapter 和更稳固的重连 token。
+- 继续细化移动端好友房手感和小屏视觉回归。
 
 ## 本地开发
 
@@ -33,10 +34,22 @@ npm install
 npm run dev
 ```
 
-默认开发地址：
+默认单机开发地址：
 
 ```text
 http://127.0.0.1:3000
+```
+
+好友房需要启动带 Socket.IO 的自定义服务：
+
+```bash
+npm run dev:online
+```
+
+PowerShell 指定端口示例：
+
+```powershell
+$env:PORT='3010'; npm run dev:online
 ```
 
 ## 验证命令
@@ -111,6 +124,8 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `WEBSITE_BUILD_PLAN.md`：总体搭建计划。
 - `docs/REUSE_EVALUATION.md`：可复用项目评估和许可证边界。
 - `docs/STAGE_0_REPORT.md`：阶段 0 执行报告。
+- `docs/STAGE_1_REPORT.md`：阶段 1 本地可玩增强执行报告。
+- `docs/STAGE_2_REPORT.md`：阶段 2 好友房在线对战执行报告。
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`：以后参考项目研究和子代理分工的标准流程。
 - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`：主控、实现子代理、验证子代理的标准开发流程。
 - `docs/HANDOFF.md`：当前任务交接文档，方便新窗口接手。

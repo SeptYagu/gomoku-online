@@ -1,6 +1,6 @@
 # 五子棋在线对弈网站搭建计划
 
-更新日期：2026-06-23
+更新日期：2026-06-25
 
 ## 1. 项目目标
 
@@ -230,6 +230,8 @@ AI 初版：
 
 ## 8. 阶段 2：好友房在线对战
 
+当前状态（2026-06-25）：MVP 已完成。已接入 Socket.IO 自定义在线服务、服务端权威房间状态机、好友房 UI、六语言文案、刷新恢复和基础断线提示。仍未进入多实例生产形态，房间状态暂存在单进程内存中，TTL、超时判负和 Redis Adapter 留给公开测试前加固。
+
 目标：
 
 - 支持用户创建房间并分享链接，完成真正的在线对弈 MVP。
@@ -251,14 +253,16 @@ AI 初版：
 - `room:create`
 - `room:join`
 - `room:leave`
-- `player:ready`
+- `room:ready`
+- `room:rejoin`
 - `game:start`
 - `game:move`
 - `game:resign`
 - `game:restart`
-- `game:state`
-- `connection:lost`
-- `connection:recovered`
+- `room:state`
+- `room:error`
+
+连接状态由 Socket.IO `connect`、`disconnect`、`connect_error` 和 `room:state` 快照中的玩家 `connected` 字段共同驱动。
 
 服务端原则：
 
@@ -269,21 +273,21 @@ AI 初版：
 
 技术任务：
 
-- 建立 Socket.IO 服务。
-- 实现 room join/leave。
-- 实现服务端房间状态机。
-- 实现房间码生成和冲突检查。
-- 实现断线后短时间保留座位。
-- 前端接入实时事件。
-- 加入基础端到端测试或手动测试脚本。
+- 建立 Socket.IO 服务。已完成：`src/server/online-server.ts`、`src/server/room-socket.ts`。
+- 实现 room join/leave。已完成。
+- 实现服务端房间状态机。已完成：`src/server/rooms.ts`。
+- 实现房间码生成和冲突检查。已完成。
+- 实现断线后短时间保留座位。已完成基础版：断线标记座位、同 `playerId` 可重连；尚未实现 TTL 和超时判负。
+- 前端接入实时事件。已完成：`src/components/useFriendRoom.ts`、`src/components/GameShell.tsx`。
+- 加入基础端到端测试或手动测试脚本。已完成：`src/server/room-socket.test.ts` 和 Chrome 双上下文手动冒烟。
 
 验收标准：
 
-- 两个浏览器窗口可以进入同一房间。
-- 任意一方落子，另一方实时看到。
-- 非当前回合无法落子。
-- 一方断线后另一方看到提示。
-- 刷新页面后能尽量恢复当前对局。
+- 两个浏览器窗口可以进入同一房间。已验收。
+- 任意一方落子，另一方实时看到。已验收。
+- 非当前回合无法落子。已验收。
+- 一方断线后另一方看到提示。已验收。
+- 刷新页面后能尽量恢复当前对局。已验收。
 
 预计时间：
 
@@ -546,7 +550,7 @@ M1：本地可玩
 
 M2：好友房上线
 
-- 完成创建房间、邀请链接、实时落子、断线提示。
+- 已完成创建房间、邀请链接、实时落子、断线提示、刷新恢复和房主重开 MVP。
 
 M3：公开测试
 
