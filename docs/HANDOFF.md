@@ -728,6 +728,61 @@ opening-book-runtime：
 待提交后推送到 origin/main。
 ```
 
+## 35. 2026-06-25 阶段 3 小步 3 线上验证补记
+
+本轮目标：
+
+- 按 handoff 追加规则，补记阶段 3 小步 3 房间列表 API 和 lobby socket channel 的真实服务器验证结果。
+- 更新阶段 3 进度文件，把小步 3 标记为完成并通过真实服务器验证。
+
+实际结果：
+
+- 小步 3 房间列表 API 和 lobby socket channel 已提交：
+  - `e0e0253 Implement stage 3 lobby room list channel`
+- 已推送到 `origin/main`。
+- 推送后等待 90 秒，第一次线上版本检查仍为 `612ec19`。
+- 再等待 90 秒后，运行：
+
+```bash
+npm run verify:online -- http://gomoku.yagu.ddns-ip.net e0e0253
+```
+
+验证结果：
+
+- 页面加载通过。
+- 页面底部版本号显示 `version e0e0253`。
+- Socket.IO polling handshake 返回 sid。
+- Socket.IO websocket 连接通过。
+
+真实服务器 lobby 冒烟：
+
+```bash
+npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net
+```
+
+结果：
+
+- REST `/api/rooms` 初始列表通过。
+- `lobby:join` 初始列表通过。
+- 创建房间后收到 `lobby:room-updated`。
+- REST 房间列表包含新建房间。
+- 加入房间后 lobby 玩家数更新。
+- 双方 ready 开局后 lobby 状态更新为 `playing`。
+- 认输结束后 lobby 收到删除/隐藏事件。
+- REST 默认列表隐藏 finished 房。
+
+回归验证：
+
+- `npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`：通过，三客户端三局好友房流程无回归。
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过，分享 URL 行为无回归。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 下一步：小步 4，房间列表 UI：Join / Watch。
+
 ## 32. 2026-06-25 阶段 3 小步 2 线上验证补记
 
 本轮目标：
@@ -1720,3 +1775,28 @@ b6faf9e
 ```text
 待提交后推送到 origin/main。
 ```
+
+## 36. 2026-06-25 阶段 3 小步 3 末尾追加校正记录
+
+本轮目标：
+
+- 保持 handoff 后续交接记录只从文件末尾追加。
+- 补记本窗口最终截止点，避免只看文件末尾时漏掉小步 3 的线上验证结果。
+
+实际结果：
+
+- 阶段 3 小步 3 房间列表 API 和 lobby socket channel 提交：`e0e0253 Implement stage 3 lobby room list channel`。
+- `e0e0253` 已推送到 `origin/main`。
+- 推送后等待 90 秒，第一次真实服务器版本检查仍为 `612ec19`；再等待 90 秒后，真实服务器显示 `version e0e0253`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net e0e0253`：通过。
+- `npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`：通过，覆盖 REST `/api/rooms`、`lobby:join` 初始列表、创建/加入/开局/结束的 lobby 增量事件、finished 房隐藏。
+- `npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`：通过，三客户端三局好友房流程无回归。
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过，分享 URL 行为无回归。
+- `docs/STAGE_3_PROGRESS.md` 已更新小步 3 为完成并通过真实服务器验证。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 下一步：小步 4，房间列表 UI：Join / Watch。

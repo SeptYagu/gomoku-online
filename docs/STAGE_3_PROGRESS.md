@@ -103,7 +103,7 @@
 
 ## 小步 3：房间列表 API 和 lobby socket channel
 
-状态：实现完成，本地验证通过；等待提交推送后做真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 目标：
 
@@ -150,3 +150,15 @@
   - `PASS REST room list hides finished room`
 - 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3030`，通过。
 - 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3030`，通过。
+- 推送 `e0e0253` 后等待 90 秒，第一次检查真实服务器仍为 `612ec19`；再等待 90 秒后，`npm run verify:online -- http://gomoku.yagu.ddns-ip.net e0e0253`：通过。
+- 真实服务器：`npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS REST room list - version 0`
+  - `PASS lobby:join - 0 rooms`
+  - `PASS lobby room created - 3L246K`
+  - `PASS REST room list includes created room`
+  - `PASS lobby room joined - player count updated`
+  - `PASS lobby room playing - status updated`
+  - `PASS lobby room deleted - finished room hidden`
+  - `PASS REST room list hides finished room`
+- 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过。
+- 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
