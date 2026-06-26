@@ -31,6 +31,8 @@ export type GameDictionary = {
     thinking: string;
   };
   room: {
+    account: string;
+    accountLoading: string;
     blackSeat: string;
     allowUndo: string;
     availableRooms: string;
@@ -51,6 +53,7 @@ export type GameDictionary = {
     finishResign: string;
     gameRecords: string;
     gamesCount: string;
+    guestAccount: string;
     joinRoom: string;
     leaderboard: string;
     leaderboardDaily: string;
@@ -87,6 +90,7 @@ export type GameDictionary = {
     ready: string;
     readyAction: string;
     readyToStart: string;
+    registerAccount: string;
     recordConflicted: string;
     recordMoves: string;
     recordOpponent: string;
@@ -108,6 +112,7 @@ export type GameDictionary = {
     roomCodePlaceholder: string;
     selfStatus: string;
     sendMessage: string;
+    signOutAccount: string;
     sitDown: string;
     spectatorSeat: string;
     spectatorStatus: string;
@@ -193,6 +198,8 @@ const en = {
       thinking: "AI thinking"
     },
     room: {
+      account: "Account",
+      accountLoading: "Loading",
       blackSeat: "Black",
       allowUndo: "Allow",
       availableRooms: "Rooms",
@@ -213,6 +220,7 @@ const en = {
       finishResign: "Resign",
       gameRecords: "Game records",
       gamesCount: "Games {count}",
+      guestAccount: "Guest",
       joinRoom: "Join room",
       leaderboard: "Rankings",
       leaderboardDaily: "Today",
@@ -249,6 +257,7 @@ const en = {
       ready: "Ready",
       readyAction: "Ready",
       readyToStart: "Both players ready",
+      registerAccount: "Register",
       recordConflicted: "Conflicted",
       recordMoves: "Moves {count}",
       recordOpponent: "vs {name}",
@@ -270,6 +279,7 @@ const en = {
       roomCodePlaceholder: "Random code",
       selfStatus: "{name} is in the room.",
       sendMessage: "Send",
+      signOutAccount: "Sign out",
       sitDown: "Sit",
       spectatorSeat: "Spectator",
       spectatorStatus: "{name} is watching.",
@@ -351,6 +361,8 @@ const zh = {
       thinking: "AI 思考中"
     },
     room: {
+      account: "账号",
+      accountLoading: "加载中",
       blackSeat: "黑棋",
       allowUndo: "允许",
       availableRooms: "房间列表",
@@ -371,6 +383,7 @@ const zh = {
       finishResign: "认输",
       gameRecords: "棋谱记录",
       gamesCount: "对局 {count}",
+      guestAccount: "游客",
       joinRoom: "加入房间",
       leaderboard: "排行榜",
       leaderboardDaily: "今日",
@@ -407,6 +420,7 @@ const zh = {
       ready: "已准备",
       readyAction: "准备",
       readyToStart: "双方已准备",
+      registerAccount: "注册",
       recordConflicted: "冲突",
       recordMoves: "手数 {count}",
       recordOpponent: "对手 {name}",
@@ -428,6 +442,7 @@ const zh = {
       roomCodePlaceholder: "随机房间码",
       selfStatus: "{name} 已在房间中。",
       sendMessage: "发送",
+      signOutAccount: "退出账号",
       sitDown: "入座",
       spectatorSeat: "观战席",
       spectatorStatus: "{name} 正在观战。",
@@ -509,6 +524,8 @@ const fr = {
       thinking: "L'IA réfléchit"
     },
     room: {
+      account: "Compte",
+      accountLoading: "Chargement",
       blackSeat: "Noirs",
       allowUndo: "Autoriser",
       availableRooms: "Salons",
@@ -529,6 +546,7 @@ const fr = {
       finishResign: "Abandon",
       gameRecords: "Parties",
       gamesCount: "Parties {count}",
+      guestAccount: "Invité",
       joinRoom: "Rejoindre",
       leaderboard: "Classement",
       leaderboardDaily: "Aujourd'hui",
@@ -565,6 +583,7 @@ const fr = {
       ready: "Prêt",
       readyAction: "Prêt",
       readyToStart: "Deux joueurs prêts",
+      registerAccount: "S'inscrire",
       recordConflicted: "Conflit",
       recordMoves: "Coups {count}",
       recordOpponent: "vs {name}",
@@ -586,6 +605,7 @@ const fr = {
       roomCodePlaceholder: "Code aléatoire",
       selfStatus: "{name} est dans le salon.",
       sendMessage: "Envoyer",
+      signOutAccount: "Déconnexion",
       sitDown: "S'asseoir",
       spectatorSeat: "Spectateur",
       spectatorStatus: "{name} regarde la partie.",
@@ -667,6 +687,8 @@ const es = {
       thinking: "La IA piensa"
     },
     room: {
+      account: "Cuenta",
+      accountLoading: "Cargando",
       blackSeat: "Negras",
       allowUndo: "Permitir",
       availableRooms: "Salas",
@@ -687,6 +709,7 @@ const es = {
       finishResign: "Rendición",
       gameRecords: "Partidas",
       gamesCount: "Partidas {count}",
+      guestAccount: "Invitado",
       joinRoom: "Unirse",
       leaderboard: "Ranking",
       leaderboardDaily: "Hoy",
@@ -723,6 +746,7 @@ const es = {
       ready: "Listo",
       readyAction: "Listo",
       readyToStart: "Ambos listos",
+      registerAccount: "Registrarse",
       recordConflicted: "Conflicto",
       recordMoves: "Movimientos {count}",
       recordOpponent: "vs {name}",
@@ -744,6 +768,7 @@ const es = {
       roomCodePlaceholder: "Código aleatorio",
       selfStatus: "{name} está en la sala.",
       sendMessage: "Enviar",
+      signOutAccount: "Salir",
       sitDown: "Sentarse",
       spectatorSeat: "Espectador",
       spectatorStatus: "{name} está mirando.",
@@ -825,6 +850,8 @@ const ru = {
       thinking: "ИИ думает"
     },
     room: {
+      account: "Аккаунт",
+      accountLoading: "Загрузка",
       blackSeat: "Черные",
       allowUndo: "Разрешить",
       availableRooms: "Комнаты",
@@ -845,6 +872,7 @@ const ru = {
       finishResign: "Сдача",
       gameRecords: "Партии",
       gamesCount: "Партии {count}",
+      guestAccount: "Гость",
       joinRoom: "Войти",
       leaderboard: "Рейтинг",
       leaderboardDaily: "Сегодня",
@@ -881,6 +909,7 @@ const ru = {
       ready: "Готов",
       readyAction: "Готов",
       readyToStart: "Оба готовы",
+      registerAccount: "Регистрация",
       recordConflicted: "Конфликт",
       recordMoves: "Ходы {count}",
       recordOpponent: "vs {name}",
@@ -902,6 +931,7 @@ const ru = {
       roomCodePlaceholder: "Случайный код",
       selfStatus: "{name} в комнате.",
       sendMessage: "Отправить",
+      signOutAccount: "Выйти",
       sitDown: "Сесть",
       spectatorSeat: "Зритель",
       spectatorStatus: "{name} наблюдает за игрой.",
@@ -983,6 +1013,8 @@ const ar = {
       thinking: "الذكاء الاصطناعي يفكر"
     },
     room: {
+      account: "الحساب",
+      accountLoading: "تحميل",
       blackSeat: "الأسود",
       allowUndo: "السماح",
       availableRooms: "الغرف",
@@ -1003,6 +1035,7 @@ const ar = {
       finishResign: "استسلام",
       gameRecords: "السجلات",
       gamesCount: "الألعاب {count}",
+      guestAccount: "ضيف",
       joinRoom: "انضمام",
       leaderboard: "الترتيب",
       leaderboardDaily: "اليوم",
@@ -1039,6 +1072,7 @@ const ar = {
       ready: "جاهز",
       readyAction: "جاهز",
       readyToStart: "اللاعبان جاهزان",
+      registerAccount: "تسجيل",
       recordConflicted: "تعارض",
       recordMoves: "النقلات {count}",
       recordOpponent: "ضد {name}",
@@ -1060,6 +1094,7 @@ const ar = {
       roomCodePlaceholder: "رمز عشوائي",
       selfStatus: "{name} داخل الغرفة.",
       sendMessage: "إرسال",
+      signOutAccount: "خروج",
       sitDown: "جلوس",
       spectatorSeat: "مشاهد",
       spectatorStatus: "{name} يشاهد المباراة.",

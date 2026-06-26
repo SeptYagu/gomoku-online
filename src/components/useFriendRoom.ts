@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
+import type { AccountSession } from "@/server/accounts";
 import type { LeaderboardScope, LeaderboardSnapshot, PlayerProfileSnapshot } from "@/server/game-records";
 import type {
   GameRecordAck,
@@ -31,12 +32,21 @@ type RoomSocket = {
 };
 
 type StoredRoomSession = {
+  accountToken?: string;
   playerId: string;
   playerName: string;
   roomCode: string;
 };
 
+type PlayerAuthPayload = {
+  accountToken?: string;
+  playerId: string;
+  playerName: string;
+};
+
 export type FriendRoomController = {
+  account: AccountSession | null;
+  accountStatus: "guest" | "loading" | "registered" | "error";
   canCancelMatch: boolean;
   canCreateRoom: boolean;
   canFindMatch: boolean;
@@ -74,6 +84,7 @@ export type FriendRoomController = {
   publicChatStatus: "idle" | "loading" | "ready" | "error";
   publicChatText: string;
   ready: boolean;
+  registerAccount: () => void;
   refreshPresence: () => void;
   refreshLeaderboard: () => void;
   refreshProfile: () => void;
@@ -85,6 +96,7 @@ export type FriendRoomController = {
   room: RoomClientState | null;
   sendPublicChatMessage: () => void;
   sendChatMessage: () => void;
+  signOutAccount: () => void;
   setChatText: (value: string) => void;
   setJoinCode: (value: string) => void;
   setLeaderboardScope: (scope: LeaderboardScope) => void;
@@ -99,12 +111,17 @@ export type FriendRoomController = {
 const PLAYER_ID_STORAGE_KEY = "gomoku-room-player-id";
 const PLAYER_NAME_STORAGE_KEY = "gomoku-room-player-name";
 const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
+const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
 
 export function useFriendRoom(): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
   const submittedGameRecordsRef = useRef<Set<string>>(new Set());
   const [connectionStatus, setConnectionStatus] = useState<FriendRoomController["connectionStatus"]>("idle");
   const [room, setRoom] = useState<RoomClientState | null>(null);
+  const [account, setAccount] = useState<AccountSession | null>(null);
+  const [accountStatus, setAccountStatus] = useState<FriendRoomController["accountStatus"]>(() =>
+    readAccountToken() ? "loading" : "guest"
+  );
   const [playerName, setPlayerNameState] = useState(getInitialPlayerName);
   const [joinCode, setJoinCodeState] = useState(getInitialJoinCode);
   const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
@@ -125,6 +142,7 @@ export function useFriendRoom(): FriendRoomController {
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const autoJoinRoomCodeRef = useRef<string | null>(null);
+  const createRequestInFlightRef = useRef(false);
 
   const isPlayer = room?.role === "player" && room.seat !== null;
   const currentPlayer = isPlayer ? getPlayerBySeat(room.snapshot, room.seat) : null;
@@ -156,6 +174,21 @@ export function useFriendRoom(): FriendRoomController {
 
     return getRoomUrl(room.snapshot.code);
   }, [room]);
+
+  const getActivePlayer = useCallback((): PlayerAuthPayload => {
+    if (account) {
+      return {
+        accountToken: account.token,
+        playerId: account.playerId,
+        playerName: account.displayName
+      };
+    }
+
+    return {
+      playerId: getOrCreatePlayerId(),
+      playerName: normalizePlayerName(playerName)
+    };
+  }, [account, playerName]);
 
   const clearClosedRoom = useCallback((roomCode: string) => {
     setLobbyRooms((currentRooms) => currentRooms.filter((candidate) => candidate.code !== roomCode));
@@ -248,34 +281,35 @@ export function useFriendRoom(): FriendRoomController {
     setJoinCodeState(response.value.snapshot.code);
     syncRoomUrl(response.value.snapshot.code);
     persistRoomSession({
+      accountToken: response.value.identity === "registered" ? account?.token ?? readAccountToken() ?? undefined : undefined,
       playerId: response.value.playerId,
       playerName: acknowledgedPlayerName,
       roomCode: response.value.snapshot.code
     });
-  }, []);
+  }, [account]);
 
   const createRoom = useCallback(() => {
-    if (!canCreateRoom) {
+    if (!canCreateRoom || createRequestInFlightRef.current) {
       return;
     }
 
     const socket = ensureSocket();
-    const nextPlayerId = getOrCreatePlayerId();
-    const nextPlayerName = normalizePlayerName(playerName);
+    const player = getActivePlayer();
 
+    createRequestInFlightRef.current = true;
     setIsCreatingRoom(true);
-    setPlayerNameState(nextPlayerName);
-    persistPlayerName(nextPlayerName);
-    socket.emit("room:create", { playerId: nextPlayerId, playerName: nextPlayerName }, (response: RoomAck) => {
+    setPlayerNameState(player.playerName);
+    persistPlayerName(player.playerName);
+    socket.emit("room:create", player, (response: RoomAck) => {
+      createRequestInFlightRef.current = false;
       setIsCreatingRoom(false);
       applyRoomAck(response);
     });
-  }, [applyRoomAck, canCreateRoom, ensureSocket, playerName]);
+  }, [applyRoomAck, canCreateRoom, ensureSocket, getActivePlayer]);
 
   const joinRoomByCode = useCallback((roomCode: string, retryWithFreshIdentity = true) => {
     const socket = ensureSocket();
-    let nextPlayerId = getOrCreatePlayerId();
-    let nextPlayerName = normalizePlayerName(playerName);
+    let player = getActivePlayer();
     const nextRoomCode = normalizeRoomCode(roomCode);
 
     if (!nextRoomCode) {
@@ -283,25 +317,28 @@ export function useFriendRoom(): FriendRoomController {
       return;
     }
 
-    setPlayerNameState(nextPlayerName);
+    setPlayerNameState(player.playerName);
     setJoinCodeState(nextRoomCode);
-    persistPlayerName(nextPlayerName);
+    persistPlayerName(player.playerName);
     socket.emit(
       "room:join",
-      { playerId: nextPlayerId, playerName: nextPlayerName, roomCode: nextRoomCode },
+      { ...player, roomCode: nextRoomCode },
       (response: RoomAck) => {
         if (
           !response.ok &&
+          !player.accountToken &&
           retryWithFreshIdentity &&
           (response.error.code === "duplicate-player" || response.error.code === "duplicate-name")
         ) {
-          nextPlayerId = createAndPersistPlayerId();
-          nextPlayerName = createGuestPlayerName();
-          setPlayerNameState(nextPlayerName);
-          persistPlayerName(nextPlayerName);
+          player = {
+            playerId: createAndPersistPlayerId(),
+            playerName: createGuestPlayerName()
+          };
+          setPlayerNameState(player.playerName);
+          persistPlayerName(player.playerName);
           socket.emit(
             "room:join",
-            { playerId: nextPlayerId, playerName: nextPlayerName, roomCode: nextRoomCode },
+            { ...player, roomCode: nextRoomCode },
             applyRoomAck
           );
           return;
@@ -310,7 +347,7 @@ export function useFriendRoom(): FriendRoomController {
         applyRoomAck(response);
       }
     );
-  }, [applyRoomAck, ensureSocket, playerName]);
+  }, [applyRoomAck, ensureSocket, getActivePlayer]);
 
   const joinRoom = useCallback(() => {
     joinRoomByCode(joinCode);
@@ -326,17 +363,16 @@ export function useFriendRoom(): FriendRoomController {
     }
 
     const socket = ensureSocket();
-    const nextPlayerId = getOrCreatePlayerId();
-    const nextPlayerName = normalizePlayerName(playerName);
+    const player = getActivePlayer();
 
     setMatchmakingStatus("searching");
-    setPlayerNameState(nextPlayerName);
-    persistPlayerName(nextPlayerName);
-    socket.emit("matchmaking:find", { playerId: nextPlayerId, playerName: nextPlayerName }, (response: RoomAck) => {
+    setPlayerNameState(player.playerName);
+    persistPlayerName(player.playerName);
+    socket.emit("matchmaking:find", player, (response: RoomAck) => {
       setMatchmakingStatus("idle");
       applyRoomAck(response);
     });
-  }, [applyRoomAck, canFindMatch, ensureSocket, playerName]);
+  }, [applyRoomAck, canFindMatch, ensureSocket, getActivePlayer]);
 
   const cancelMatch = useCallback(() => {
     if (!room) {
@@ -389,18 +425,16 @@ export function useFriendRoom(): FriendRoomController {
   }, [ensureSocket]);
 
   const refreshPresence = useCallback(() => {
-    const nextPlayerId = getOrCreatePlayerId();
-    const nextPlayerName = normalizePlayerName(playerName);
+    const player = getActivePlayer();
 
     setPresenceStatus("loading");
-    setPlayerNameState(nextPlayerName);
-    persistPlayerName(nextPlayerName);
+    setPlayerNameState(player.playerName);
+    persistPlayerName(player.playerName);
     ensureSocket().emit(
       "presence:join",
       {
+        ...player,
         limit: 30,
-        playerId: nextPlayerId,
-        playerName: nextPlayerName
       },
       (response: PresenceAck) => {
         if (!response.ok) {
@@ -413,7 +447,7 @@ export function useFriendRoom(): FriendRoomController {
         setPresenceStatus("ready");
       }
     );
-  }, [ensureSocket, playerName]);
+  }, [ensureSocket, getActivePlayer]);
 
   const refreshLeaderboard = useCallback(() => {
     const params = new URLSearchParams({
@@ -445,19 +479,23 @@ export function useFriendRoom(): FriendRoomController {
   }, [leaderboardScope]);
 
   const refreshProfile = useCallback(() => {
-    const nextPlayerId = getOrCreatePlayerId();
-    const nextPlayerName = normalizePlayerName(playerName);
+    const player = getActivePlayer();
     const params = new URLSearchParams({
       limit: "10",
-      name: nextPlayerName,
-      playerId: nextPlayerId
+      name: player.playerName,
+      playerId: player.playerId
     });
+    const headers: HeadersInit = {
+      "accept": "application/json"
+    };
+
+    if (player.accountToken) {
+      headers.authorization = `Bearer ${player.accountToken}`;
+    }
 
     setProfileStatus("loading");
     void fetch(`/api/profile?${params.toString()}`, {
-      headers: {
-        "accept": "application/json"
-      }
+      headers
     })
       .then(async (response) => {
         if (!response.ok) {
@@ -474,7 +512,7 @@ export function useFriendRoom(): FriendRoomController {
         setProfileStatus("error");
         setError(profileError instanceof Error ? profileError.message : "Profile request failed.");
       });
-  }, [playerName]);
+  }, [getActivePlayer]);
 
   const toggleReady = useCallback(() => {
     if (!room) {
@@ -573,14 +611,13 @@ export function useFriendRoom(): FriendRoomController {
       return;
     }
 
-    const nextPlayerId = getOrCreatePlayerId();
-    const nextPlayerName = normalizePlayerName(playerName);
+    const player = getActivePlayer();
 
-    setPlayerNameState(nextPlayerName);
-    persistPlayerName(nextPlayerName);
+    setPlayerNameState(player.playerName);
+    persistPlayerName(player.playerName);
     ensureSocket().emit(
       "public-chat:send",
-      { playerId: nextPlayerId, playerName: nextPlayerName, text },
+      { ...player, text },
       (response: PublicChatAck) => {
         if (!response.ok) {
           setError(response.error.message);
@@ -593,7 +630,7 @@ export function useFriendRoom(): FriendRoomController {
         setError(null);
       }
     );
-  }, [ensureSocket, playerName, publicChatText]);
+  }, [ensureSocket, getActivePlayer, publicChatText]);
 
   const leaveRoom = useCallback(() => {
     if (!room) {
@@ -642,6 +679,49 @@ export function useFriendRoom(): FriendRoomController {
       .catch(() => setError(`Copy this link: ${currentInviteUrl}`));
   }, [room]);
 
+  const registerAccount = useCallback(() => {
+    const displayName = normalizePlayerName(playerName);
+
+    setAccountStatus("loading");
+    void fetch("/api/account/register", {
+      body: JSON.stringify({ displayName }),
+      headers: {
+        "accept": "application/json",
+        "content-type": "application/json"
+      },
+      method: "POST"
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as { error?: string } | null;
+
+          throw new Error(body?.error ?? `Account request failed: ${response.status}`);
+        }
+
+        return (await response.json()) as AccountSession;
+      })
+      .then((session) => {
+        persistAccountToken(session.token);
+        setAccount(session);
+        setAccountStatus("registered");
+        setPlayerNameState(session.displayName);
+        persistPlayerName(session.displayName);
+        setError(null);
+      })
+      .catch((accountError: unknown) => {
+        setAccountStatus("error");
+        setError(accountError instanceof Error ? accountError.message : "Account request failed.");
+      });
+  }, [playerName]);
+
+  const signOutAccount = useCallback(() => {
+    clearAccountToken();
+    setAccount(null);
+    setAccountStatus("guest");
+    createAndPersistPlayerId();
+    clearRoomSession();
+  }, []);
+
   const setPlayerName = useCallback((value: string) => {
     setPlayerNameState(value);
     persistPlayerName(value);
@@ -653,6 +733,40 @@ export function useFriendRoom(): FriendRoomController {
 
   const setLeaderboardScope = useCallback((scope: LeaderboardScope) => {
     setLeaderboardScopeState(scope);
+  }, []);
+
+  useEffect(() => {
+    const token = readAccountToken();
+
+    if (!token) {
+      return;
+    }
+
+    void fetch("/api/account/session", {
+      headers: {
+        "accept": "application/json",
+        "authorization": `Bearer ${token}`
+      }
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Account session failed: ${response.status}`);
+        }
+
+        return (await response.json()) as AccountSession;
+      })
+      .then((session) => {
+        persistAccountToken(session.token);
+        setAccount(session);
+        setAccountStatus("registered");
+        setPlayerNameState(session.displayName);
+        persistPlayerName(session.displayName);
+      })
+      .catch(() => {
+        clearAccountToken();
+        setAccount(null);
+        setAccountStatus("guest");
+      });
   }, []);
 
   useEffect(() => {
@@ -750,6 +864,8 @@ export function useFriendRoom(): FriendRoomController {
   }, [copiedInvite]);
 
   return {
+    account,
+    accountStatus,
     canCancelMatch,
     canCreateRoom,
     canFindMatch,
@@ -787,6 +903,7 @@ export function useFriendRoom(): FriendRoomController {
     publicChatStatus,
     publicChatText,
     ready,
+    registerAccount,
     refreshPresence,
     refreshLeaderboard,
     refreshProfile,
@@ -798,6 +915,7 @@ export function useFriendRoom(): FriendRoomController {
     room,
     sendPublicChatMessage,
     sendChatMessage,
+    signOutAccount,
     setChatText,
     setJoinCode,
     setLeaderboardScope,
@@ -997,6 +1115,22 @@ function copyTextWithFallback(text: string): boolean {
 
 function persistPlayerName(playerName: string) {
   window.localStorage.setItem(PLAYER_NAME_STORAGE_KEY, playerName);
+}
+
+function persistAccountToken(accountToken: string) {
+  window.localStorage.setItem(ACCOUNT_TOKEN_STORAGE_KEY, accountToken);
+}
+
+function readAccountToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(ACCOUNT_TOKEN_STORAGE_KEY);
+}
+
+function clearAccountToken() {
+  window.localStorage.removeItem(ACCOUNT_TOKEN_STORAGE_KEY);
 }
 
 function persistRoomSession(session: StoredRoomSession) {

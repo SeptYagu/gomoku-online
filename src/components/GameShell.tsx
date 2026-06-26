@@ -751,6 +751,29 @@ function FriendRoomControls({
         </label>
       </div>
 
+      <div className="room-account">
+        <div>
+          <p className="metric-label">{labels.account}</p>
+          <strong>{room.account ? room.account.displayName : labels.guestAccount}</strong>
+        </div>
+        {room.account ? (
+          <button className="mode-pill" onClick={room.signOutAccount} type="button">
+            <LogOut aria-hidden="true" focusable={false} />
+            {labels.signOutAccount}
+          </button>
+        ) : (
+          <button
+            className="mode-pill"
+            disabled={room.accountStatus === "loading"}
+            onClick={room.registerAccount}
+            type="button"
+          >
+            <UserRound aria-hidden="true" focusable={false} />
+            {room.accountStatus === "loading" ? labels.accountLoading : labels.registerAccount}
+          </button>
+        )}
+      </div>
+
       <div className="room-actions">
         {room.canCancelMatch ? (
           <button className="mode-pill danger" onClick={room.cancelMatch} type="button">

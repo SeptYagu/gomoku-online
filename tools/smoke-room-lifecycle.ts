@@ -39,6 +39,7 @@ async function main(): Promise<void> {
 
     await verifyRepeatedCreateClosesPreviousRoom(baseUrl, host, suffix);
     await verifySamePlayerCreateClosesPreviousRoom(baseUrl, host, mirror, suffix);
+    await verifyWaitingRoomClosesAfterCreatorDisconnects(baseUrl, suffix);
     await verifySpectatorCanSitInOpenSeat(host, guest, spectator, suffix);
     await verifyDisconnectTimeoutForfeit(host, guest, suffix);
   } finally {
@@ -108,6 +109,28 @@ async function verifySamePlayerCreateClosesPreviousRoom(
   assert(!rooms.rooms.some((room) => room.code === first.code), "first mirror room should be closed");
   assert(rooms.rooms.some((room) => room.code === second.code), "second mirror room should remain listed");
   console.log(`PASS same player create closes previous room - ${first.code} -> ${second.code}`);
+}
+
+async function verifyWaitingRoomClosesAfterCreatorDisconnects(baseUrl: string, suffix: string): Promise<void> {
+  const socket = await connectClient(baseUrl);
+
+  try {
+    const created = requireOk(
+      await emitAck(socket, "room:create", {
+        playerId: `empty-host-${suffix}`,
+        playerName: `Empty Host ${suffix}`
+      }),
+      "empty room:create"
+    ).snapshot;
+    const roomCode = created.code;
+
+    socket.disconnect();
+
+    await waitForRoomAbsent(baseUrl, roomCode);
+    console.log(`PASS empty waiting room closes on disconnect - ${roomCode}`);
+  } finally {
+    socket.disconnect();
+  }
 }
 
 async function verifySpectatorCanSitInOpenSeat(
@@ -202,6 +225,26 @@ async function fetchRoomList(baseUrl: string): Promise<RoomListSnapshot> {
   assert(response.ok, `GET /api/rooms should succeed, got ${response.status}`);
 
   return (await response.json()) as RoomListSnapshot;
+}
+
+async function waitForRoomAbsent(baseUrl: string, roomCode: string, timeoutMs = TIMEOUT_MS): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() <= deadline) {
+    const rooms = await fetchRoomList(baseUrl);
+
+    if (!rooms.rooms.some((room) => room.code === roomCode)) {
+      return;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Timed out waiting for room ${roomCode} to close`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeBaseUrl(input: string): string {

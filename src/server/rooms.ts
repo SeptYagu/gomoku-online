@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { createBoard, getGameResult, getOpponent, isValidMove, placeStone } from "../game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "../game/types";
+import type { PlayerIdentityKind } from "./accounts";
 import {
   GameRecordStore,
   type AuthoritativeGameRecord,
@@ -67,7 +68,7 @@ export type PresenceStatus = "online" | "in_room" | "playing" | "spectating" | "
 
 export type UserPresenceSnapshot = {
   connected: boolean;
-  identity: "guest" | "registered";
+  identity: PlayerIdentityKind;
   lastSeenAt: number;
   name: string;
   playerId: string;
@@ -150,11 +151,13 @@ export type RoomCleanupResult = {
 };
 
 export type CreateRoomInput = {
+  identity?: PlayerIdentityKind;
   playerId: string;
   playerName: string;
 };
 
 export type JoinRoomInput = {
+  identity?: PlayerIdentityKind;
   playerId: string;
   playerName: string;
 };
@@ -166,6 +169,7 @@ export type MoveIntent = {
 };
 
 export type RoomErrorCode =
+  | "account-token-invalid"
   | "duplicate-name"
   | "duplicate-player"
   | "chat-message-empty"
@@ -214,6 +218,7 @@ type RoomPlayer = {
   disconnectedAt: number | null;
   disconnectDeadline: number | null;
   id: string;
+  identity: PlayerIdentityKind;
   joinedAt: number;
   lastChatSentAt: number | null;
   name: string;
@@ -227,6 +232,7 @@ type RoomSpectator = {
   connected: boolean;
   disconnectedAt: number | null;
   id: string;
+  identity: PlayerIdentityKind;
   joinedAt: number;
   lastChatSentAt: number | null;
   name: string;
@@ -234,7 +240,7 @@ type RoomSpectator = {
 
 type PresenceEntry = {
   connectionCount: number;
-  identity: "guest" | "registered";
+  identity: PlayerIdentityKind;
   lastSeenAt: number;
   name: string;
   playerId: string;
@@ -502,6 +508,7 @@ export class RoomStore {
       disconnectedAt: null,
       disconnectDeadline: null,
       id: participant.id,
+      identity: participant.identity,
       joinedAt: now,
       lastChatSentAt: participant.lastChatSentAt,
       name: participant.name,
@@ -1058,13 +1065,14 @@ export class RoomStore {
       this.presences.get(player.id) ??
       ({
         connectionCount: 0,
-        identity: "guest",
+        identity: player.identity,
         lastSeenAt: now,
         name: player.name,
         playerId: player.id
       } satisfies PresenceEntry);
 
     entry.connectionCount += 1;
+    entry.identity = player.identity;
     entry.lastSeenAt = now;
     entry.name = player.name;
     this.presences.set(player.id, entry);
@@ -1085,12 +1093,13 @@ export class RoomStore {
       this.presences.get(player.id) ??
       ({
         connectionCount: 0,
-        identity: "guest",
+        identity: player.identity,
         lastSeenAt: now,
         name: player.name,
         playerId: player.id
       } satisfies PresenceEntry);
 
+    entry.identity = player.identity;
     entry.lastSeenAt = now;
     entry.name = player.name;
     this.presences.set(player.id, entry);
@@ -1204,8 +1213,13 @@ export class RoomStore {
     return this.gameRecordStore.getLeaderboard(query);
   }
 
-  getPlayerProfile(playerId: string, displayName?: string, limit?: number): PlayerProfileSnapshot {
-    return this.gameRecordStore.getPlayerProfile(playerId, displayName, limit);
+  getPlayerProfile(
+    playerId: string,
+    displayName?: string,
+    limit?: number,
+    identity?: PlayerIdentityKind
+  ): PlayerProfileSnapshot {
+    return this.gameRecordStore.getPlayerProfile(playerId, displayName, limit, identity);
   }
 
   getPlayerSeat(roomCode: string, playerId: string): RoomPlayerSeat | null {
@@ -1217,7 +1231,7 @@ export class RoomStore {
   getParticipantRole(
     roomCode: string,
     playerId: string
-  ): { name: string; role: RoomParticipantRole; seat: RoomPlayerSeat | null } | null {
+  ): { identity: PlayerIdentityKind; name: string; role: RoomParticipantRole; seat: RoomPlayerSeat | null } | null {
     const room = this.getRoom(roomCode);
 
     if (!room) {
@@ -1227,13 +1241,13 @@ export class RoomStore {
     const player = room.players.find((candidate) => candidate.id === playerId);
 
     if (player) {
-      return { name: player.name, role: "player", seat: player.seat };
+      return { identity: player.identity, name: player.name, role: "player", seat: player.seat };
     }
 
     const spectator = room.spectators.find((candidate) => candidate.id === playerId);
 
     if (spectator) {
-      return { name: spectator.name, role: "spectator", seat: null };
+      return { identity: spectator.identity, name: spectator.name, role: "spectator", seat: null };
     }
 
     return null;
@@ -1306,6 +1320,25 @@ export class RoomStore {
     }
 
     return getRoomListItem(room);
+  }
+
+  listRoomCodes(): string[] {
+    return [...this.rooms.keys()];
+  }
+
+  deleteRoom(roomCode: string): RoomSnapshot | null {
+    const room = this.getRoom(roomCode);
+
+    if (!room) {
+      return null;
+    }
+
+    const snapshot = getRoomSnapshot(room);
+
+    this.rooms.delete(room.code);
+    this.nextLobbyVersion();
+
+    return snapshot;
   }
 
   private getRoom(roomCode: string): RoomState | null {
@@ -1445,7 +1478,7 @@ export class RoomStore {
       moveSeq: room.moveSeq,
       moves: room.moves,
       players: room.players.map((player) => ({
-        identity: "guest",
+        identity: player.identity,
         name: player.name,
         playerId: player.id,
         seat: player.seat
@@ -1823,15 +1856,16 @@ function markUndoRequestRejected(room: RoomState, undoRequest: UndoRequestSnapsh
   room.updatedAt = now;
 }
 
-function normalizePlayerInput(input: CreateRoomInput | JoinRoomInput): Pick<RoomPlayer, "id" | "name"> | null {
+function normalizePlayerInput(input: CreateRoomInput | JoinRoomInput): Pick<RoomPlayer, "id" | "identity" | "name"> | null {
   const id = input.playerId.trim();
   const name = input.playerName.trim();
+  const identity = input.identity === "registered" ? "registered" : "guest";
 
   if (!id || !name) {
     return null;
   }
 
-  return { id, name };
+  return { id, identity, name };
 }
 
 function findParticipant(room: RoomState, playerId: string): RoomPlayer | RoomSpectator | null {

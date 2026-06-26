@@ -1,12 +1,13 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import type { PlayerIdentityKind } from "./accounts";
 import type { Board, Move, Point, Stone } from "../game/types";
 
 export type GameRecordStatus = "partial" | "verified" | "conflicted";
 export type GameRecordFinishReason = "five" | "draw" | "resign" | "disconnect" | "abandoned";
 
 export type GameRecordPlayer = {
-  identity: "guest" | "registered";
+  identity: PlayerIdentityKind;
   name: string;
   playerId: string;
   seat: Stone;
@@ -86,7 +87,7 @@ export type PlayerGameRecordSummary = {
 export type PlayerProfileSnapshot = {
   displayName: string;
   generatedAt: number;
-  identity: "guest" | "registered";
+  identity: PlayerIdentityKind;
   playerId: string;
   recentRecords: PlayerGameRecordSummary[];
   stats: {
@@ -177,7 +178,12 @@ export class GameRecordStore {
     };
   }
 
-  getPlayerProfile(playerId: string, displayName = "Player", limit = 20): PlayerProfileSnapshot {
+  getPlayerProfile(
+    playerId: string,
+    displayName = "Player",
+    limit = 20,
+    fallbackIdentity: PlayerIdentityKind = "guest"
+  ): PlayerProfileSnapshot {
     const normalizedPlayerId = playerId.trim();
     const records = this.listRecordsForPlayer(normalizedPlayerId, limit);
     const stats = {
@@ -189,8 +195,8 @@ export class GameRecordStore {
       verified: 0,
       wins: 0
     };
-    const latestRecordName = records[0]?.players.find((player) => player.playerId === normalizedPlayerId)?.name;
-    const latestPlayerName = (latestRecordName ?? displayName.trim()) || "Player";
+    const latestRecordPlayer = records[0]?.players.find((player) => player.playerId === normalizedPlayerId);
+    const latestPlayerName = (latestRecordPlayer?.name ?? displayName.trim()) || "Player";
 
     for (const record of records) {
       if (record.recordStatus === "verified") {
@@ -215,7 +221,7 @@ export class GameRecordStore {
     return {
       displayName: latestPlayerName,
       generatedAt: this.now(),
-      identity: "guest",
+      identity: latestRecordPlayer?.identity ?? fallbackIdentity,
       playerId: normalizedPlayerId,
       recentRecords: records.map((record) => getPlayerRecordSummary(record, normalizedPlayerId)),
       stats

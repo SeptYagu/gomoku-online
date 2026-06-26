@@ -88,6 +88,23 @@ describe("RoomStore", () => {
     expect(matched.players[0]).toMatchObject({ name: "Alice", seat: "black" });
   });
 
+  it("deletes room records explicitly for transport-level zombie cleanup", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    expect(store.listRoomCodes()).toEqual([created.code]);
+
+    const deleted = store.deleteRoom(" room01 ");
+
+    expect(deleted?.code).toBe(created.code);
+    expect(store.listRoomCodes()).toEqual([]);
+    expect(store.getSnapshot(created.code)).toMatchObject({
+      ok: false,
+      error: { code: "room-not-found" }
+    });
+    expect(store.deleteRoom(created.code)).toBeNull();
+  });
+
   it("derives live user presence from connection and room state", () => {
     const store = createTestRoomStore(["ROOM01"]);
 
@@ -145,6 +162,7 @@ describe("RoomStore", () => {
       }
     ]);
     expect(store.getParticipantRole(created.code, "player-3")).toEqual({
+      identity: "guest",
       name: "Cara",
       role: "spectator",
       seat: null
@@ -200,6 +218,7 @@ describe("RoomStore", () => {
     ]);
     expect(seated.spectators).toEqual([]);
     expect(store.getParticipantRole(created.code, "spectator-1")).toEqual({
+      identity: "guest",
       name: "Cara",
       role: "player",
       seat: "white"
@@ -228,6 +247,48 @@ describe("RoomStore", () => {
     expect(verified.record.recordStatus).toBe("verified");
     expect(verified.record.submissions.map((submission) => submission.seat)).toEqual(["black", "white"]);
     expect(store.listGameRecords()).toEqual([verified.record]);
+  });
+
+  it("preserves registered player identity in game records and profiles", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const created = expectOk(
+      store.createRoom({
+        identity: "registered",
+        playerId: "acct_alice",
+        playerName: "Alice Account"
+      })
+    );
+
+    expectOk(
+      store.joinRoom(created.code, {
+        identity: "registered",
+        playerId: "acct_bob",
+        playerName: "Bob Account"
+      })
+    );
+    expectOk(store.setPlayerReady(created.code, "acct_alice"));
+    const started = expectOk(store.setPlayerReady(created.code, "acct_bob"));
+    const finished = expectOk(store.resignGame(started.code, "acct_alice"));
+
+    expectOk(store.submitGameRecord(createGameRecordSubmission(finished, "acct_alice")));
+    const verified = expectOk(store.submitGameRecord(createGameRecordSubmission(finished, "acct_bob")));
+
+    expect(verified.record.players).toEqual([
+      expect.objectContaining({ identity: "registered", playerId: "acct_alice" }),
+      expect.objectContaining({ identity: "registered", playerId: "acct_bob" })
+    ]);
+    expect(store.getPlayerProfile("acct_bob", "Bob Account", 10, "registered")).toMatchObject({
+      identity: "registered",
+      stats: {
+        games: 1,
+        wins: 1
+      }
+    });
+    expect(store.getLeaderboard().entries[0]).toMatchObject({
+      displayName: "Bob Account",
+      identity: "registered",
+      wins: 1
+    });
   });
 
   it("keeps the authoritative game record when a client submission conflicts", () => {

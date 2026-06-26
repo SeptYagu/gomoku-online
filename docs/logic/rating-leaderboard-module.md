@@ -455,3 +455,34 @@ Game 增加：
 - 排行榜分页、搜索和增量事件。
 - 持久化 rating event 审计。
 - 注册用户和游客榜单隔离策略。
+
+## 当前落地：账号 / 注册玩家身份第一版（2026-06-25）
+
+已完成轻账号第一版，用于先打通 registered identity，而不是一次性引入完整登录系统：
+
+- 服务端新增 `AccountStore`：
+  - `POST /api/account/register` 签发账号 token。
+  - `GET /api/account/session` 校验 bearer token。
+  - 默认 JSONL 持久化到 `data/accounts/accounts.jsonl`。
+  - 只保存 token hash，不保存明文 token。
+- Socket.IO 入口支持 `accountToken`：
+  - `room:create`
+  - `room:join`
+  - `room:rejoin`
+  - `matchmaking:find`
+  - `presence:join`
+  - `public-chat:send`
+- 有效 token 由服务端解析为 registered `playerId` 和 `displayName`，忽略客户端伪造的 playerId/playerName。
+- `RoomStore` 内玩家、观战者、presence、服务端权威棋谱都保留 `identity`。
+- `GameRecordStore` 的 Profile 和 Leaderboard 读回会继承棋谱里的 `registered` / `guest` 身份。
+- 前端好友房面板新增账号条：
+  - 使用当前昵称注册轻账号。
+  - token 存入浏览器 localStorage。
+  - Sign out 后回到 guest。
+
+仍保留到后续小步：
+
+- 正式邮箱/密码/OAuth 登录。
+- 注册玩家 Profile 页面独立入口。
+- 游客榜和注册用户榜隔离策略。
+- 账号改名、合并、注销和 token 轮换。

@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Server } from "socket.io";
 import { describe, expect, it } from "vitest";
+import { AccountStore } from "./accounts";
 import type { GameRecordAck, PresenceAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
 import {
@@ -408,6 +409,47 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("closes room records that have no socket members before creating a new room", async () => {
+    const roomStore = new RoomStore();
+    const orphanResult = roomStore.createRoom({
+      playerId: "orphan-player",
+      playerName: "Orphan"
+    });
+
+    if (!orphanResult.ok) {
+      throw new Error(orphanResult.error.message);
+    }
+
+    const orphanRoomCode = orphanResult.value.code;
+    const harness = await createSocketHarness({ roomStore });
+
+    try {
+      const host = await harness.connectClient();
+      const lobby = await harness.connectClient();
+
+      const initialList = await emitAck<RoomListAck>(lobby, "lobby:join", { limit: 20 });
+      expect(initialList.ok ? initialList.value.rooms.some((room) => room.code === orphanRoomCode) : false).toBe(true);
+
+      const lobbySawOrphanDelete = waitForEventMatching<LobbyRoomDeletedEvent>(
+        lobby,
+        "lobby:room-deleted",
+        (event) => event.code === orphanRoomCode
+      );
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "fresh-player",
+        playerName: "Fresh"
+      });
+
+      expect(createAck.ok).toBe(true);
+      expect(await lobbySawOrphanDelete).toMatchObject({ code: orphanRoomCode });
+
+      const finalList = await emitAck<RoomListAck>(lobby, "lobby:list", { limit: 20 });
+      expect(finalList.ok ? finalList.value.rooms.some((room) => room.code === orphanRoomCode) : true).toBe(false);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("broadcasts live user presence as sockets enter rooms and games", async () => {
     const harness = await createSocketHarness();
 
@@ -663,6 +705,90 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("resolves account tokens into registered room and game record identity", async () => {
+    const accountStore = new AccountStore({ filePath: false });
+    const hostAccount = expectAccountOk(accountStore.createAccount({ displayName: "Account Host" }));
+    const guestAccount = expectAccountOk(accountStore.createAccount({ displayName: "Account Guest" }));
+    const harness = await createSocketHarness({ accountStore });
+
+    try {
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+
+      const createAck = await emitAck(host, "room:create", {
+        accountToken: hostAccount.token,
+        playerId: "spoofed-host",
+        playerName: "Spoofed Host"
+      });
+
+      expect(createAck).toMatchObject({
+        ok: true,
+        value: {
+          identity: "registered",
+          name: "Account Host",
+          playerId: hostAccount.playerId
+        }
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+
+      expect(
+        await emitAck(guest, "room:join", {
+          accountToken: guestAccount.token,
+          playerId: "spoofed-guest",
+          playerName: "Spoofed Guest",
+          roomCode
+        })
+      ).toMatchObject({
+        ok: true,
+        value: {
+          identity: "registered",
+          name: "Account Guest",
+          playerId: guestAccount.playerId
+        }
+      });
+      expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+
+      const finished = await emitAck<RoomAck>(host, "game:resign", { roomCode });
+
+      if (!finished.ok) {
+        throw new Error(finished.error.message);
+      }
+
+      expect(await emitAck<GameRecordAck>(host, "game-record:submit", createGameRecordPayload(finished.value.snapshot)))
+        .toMatchObject({
+          ok: true,
+          value: {
+            record: {
+              players: expect.arrayContaining([
+                expect.objectContaining({ identity: "registered", playerId: hostAccount.playerId })
+              ])
+            }
+          }
+        });
+      expect(await emitAck<GameRecordAck>(guest, "game-record:submit", createGameRecordPayload(finished.value.snapshot)))
+        .toMatchObject({
+          ok: true,
+          value: {
+            record: {
+              recordStatus: "verified",
+              players: [
+                expect.objectContaining({ identity: "registered", playerId: hostAccount.playerId }),
+                expect.objectContaining({ identity: "registered", playerId: guestAccount.playerId })
+              ]
+            }
+          }
+        });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("lets spectators sit in an open player seat through Socket.IO", async () => {
     const harness = await createSocketHarness();
 
@@ -787,7 +913,9 @@ describe("room socket handlers", () => {
   });
 });
 
-async function createSocketHarness(options: { lifecycleIntervalMs?: false | number; roomStore?: RoomStore } = {}) {
+async function createSocketHarness(
+  options: { accountStore?: AccountStore; lifecycleIntervalMs?: false | number; roomStore?: RoomStore } = {}
+) {
   const httpServer = createServer();
   const io = new Server(httpServer, {
     path: "/socket.io"
@@ -795,6 +923,7 @@ async function createSocketHarness(options: { lifecycleIntervalMs?: false | numb
   const clients: TestSocket[] = [];
 
   registerRoomSocketHandlers(io as unknown as RoomSocketServer, options.roomStore ?? new RoomStore(), {
+    accountStore: options.accountStore,
     lifecycleIntervalMs: options.lifecycleIntervalMs ?? false
   });
 
@@ -903,4 +1032,14 @@ function closeHttpServer(httpServer: HttpServer): Promise<void> {
       resolve();
     });
   });
+}
+
+function expectAccountOk<T>(result: { ok: true; value: T } | { ok: false; error: { message: string } }): T {
+  expect(result.ok).toBe(true);
+
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  return result.value;
 }

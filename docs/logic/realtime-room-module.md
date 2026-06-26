@@ -285,6 +285,8 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready；每次重开都会切换下一局先手，房主权限不随先手变化。
 - 断线/重连的核心连接状态标记已实现；刷新恢复通过 sessionStorage `playerId` + `roomCode` 完成，并兼容读取旧 localStorage 记录。
 - 显式 `room:leave`、同一 socket 创建新房、同一 socket 加入其他房间都会释放非 `playing` 旧座位；房间没有玩家和观战者时立即关闭。
+- `room:create` 前端增加同步 in-flight 锁，防止创建 ack 返回前连点发出多个创建请求。
+- Socket.IO 进房前会清理没有任何 socket 仍在房间频道里的僵尸房；即使服务端还残留房间记录，只要真实房间里没人，也会广播 `room:closed` 并从大厅列表移除。
 - 断线宽限期和超时判负已完成基础版：`playing` 中断线会设置 `disconnectDeadline`，默认宽限期 60 秒，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned，并在无人状态下清理房间。
 - 邀请链接已支持根路径保留房间参数：`/?room=ABC123` 会重定向为 `/en?room=ABC123`，前端加载后自动加入房间。
 - 正式 reconnect token 仍未做。
@@ -309,7 +311,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 浏览器双上下文创建、邀请 URL 加入、实时落子、非当前回合禁点、刷新恢复和断线提示。已手动验证。
 - 断线宽限期内可恢复。基础刷新恢复和 deadline 已覆盖；正式 reconnect token 未实现。
 - 宽限期后按规则处理。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`。
-- 重复创建房间会释放旧房；空 waiting 房立即关闭；根路径邀请链接可自动进房。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`、`tools/smoke-room-lifecycle.ts`、`tools/smoke-share-url.ts`。
+- 重复创建房间会释放旧房；空 waiting 房立即关闭；没有 socket 成员的僵尸房会在下一次进房前关闭；根路径邀请链接可自动进房。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`、`tools/smoke-room-lifecycle.ts`、`tools/smoke-share-url.ts`。
 
 ## 许可证边界
 

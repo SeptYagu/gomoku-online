@@ -1,4 +1,5 @@
 import type { Point } from "../game/types";
+import { AccountStore, resolvePlayerIdentity } from "./accounts";
 import type { GameRecordAck, PresenceAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import type { GameRecordClientSubmission } from "./game-records";
 import {
@@ -19,6 +20,12 @@ import {
 const LOBBY_ROOM = "lobby";
 const PRESENCE_ROOM = "presence";
 const PUBLIC_CHAT_ROOM = "public-chat";
+
+type PlayerAuthPayload = {
+  accountToken?: null | string;
+  playerId: string;
+  playerName: string;
+};
 
 export type ClientToServerEvents = {
   "game:move": (
@@ -41,9 +48,9 @@ export type ClientToServerEvents = {
   "lobby:leave": (payload: undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:list": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
   "matchmaking:cancel": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
-  "matchmaking:find": (payload: { playerId: string; playerName: string }, ack: (response: RoomAck) => void) => void;
+  "matchmaking:find": (payload: PlayerAuthPayload, ack: (response: RoomAck) => void) => void;
   "presence:join": (
-    payload: { includeOffline?: boolean; limit?: number; playerId: string; playerName: string },
+    payload: PlayerAuthPayload & { includeOffline?: boolean; limit?: number },
     ack: (response: PresenceAck) => void
   ) => void;
   "presence:leave": (payload: undefined, ack: (response: PresenceAck) => void) => void;
@@ -51,22 +58,22 @@ export type ClientToServerEvents = {
   "public-chat:join": (payload: undefined, ack: (response: PublicChatAck) => void) => void;
   "public-chat:leave": (payload: undefined, ack: (response: PublicChatAck) => void) => void;
   "public-chat:send": (
-    payload: { playerId: string; playerName: string; text: string },
+    payload: PlayerAuthPayload & { text: string },
     ack: (response: PublicChatAck) => void
   ) => void;
   "room:chat-send": (
     payload: { roomCode: string; text: string },
     ack: (response: RoomAck) => void
   ) => void;
-  "room:create": (payload: { playerId: string; playerName: string }, ack: (response: RoomAck) => void) => void;
+  "room:create": (payload: PlayerAuthPayload, ack: (response: RoomAck) => void) => void;
   "room:join": (
-    payload: { playerId: string; playerName: string; roomCode: string },
+    payload: PlayerAuthPayload & { roomCode: string },
     ack: (response: RoomAck) => void
   ) => void;
   "room:leave": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
   "room:ready": (payload: { ready: boolean; roomCode: string }, ack: (response: RoomAck) => void) => void;
   "room:rejoin": (
-    payload: { playerId: string; playerName: string; roomCode: string },
+    payload: PlayerAuthPayload & { roomCode: string },
     ack: (response: RoomAck) => void
   ) => void;
   "room:sit": (payload: { roomCode: string; seat?: "black" | "white" }, ack: (response: RoomAck) => void) => void;
@@ -91,6 +98,11 @@ type SocketData = {
 
 export type RoomSocketServer = {
   on: (event: "connection", listener: (socket: RoomSocket) => void) => void;
+  sockets: {
+    adapter: {
+      rooms: Map<string, Set<string>>;
+    };
+  };
   to: (roomCode: string) => {
     emit: <Event extends keyof ServerToClientEvents>(
       event: Event,
@@ -100,6 +112,7 @@ export type RoomSocketServer = {
 };
 
 type RegisterRoomSocketOptions = {
+  accountStore?: AccountStore;
   lifecycleIntervalMs?: false | number;
 };
 
@@ -128,6 +141,7 @@ export function registerRoomSocketHandlers(
   roomStore = new RoomStore(),
   options: RegisterRoomSocketOptions = {}
 ) {
+  const accountStore = options.accountStore ?? new AccountStore({ filePath: false });
   const lifecycleIntervalMs = options.lifecycleIntervalMs ?? 10_000;
 
   if (lifecycleIntervalMs !== false) {
@@ -138,36 +152,64 @@ export function registerRoomSocketHandlers(
 
   io.on("connection", (socket) => {
     socket.on("room:create", (payload, ack) => {
-      leaveRoomsBeforeEntry(io, socket, roomStore, payload.playerId);
-      const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(payload), payload.playerId);
+      const player = resolvePlayerIdentity(payload, accountStore);
+
+      if (!player.ok) {
+        acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
+        return;
+      }
+
+      leaveRoomsBeforeEntry(io, socket, roomStore, player.value.playerId);
+      const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(player.value), player.value.playerId);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("room:join", (payload, ack) => {
-      leaveRoomsBeforeEntry(io, socket, roomStore, payload.playerId, payload.roomCode);
+      const player = resolvePlayerIdentity(payload, accountStore);
+
+      if (!player.ok) {
+        acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
+        return;
+      }
+
+      leaveRoomsBeforeEntry(io, socket, roomStore, player.value.playerId, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
-        roomStore.joinRoom(payload.roomCode, payload),
-        payload.playerId
+        roomStore.joinRoom(payload.roomCode, player.value),
+        player.value.playerId
       );
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("room:rejoin", (payload, ack) => {
-      leaveRoomsBeforeEntry(io, socket, roomStore, payload.playerId, payload.roomCode);
+      const player = resolvePlayerIdentity(payload, accountStore);
+
+      if (!player.ok) {
+        acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
+        return;
+      }
+
+      leaveRoomsBeforeEntry(io, socket, roomStore, player.value.playerId, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
-        roomStore.reconnectRoom(payload.roomCode, payload),
-        payload.playerId
+        roomStore.reconnectRoom(payload.roomCode, player.value),
+        player.value.playerId
       );
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("matchmaking:find", (payload, ack) => {
-      leaveRoomsBeforeEntry(io, socket, roomStore, payload.playerId);
-      const response = handleJoinedRoom(socket, roomStore, roomStore.findMatch(payload), payload.playerId);
+      const player = resolvePlayerIdentity(payload, accountStore);
+
+      if (!player.ok) {
+        acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
+        return;
+      }
+
+      leaveRoomsBeforeEntry(io, socket, roomStore, player.value.playerId);
+      const response = handleJoinedRoom(socket, roomStore, roomStore.findMatch(player.value), player.value.playerId);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
@@ -200,8 +242,16 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("presence:join", (payload, ack) => {
+      const player = resolvePlayerIdentity(payload, accountStore);
+
+      if (!player.ok) {
+        acknowledgePresence(player, ack);
+        socket.emit("room:error", player.error);
+        return;
+      }
+
       socket.join(PRESENCE_ROOM);
-      acknowledgePresence(identifySocketPresence(socket, roomStore, payload), ack);
+      acknowledgePresence(identifySocketPresence(socket, roomStore, player.value), ack);
       broadcastPresence(io, roomStore);
     });
 
@@ -225,8 +275,15 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("public-chat:send", (payload, ack) => {
-      identifySocketPresence(socket, roomStore, payload);
-      acknowledgeAndBroadcastPublicChat(io, socket, roomStore.sendPublicChat(payload), ack);
+      const player = resolvePlayerIdentity(payload, accountStore);
+
+      if (!player.ok) {
+        acknowledgeAndBroadcastPublicChat(io, socket, player, ack);
+        return;
+      }
+
+      identifySocketPresence(socket, roomStore, player.value);
+      acknowledgeAndBroadcastPublicChat(io, socket, roomStore.sendPublicChat({ ...player.value, text: payload.text }), ack);
       broadcastPresence(io, roomStore);
     });
 
@@ -415,6 +472,8 @@ function leaveRoomsBeforeEntry(
     socket.leave(previousRoomCode);
     socket.data.roomCode = undefined;
   }
+
+  closeRoomsWithoutSocketMembers(io, roomStore);
 }
 
 function broadcastRoomCleanup(io: RoomSocketServer, roomStore: RoomStore, cleanup: RoomCleanupResult) {
@@ -429,6 +488,22 @@ function broadcastRoomCleanup(io: RoomSocketServer, roomStore: RoomStore, cleanu
 
   if (cleanup.updatedSnapshots.length > 0 || cleanup.deletedRoomCodes.length > 0) {
     broadcastPresence(io, roomStore);
+  }
+}
+
+function closeRoomsWithoutSocketMembers(io: RoomSocketServer, roomStore: RoomStore) {
+  for (const roomCode of roomStore.listRoomCodes()) {
+    const socketRoom = io.sockets.adapter.rooms.get(roomCode);
+
+    if (socketRoom && socketRoom.size > 0) {
+      continue;
+    }
+
+    const snapshot = roomStore.deleteRoom(roomCode);
+
+    if (snapshot) {
+      broadcastRoomClosed(io, roomStore, snapshot.code);
+    }
   }
 }
 
@@ -466,7 +541,11 @@ function handleJoinedRoom(
     return { ok: false, error: { code: "not-room-member", message: "Player is not in this room." } };
   }
 
-  identifySocketPresence(socket, roomStore, { playerId, playerName: participant.name });
+  identifySocketPresence(socket, roomStore, {
+    identity: participant.identity,
+    playerId,
+    playerName: participant.name
+  });
   socket.data.playerId = playerId;
   socket.data.roomCode = roomCode;
   socket.join(roomCode);
@@ -474,6 +553,7 @@ function handleJoinedRoom(
   return {
     ok: true,
     value: {
+      identity: participant.identity,
       playerId,
       name: participant.name,
       role: participant.role,
@@ -522,6 +602,7 @@ function runForCurrentPlayer(
     ok: true,
     value: {
       playerId,
+      identity: participant.identity,
       name: participant.name,
       role: participant.role,
       seat: participant.seat,
@@ -561,6 +642,7 @@ function runForCurrentMember(
     ok: true,
     value: {
       playerId,
+      identity: participant?.identity ?? "guest",
       name: participant?.name ?? "",
       role: participant?.role ?? "spectator",
       seat: participant?.seat ?? null,
@@ -708,7 +790,7 @@ function broadcastPresence(io: RoomSocketServer, roomStore: RoomStore) {
 function identifySocketPresence(
   socket: RoomSocket,
   roomStore: RoomStore,
-  input: { playerId: string; playerName: string }
+  input: { identity?: "guest" | "registered"; playerId: string; playerName: string }
 ): PresenceAck {
   const nextPlayerId = input.playerId.trim();
 

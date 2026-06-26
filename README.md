@@ -166,6 +166,12 @@ npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net
 ```
 
+账号身份第一版可跑 REST + Socket.IO 冒烟，确认注册账号、账号 token、注册玩家对局棋谱、Profile 和排行榜身份归属：
+
+```bash
+npm run smoke:account -- http://gomoku.yagu.ddns-ip.net
+```
+
 房间生命周期可跑 Socket.IO 冒烟，确认重复创建会关闭旧房、观战者可补空位、对局中断线 60 秒后判负：
 
 ```bash

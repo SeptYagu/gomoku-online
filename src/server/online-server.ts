@@ -1,9 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
+import type { AccountSession } from "./accounts";
 import type { LeaderboardQuery } from "./game-records";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
-import { roomStore } from "./room-store";
+import { accountStore, roomStore } from "./room-store";
 import type { PresenceListQuery, RoomListQuery } from "./rooms";
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
@@ -15,6 +16,10 @@ const handler = app.getRequestHandler();
 await app.prepare();
 
 const httpServer = createServer((request, response) => {
+  if (handleAccountApi(request, response)) {
+    return;
+  }
+
   if (handleRoomsApi(request, response)) {
     return;
   }
@@ -37,11 +42,64 @@ const io = new Server(httpServer, {
   path: "/socket.io"
 });
 
-registerRoomSocketHandlers(io as RoomSocketServer, roomStore);
+registerRoomSocketHandlers(io as RoomSocketServer, roomStore, { accountStore });
 
 httpServer.listen(port, hostname, () => {
   console.log(`Gomoku Online listening at http://${hostname}:${port} (${dev ? "development" : "production"})`);
 });
+
+function handleAccountApi(request: IncomingMessage, response: ServerResponse): boolean {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+  if (url.pathname !== "/api/account/register" && url.pathname !== "/api/account/session") {
+    return false;
+  }
+
+  void processAccountApiRequest(request, response, url).catch(() => {
+    writeJson(response, 500, { error: "Account request failed" });
+  });
+
+  return true;
+}
+
+async function processAccountApiRequest(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
+  if (url.pathname === "/api/account/register") {
+    if (request.method !== "POST") {
+      writeJson(response, 405, { error: "Method not allowed" }, { allow: "POST" });
+      return;
+    }
+
+    const body = await readJsonBody<{ displayName?: string }>(request);
+    const result = accountStore.createAccount({ displayName: body?.displayName ?? "" });
+
+    if (!result.ok) {
+      writeJson(response, result.error.code === "duplicate-name" ? 409 : 400, { error: result.error.message });
+      return;
+    }
+
+    writeAccountSession(response, result.value);
+    return;
+  }
+
+  if (request.method !== "GET") {
+    writeJson(response, 405, { error: "Method not allowed" }, { allow: "GET" });
+    return;
+  }
+
+  const token = getBearerToken(request);
+  const account = token ? accountStore.authenticate(token) : null;
+
+  if (!account || !token) {
+    writeJson(response, 401, { error: "Account session is invalid" });
+    return;
+  }
+
+  writeAccountSession(response, { ...account, token });
+}
+
+function writeAccountSession(response: ServerResponse, session: AccountSession): void {
+  writeJson(response, 200, session);
+}
 
 function handleRoomsApi(request: IncomingMessage, response: ServerResponse): boolean {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
@@ -51,19 +109,11 @@ function handleRoomsApi(request: IncomingMessage, response: ServerResponse): boo
   }
 
   if (request.method !== "GET") {
-    response.writeHead(405, {
-      "allow": "GET",
-      "content-type": "application/json; charset=utf-8"
-    });
-    response.end(JSON.stringify({ error: "Method not allowed" }));
+    writeJson(response, 405, { error: "Method not allowed" }, { allow: "GET" });
     return true;
   }
 
-  response.writeHead(200, {
-    "cache-control": "no-store",
-    "content-type": "application/json; charset=utf-8"
-  });
-  response.end(JSON.stringify(roomStore.listRooms(parseRoomListQuery(url))));
+  writeJson(response, 200, roomStore.listRooms(parseRoomListQuery(url)));
 
   return true;
 }
@@ -76,19 +126,11 @@ function handlePresenceApi(request: IncomingMessage, response: ServerResponse): 
   }
 
   if (request.method !== "GET") {
-    response.writeHead(405, {
-      "allow": "GET",
-      "content-type": "application/json; charset=utf-8"
-    });
-    response.end(JSON.stringify({ error: "Method not allowed" }));
+    writeJson(response, 405, { error: "Method not allowed" }, { allow: "GET" });
     return true;
   }
 
-  response.writeHead(200, {
-    "cache-control": "no-store",
-    "content-type": "application/json; charset=utf-8"
-  });
-  response.end(JSON.stringify(roomStore.listPresence(parsePresenceListQuery(url))));
+  writeJson(response, 200, roomStore.listPresence(parsePresenceListQuery(url)));
 
   return true;
 }
@@ -101,19 +143,11 @@ function handleLeaderboardApi(request: IncomingMessage, response: ServerResponse
   }
 
   if (request.method !== "GET") {
-    response.writeHead(405, {
-      "allow": "GET",
-      "content-type": "application/json; charset=utf-8"
-    });
-    response.end(JSON.stringify({ error: "Method not allowed" }));
+    writeJson(response, 405, { error: "Method not allowed" }, { allow: "GET" });
     return true;
   }
 
-  response.writeHead(200, {
-    "cache-control": "no-store",
-    "content-type": "application/json; charset=utf-8"
-  });
-  response.end(JSON.stringify(roomStore.getLeaderboard(parseLeaderboardQuery(url))));
+  writeJson(response, 200, roomStore.getLeaderboard(parseLeaderboardQuery(url)));
 
   return true;
 }
@@ -126,39 +160,79 @@ function handleProfileApi(request: IncomingMessage, response: ServerResponse): b
   }
 
   if (request.method !== "GET") {
-    response.writeHead(405, {
-      "allow": "GET",
-      "content-type": "application/json; charset=utf-8"
-    });
-    response.end(JSON.stringify({ error: "Method not allowed" }));
+    writeJson(response, 405, { error: "Method not allowed" }, { allow: "GET" });
     return true;
   }
 
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
 
   if (!playerId) {
-    response.writeHead(400, {
-      "cache-control": "no-store",
-      "content-type": "application/json; charset=utf-8"
-    });
-    response.end(JSON.stringify({ error: "playerId is required" }));
+    writeJson(response, 400, { error: "playerId is required" });
     return true;
   }
 
   const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
   const playerName = url.searchParams.get("name") ?? undefined;
+  const token = getBearerToken(request);
+  const account = token ? accountStore.authenticate(token) : null;
+  const identity = account?.playerId === playerId ? account.identity : undefined;
 
-  response.writeHead(200, {
-    "cache-control": "no-store",
-    "content-type": "application/json; charset=utf-8"
-  });
-  response.end(
-    JSON.stringify(
-      roomStore.getPlayerProfile(playerId, playerName, Number.isFinite(rawLimit) ? rawLimit : undefined)
-    )
+  writeJson(
+    response,
+    200,
+    roomStore.getPlayerProfile(playerId, playerName, Number.isFinite(rawLimit) ? rawLimit : undefined, identity)
   );
 
   return true;
+}
+
+function getBearerToken(request: IncomingMessage): string {
+  const authorization = request.headers.authorization ?? "";
+  const match = /^Bearer\s+(.+)$/i.exec(Array.isArray(authorization) ? authorization[0] : authorization);
+
+  return match?.[1]?.trim() ?? "";
+}
+
+function readJsonBody<T>(request: IncomingMessage): Promise<T | null> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+
+    request.setEncoding("utf8");
+    request.on("data", (chunk: string) => {
+      body += chunk;
+
+      if (body.length > 4096) {
+        request.destroy(new Error("Request body too large"));
+      }
+    });
+    request.on("end", () => {
+      if (!body.trim()) {
+        resolve(null);
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(body) as T);
+      } catch {
+        resolve(null);
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function writeJson(
+  response: ServerResponse,
+  statusCode: number,
+  body: unknown,
+  headers: Record<string, string> = {}
+): void {
+  response.writeHead(statusCode, {
+    ...headers,
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8"
+  });
+  response.end(JSON.stringify(body));
 }
 
 function parseLeaderboardQuery(url: URL): LeaderboardQuery {

@@ -2744,3 +2744,139 @@ b6faf9e
 - 小步 11：排行榜第一版，完成并通过真实服务器验证。
 - 用户刚反馈的“空房关闭、不能一直点创建新房”：本轮前端已禁用已在房间时继续创建/匹配，线上 `smoke:room-lifecycle` 已验证重复创建会关闭旧房。
 - 下一步：阶段 3 后续小步继续推进账号/注册玩家身份、正式 Profile/Ranking、Game records 回看和更多 PlayOK 式用户功能。
+
+## 57. 2026-06-25 阶段 3 小步 12：账号 / 注册玩家身份本地完成
+
+本轮目标：
+
+- 按阶段 3 build plan 继续推进账号/注册玩家身份第一版。
+- 暂不接邮件 magic link、OAuth 或密码系统；先完成可用的服务器签发 token 轻账号。
+- 注册玩家对局结束后，棋谱、Profile 和 Leaderboard 都应归属为 `registered`。
+- 游客路径继续保持可玩，guest 棋谱继续提交和保存。
+
+实际完成：
+
+- `src/server/accounts.ts`：
+  - 新增 `AccountStore`、`AccountSession`、`resolvePlayerIdentity()`。
+  - 账号 JSONL 持久化，默认路径 `data/accounts/accounts.jsonl`。
+  - 只保存 token hash，不保存明文 token。
+- `src/server/room-store.ts`：
+  - 新增生产 `accountStore` 单例。
+  - 支持 `GOMOKU_ACCOUNTS_PATH` 覆盖账号持久化路径。
+- `src/server/online-server.ts`：
+  - 新增 `POST /api/account/register`。
+  - 新增 `GET /api/account/session`。
+  - `/api/profile` 支持 bearer token 验证 registered 身份。
+  - `registerRoomSocketHandlers()` 传入 `accountStore`。
+- `src/server/room-socket.ts`：
+  - `room:create`、`room:join`、`room:rejoin`、`matchmaking:find`、`presence:join` 和 `public-chat:send` 支持 `accountToken`。
+  - 有效 token 会由服务器解析账号 id/displayName/registered identity，忽略客户端伪造的 playerId/playerName。
+  - Room ack 返回 `identity`。
+- `src/server/rooms.ts`、`src/server/game-records.ts`：
+  - 房间玩家、观战者、presence 和服务端权威棋谱保留 `identity`。
+  - `getPlayerProfile()` 支持 registered fallback identity，并优先使用最近棋谱里的身份。
+  - Leaderboard entry 继承棋谱身份。
+- `src/components/useFriendRoom.ts`、`src/components/GameShell.tsx`、`src/app/globals.css`：
+  - 好友房面板新增账号条。
+  - 可用当前昵称注册轻账号，token 存入 localStorage。
+  - 创建、加入、匹配、presence、公共聊天和 Profile 刷新会使用 registered 身份。
+  - Sign out 回到 guest 身份。
+- `src/i18n/dictionaries.ts`：
+  - 六语言新增账号条文案。
+- `src/server/accounts.test.ts`、`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`：
+  - 覆盖账号持久化、token hash、不接受坏 token、注册身份棋谱/Profile/Leaderboard、socket token 解析。
+- `tools/smoke-account.ts`、`package.json`、`README.md`：
+  - 新增 `npm run smoke:account`。
+  - 覆盖真实服务器注册账号、账号 token、注册玩家棋谱、Profile 和 Leaderboard 归属。
+
+本地验证：
+
+- `npm test`：通过，7 个测试文件、84 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3040 npm run start:online` 后运行 `npm run smoke:account -- http://127.0.0.1:3040`，通过。
+  - `PASS register host - acct_R2ng0dty0II`
+  - `PASS register guest - acct_H6zhL_VhqcI`
+  - `PASS account session verify`
+  - `PASS registered record verified - BDFQD2-1`
+  - `PASS registered profile readback`
+  - `PASS registered leaderboard readback`
+- 本地生产服务：`npm run smoke:leaderboard -- http://127.0.0.1:3040`，通过。
+  - `PASS submitted verified ranked record - C5T2R5-1`
+  - `PASS leaderboard readback - C5T2R5-1`
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3040`，通过，继续覆盖三客户端三局、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:account`、`smoke:leaderboard` 和必要联机回归。
+
+## 58. 2026-06-25 阶段 3 小步 12 补强：空房关闭和防重复创建
+
+本轮新增用户反馈：
+
+- 房间里没有人的话，需要关房。
+- 当前可一直点创建新房，产生多个新房。
+
+处理原则：
+
+- 不修改过去 handoff 内容，只追加本段记录。
+- 继续把这项并入阶段 3 小步 12 的本地完成内容，提交前一并验证。
+
+实际完成：
+
+- `.gitignore`
+  - 忽略运行态 `data/accounts/`，避免本地账号 smoke 生成的账号 JSONL 数据误提交。
+- `src/components/useFriendRoom.ts`
+  - `room:create` 增加同步 `createRequestInFlightRef` 锁。
+  - 在 ack 返回前，即使用户连续点击，后续点击也不会再发出新的 `room:create`。
+- `src/server/rooms.ts`
+  - 新增 `listRoomCodes()`。
+  - 新增 `deleteRoom()`，给 Socket.IO transport 层显式关闭僵尸房使用。
+- `src/server/room-socket.ts`
+  - 每次 `room:create`、`room:join`、`room:rejoin`、`matchmaking:find` 进入新房前，扫描所有房间码。
+  - 如果 Socket.IO adapter 中对应房间频道没有任何 socket 成员，则删除该房间记录。
+  - 删除时广播 `room:closed` 和 `lobby:room-deleted`。
+- `src/server/rooms.test.ts`
+  - 新增显式删除房间记录的单元测试。
+- `src/server/room-socket.test.ts`
+  - 新增“服务端残留房间记录但没有 socket 成员时，下一次创建房间前自动关闭”的测试。
+- `tools/smoke-room-lifecycle.ts`
+  - 新增等待房创建者直接断开后，房间从 `/api/rooms` 消失的真实 Socket.IO/HTTP 检查。
+- `docs/logic/realtime-room-module.md`
+  - 补记防连点创建和 transport 僵尸房清理规则。
+- `docs/logic/rating-leaderboard-module.md`
+  - 补记账号 / registered identity 第一版。
+- `docs/STAGE_3_PLAN.md`
+  - 小步 12 改为账号 / 注册玩家身份第一版，并追加后续 Profile、榜单隔离、棋谱回看方向。
+
+本地验证：
+
+- `npm test`：通过，7 个测试文件、86 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3041 npm run start:online`。
+- `npm run smoke:room-lifecycle -- http://127.0.0.1:3041`：通过。
+  - `PASS repeated create closes previous room - RWQUYP -> R8PNJY`
+  - `PASS same player create closes previous room - DV9H6W -> B25627`
+  - `PASS empty waiting room closes on disconnect - YH89E5`
+  - `PASS spectator sits in open seat - ZWKVMR`
+  - `PASS disconnect timeout forfeit - 7MEY6S`
+- `npm run smoke:account -- http://127.0.0.1:3041`：通过。
+  - `PASS register host - acct_eQ20PWKdNuk`
+  - `PASS register guest - acct_IvDmwRquGGQ`
+  - `PASS account session verify`
+  - `PASS registered record verified - GCPWX2-1`
+  - `PASS registered profile readback`
+  - `PASS registered leaderboard readback`
+- `npm run smoke:leaderboard -- http://127.0.0.1:3041`：通过。
+  - `PASS submitted verified ranked record - B9PZVA-1`
+  - `PASS leaderboard readback - B9PZVA-1`
+- `npm run smoke:online-room -- http://127.0.0.1:3041`：通过，继续覆盖三客户端三局、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:account`、`smoke:room-lifecycle`、`smoke:leaderboard` 和 `smoke:online-room`。

@@ -1,4 +1,5 @@
 import type { Stone } from "../game/types";
+import type { PlayerIdentityKind } from "./accounts";
 import type { GameRecordSubmitResult } from "./game-records";
 import type {
   PresenceSnapshot,
@@ -10,6 +11,7 @@ import type {
 } from "./rooms";
 
 export type RoomClientState = {
+  identity: PlayerIdentityKind;
   name: string;
   playerId: string;
   role: RoomParticipantRole;
