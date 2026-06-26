@@ -274,6 +274,32 @@ async function waitForProfileReplay(cdp: CdpClient): Promise<void> {
 
     return bodyText.includes("Move 2 / 3") ? true : null;
   }, STEP_TIMEOUT_MS);
+
+  const download = await evaluate<{ download: string; hrefPrefix: string; ok: boolean; text: string }>(
+    cdp,
+    `(() => {
+      const link = document.querySelector(".profile-record-download");
+
+      if (!(link instanceof HTMLAnchorElement)) {
+        return { download: "", hrefPrefix: "", ok: false, text: document.body ? document.body.innerText : "" };
+      }
+
+      return {
+        download: link.download,
+        hrefPrefix: link.href.slice(0, 42),
+        ok: true,
+        text: (link.textContent || "").trim()
+      };
+    })()`
+  );
+
+  assert(download.ok, "profile SGF download link should exist");
+  assert(download.text.includes("Download SGF"), "profile SGF download link should be labeled");
+  assert(download.download.endsWith(".sgf"), "profile SGF download filename should end with .sgf");
+  assert(
+    download.hrefPrefix.startsWith("data:application/x-go-sgf;charset=utf-8,"),
+    "profile SGF download should use a data URL"
+  );
 }
 
 async function evaluate<T>(cdp: CdpClient, expression: string): Promise<T> {

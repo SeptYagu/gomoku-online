@@ -818,6 +818,18 @@ h1 {
   gap: 6px;
 }
 
+.profile-record-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.profile-record-download {
+  min-height: 36px;
+}
+
 .profile-replay-controls {
   align-items: center;
   display: grid;

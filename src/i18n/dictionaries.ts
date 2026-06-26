@@ -45,6 +45,7 @@ export type GameDictionary = {
     createOrJoin: string;
     createRoom: string;
     disconnected: string;
+    downloadSgf: string;
     findMatch: string;
     finishAbandoned: string;
     finishDisconnect: string;
@@ -218,6 +219,7 @@ const en = {
       createOrJoin: "Create a room or enter a code.",
       createRoom: "Create room",
       disconnected: "Disconnected",
+      downloadSgf: "Download SGF",
       findMatch: "Find match",
       finishAbandoned: "Abandoned",
       finishDisconnect: "Disconnect",
@@ -387,6 +389,7 @@ const zh = {
       createOrJoin: "创建房间或输入房间码。",
       createRoom: "创建房间",
       disconnected: "已断开",
+      downloadSgf: "下载 SGF",
       findMatch: "随机匹配",
       finishAbandoned: "中止",
       finishDisconnect: "断线",
@@ -556,6 +559,7 @@ const fr = {
       createOrJoin: "Créez un salon ou entrez un code.",
       createRoom: "Créer un salon",
       disconnected: "Déconnecté",
+      downloadSgf: "Télécharger SGF",
       findMatch: "Trouver une partie",
       finishAbandoned: "Abandon",
       finishDisconnect: "Déconnexion",
@@ -725,6 +729,7 @@ const es = {
       createOrJoin: "Crea una sala o introduce un código.",
       createRoom: "Crear sala",
       disconnected: "Desconectado",
+      downloadSgf: "Descargar SGF",
       findMatch: "Buscar partida",
       finishAbandoned: "Abandonada",
       finishDisconnect: "Desconexión",
@@ -894,6 +899,7 @@ const ru = {
       createOrJoin: "Создайте комнату или введите код.",
       createRoom: "Создать комнату",
       disconnected: "Отключен",
+      downloadSgf: "Скачать SGF",
       findMatch: "Найти игру",
       finishAbandoned: "Прервана",
       finishDisconnect: "Отключение",
@@ -1063,6 +1069,7 @@ const ar = {
       createOrJoin: "أنشئ غرفة أو أدخل رمزا.",
       createRoom: "إنشاء غرفة",
       disconnected: "غير متصل",
+      downloadSgf: "تنزيل SGF",
       findMatch: "بحث عن مباراة",
       finishAbandoned: "متروكة",
       finishDisconnect: "انقطاع",

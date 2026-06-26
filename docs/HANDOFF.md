@@ -3394,3 +3394,53 @@ b6faf9e
 下一步：
 
 - 阶段 3 继续推进棋谱下载入口、开局库分析流程接入、账号完整化，以及后续 PlayOK 式用户功能。
+
+## 68. 2026-06-26 阶段 3 小步 17 本地完成：单局 SGF 下载入口
+
+本轮目标：
+
+- 按阶段 3 主线继续推进棋谱下载入口。
+- Profile / Game records 页面每条棋谱都能下载单局 SGF。
+- 保持 handoff 追加规则，不修改过去窗口记录。
+
+实现记录：
+
+- `src/game/game-record-sgf.ts`
+  - 新增浏览器可用的单局 SGF 序列化 helper。
+  - 从 `PlayerGameRecordSummary` 和当前 Profile 玩家名生成 SGF。
+  - 按 `playerSeat` 推断 `PB` / `PW`。
+  - 写入 `GN`、`EV`、`DT`、`RE` 和 record status / finish reason / moveSeq / playerSeat / result 注释。
+  - 新增 SGF data URL 和安全 `.sgf` 文件名 helper。
+- `src/game/game-record-sgf.test.ts`
+  - 覆盖姓名推断、结果、坐标、注释字段、data URL 和文件名安全化。
+- `src/components/profile/PlayerProfilePage.tsx`
+  - Profile 棋谱卡片新增 `Download SGF` 入口。
+  - 下载使用 anchor `download` 属性和 data URL，不依赖额外 API。
+- `src/app/globals.css`
+  - 新增棋谱卡片动作区和下载按钮样式。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增 `downloadSgf` 文案。
+- `tools/smoke-profile-page.ts`
+  - 浏览器冒烟在 Profile 读回和逐手回放之外，验证 SGF 下载链接、`.sgf` 文件名和 data URL。
+- `README.md`、`docs/STAGE_3_PROGRESS.md`、`docs/logic/rating-leaderboard-module.md`
+  - 记录本小步范围和验证结果。
+
+本地验证：
+
+- `npx vitest run src/game/game-record-sgf.test.ts src/game/record-replay.test.ts`：通过，2 个测试文件、4 个测试用例。
+- `npm run lint`：通过。
+- `npm test`：通过，10 个测试文件、96 个测试用例。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3047 npm run start:online`。
+- `npm run smoke:profile-page -- http://127.0.0.1:3047`：通过。
+  - `PASS profile page readback - 5CYUK6-1`
+  - 脚本验证了 Profile 页面回放从 `Move 3 / 3` 点击上一手变成 `Move 2 / 3`。
+  - 脚本验证了 `Download SGF` 链接、`.sgf` 文件名和 `data:application/x-go-sgf` URL。
+- `npm run smoke:profile-records -- http://127.0.0.1:3047`：通过。
+  - `PASS profile readback - V5YWYR-1`
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：等待真实服务器部署新版后，运行 `verify:online`、`smoke:profile-page` 和 `smoke:profile-records`。

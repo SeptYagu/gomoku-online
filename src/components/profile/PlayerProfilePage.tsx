@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, UserRound } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, RefreshCw, UserRound } from "lucide-react";
+import {
+  createSgfDataUrl,
+  getProfileRecordSgfFileName,
+  serializeProfileRecordToSgf
+} from "@/game/game-record-sgf";
 import { replayBoardAtMove } from "@/game/record-replay";
 import type { Board, Move } from "@/game/types";
 import type { Locale } from "@/i18n/config";
@@ -148,7 +153,7 @@ export function PlayerProfilePage({ dictionary, initialName, locale, playerId }:
         {records.length > 0 ? (
           <div className="profile-record-grid">
             {records.map((record) => (
-              <ProfileRecordCard key={record.gameId} labels={labels} record={record} />
+              <ProfileRecordCard key={record.gameId} labels={labels} playerName={displayName} record={record} />
             ))}
           </div>
         ) : (
@@ -167,15 +172,20 @@ function ProfileStat({ label }: { label: string }) {
 
 function ProfileRecordCard({
   labels,
+  playerName,
   record
 }: {
   labels: GameDictionary["room"];
+  playerName: string;
   record: PlayerGameRecordSummary;
 }) {
   const [replayMove, setReplayMove] = useState(record.moves.length);
   const currentMove = Math.min(record.moves.length, Math.max(0, replayMove));
   const replayBoard = useMemo(() => replayBoardAtMove(record.moves, currentMove), [currentMove, record.moves]);
   const lastMove = currentMove > 0 ? record.moves[currentMove - 1] : null;
+  const sgf = useMemo(() => serializeProfileRecordToSgf(record, playerName), [playerName, record]);
+  const sgfHref = useMemo(() => createSgfDataUrl(sgf), [sgf]);
+  const sgfFileName = useMemo(() => getProfileRecordSgfFileName(record), [record]);
 
   return (
     <article className={`profile-record-card ${record.result}`}>
@@ -199,6 +209,12 @@ function ProfileRecordCard({
           <span>{labels.recordMoves.replace("{count}", String(record.moveSeq))}</span>
           <span>{getRecordStatusLabel(record.recordStatus, labels)}</span>
           <span>{record.playerSeat === "black" ? labels.blackSeat : labels.whiteSeat}</span>
+        </div>
+        <div className="profile-record-actions">
+          <a className="mode-pill profile-record-download" download={sgfFileName} href={sgfHref}>
+            <Download aria-hidden="true" focusable={false} />
+            {labels.downloadSgf}
+          </a>
         </div>
         <div className="profile-replay-controls">
           <button

@@ -554,7 +554,25 @@ Game 增加：
 
 仍保留到后续小步：
 
-- 在页面内提供单局 SGF 下载按钮。
+- 将导出的棋谱池接入自动开局库分析 / 统计 / 筛线流程。
+- 排行榜分页、搜索和增量事件。
+- 正式邮箱/密码/OAuth 登录。
+
+## 当前落地：单局 SGF 下载入口（2026-06-26）
+
+本轮补齐 Profile / Game records 页面内的单局下载：
+
+- 新增 client-safe `src/game/game-record-sgf.ts`：
+  - 从 `PlayerGameRecordSummary` 和当前 Profile 玩家名生成单局 SGF。
+  - 按 `playerSeat` 推断黑白双方姓名。
+  - 写入 `gameId`、`roomCode`、日期、结果、record status、finish reason、手数和玩家视角结果。
+  - 生成浏览器可下载的 `data:application/x-go-sgf` URL。
+  - 生成安全的 `.sgf` 文件名。
+- Profile 页面每张棋谱卡片新增 Download SGF 入口。
+- `tools/smoke-profile-page.ts` 验证 Profile 页面读回、逐手回放、下载链接文本、`.sgf` 文件名和 SGF data URL。
+
+仍保留到后续小步：
+
 - 将导出的棋谱池接入自动开局库分析 / 统计 / 筛线流程。
 - 排行榜分页、搜索和增量事件。
 - 正式邮箱/密码/OAuth 登录。

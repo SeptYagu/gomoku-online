@@ -166,7 +166,7 @@ Profile 页面入口可跑浏览器冒烟，确认注册玩家正式 Profile 页
 npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net
 ```
 
-该冒烟也会检查 Profile 页面里的棋谱逐手回放控件。
+该冒烟也会检查 Profile 页面里的棋谱逐手回放控件和单局 SGF 下载入口。
 
 服务器已保存的在线棋谱可以导出为 SGF 或 JSONL，供后续离线分析和开局库候选筛选：
 
