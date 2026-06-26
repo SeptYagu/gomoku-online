@@ -223,7 +223,7 @@
 
 ## 小步 8：在线棋谱提交、去重和匿名/注册记录保存
 
-状态：本地完成，待推送并等待真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 目标：
 
@@ -276,6 +276,38 @@
 - 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3036`，通过。
 - 本地生产服务：`npm run smoke:matchmaking -- http://127.0.0.1:3036`，通过。
 - 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3036`，通过。
+
+线上验证：
+
+- 本轮提交：`7511cd7 Implement stage 3 game record submission`。
+- `7511cd7` 已推送到 `origin/main`。
+- 第一次等待 90 秒后，真实服务器仍显示 `version 688904f`；第二次等待 90 秒后，真实服务器显示 `version 7511cd7`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 7511cd7`：通过。
+- 真实服务器：`npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS first submit partial - Y7VH6Q-1`
+  - `PASS second submit verified - Y7VH6Q-1`
+  - `PASS duplicate submit deduped - Y7VH6Q-1`
+- 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过，继续覆盖三客户端三局流程、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS create room URL - P9XLNN`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+- 真实服务器：`npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`，顺序重跑通过。
+  - `PASS lobby room created - PNHC6E`
+  - `PASS lobby room joined - player count updated`
+  - `PASS lobby room playing - status updated`
+  - `PASS lobby room deleted - finished room hidden`
+- 真实服务器：`npm run smoke:matchmaking -- http://gomoku.yagu.ddns-ip.net`，顺序重跑通过。
+  - `PASS first find creates waiting room - A7VZMM`
+  - `PASS second find joins waiting room - A7VZMM`
+  - `PASS third find does not overfill - DQWKQX`
+  - `PASS cancel closes solo waiting match - DQWKQX`
+- 真实服务器：`npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS repeated create closes previous room - QLEM57 -> Y2XM6H`
+  - `PASS spectator sits in open seat - 3XWUJG`
+  - `PASS disconnect timeout forfeit - A38XDV`
+- 备注：第一次将 `smoke:lobby`、`smoke:matchmaking`、`smoke:share-url` 并行跑时，lobby/matchmaking 因测试脚本之间共享线上 waiting 房而互相干扰；随后顺序重跑通过。
 - 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
   - `PASS create room URL - W5H8F2`
   - `PASS copy invite - copied current URL`

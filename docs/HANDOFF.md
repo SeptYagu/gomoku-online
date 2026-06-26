@@ -2368,3 +2368,57 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：提交并推送小步 8，等待真实服务器更新后跑 `verify:online`、`smoke:game-records`、`smoke:online-room`、`smoke:lobby`、`smoke:matchmaking` 和 `smoke:share-url`。
+
+## 50. 2026-06-25 阶段 3 小步 8 线上验证补记
+
+本轮目标：
+
+- 按 handoff 追加规则，补记阶段 3 小步 8 在线棋谱提交的推送和真实服务器验证结果。
+- 更新阶段 3 进度文件，把小步 8 标记为完成并通过真实服务器验证。
+
+实际结果：
+
+- 阶段 3 小步 8 在线棋谱提交提交：`7511cd7 Implement stage 3 game record submission`。
+- `7511cd7` 已推送到 `origin/main`。
+- 推送后第一次等待 90 秒，真实服务器仍显示 `version 688904f`。
+- 第二次等待 90 秒后，真实服务器显示 `version 7511cd7`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 7511cd7`：通过。
+- `npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS first submit partial - Y7VH6Q-1`
+  - `PASS second submit verified - Y7VH6Q-1`
+  - `PASS duplicate submit deduped - Y7VH6Q-1`
+- `npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`：通过，继续覆盖三客户端三局流程、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS create room URL - P9XLNN`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+- `npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`：顺序重跑通过。
+  - `PASS lobby room created - PNHC6E`
+  - `PASS lobby room joined - player count updated`
+  - `PASS lobby room playing - status updated`
+  - `PASS lobby room deleted - finished room hidden`
+- `npm run smoke:matchmaking -- http://gomoku.yagu.ddns-ip.net`：顺序重跑通过。
+  - `PASS first find creates waiting room - A7VZMM`
+  - `PASS second find joins waiting room - A7VZMM`
+  - `PASS third find does not overfill - DQWKQX`
+  - `PASS cancel closes solo waiting match - DQWKQX`
+- `npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS repeated create closes previous room - QLEM57 -> Y2XM6H`
+  - `PASS spectator sits in open seat - 3XWUJG`
+  - `PASS disconnect timeout forfeit - A38XDV`
+- 并行 smoke 备注：第一次将 `smoke:lobby`、`smoke:matchmaking`、`smoke:share-url` 并行跑时，lobby/matchmaking 因测试脚本之间共享线上 waiting 房而互相干扰；随后改为顺序重跑并通过。
+- `docs/STAGE_3_PROGRESS.md` 已更新小步 8 为完成并通过真实服务器验证。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 小步 8：在线棋谱提交、去重和 guest 棋谱保存，完成并通过真实服务器验证。
+- 联机回归修复：房间生命周期、补位和邀请链接，完成并通过真实服务器验证。
+- 下一步：阶段 3 小步 9，注册玩家 Profile 和 Game records 回看。
