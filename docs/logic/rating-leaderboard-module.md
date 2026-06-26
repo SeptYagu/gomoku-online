@@ -272,6 +272,15 @@ K 值：
 - 保存格式需要能无损转成 SGF，便于后续开局库生成和玩家回看。
 - “本地分析”指后续用户把服务器棋谱池导出到本地或离线分析流程，用于统计、筛选、训练/评估开局线和生成自有开局库；不是客户端浏览器本地保存策略，也不是当前阶段的浏览器内分析功能。
 
+当前小步 8 已实现第一版：
+
+- `RoomSnapshot.gameId` 按同一房间内局号递增，例如 `ABC123-1`、`ABC123-2`。
+- `RoomSnapshot.finishReason` 标记 `five`、`draw`、`resign`、`disconnect`、`abandoned`。
+- 客户端玩家看到 finished/abandoned 快照后自动提交 `game-record:submit`。
+- 服务端用 finalized server snapshot 作为权威棋谱，客户端提交只参与一致性校验和双方到齐去重。
+- `GameRecordStore` 以 append-only JSONL 保存记录状态更新，默认路径为 `data/game-records/records.jsonl`，可用 `GOMOKU_GAME_RECORDS_PATH` 覆盖。
+- 当前没有注册系统，保存的玩家身份为 `guest`；注册用户 Profile/Game records 回看留到小步 9。
+
 ### 排行榜 API
 
 推荐：
@@ -358,9 +367,9 @@ Game 增加：
 - 实现 `leaderboard:ratingChanged` 增量事件。
 - 实现当前用户 rating 专属更新。
 - 实现游客 rating 池。
-- 实现在线对局棋谱提交、去重、partial/verified/conflicted 状态流。
+- 实现在线对局棋谱提交、去重、partial/verified/conflicted 状态流。已完成第一版：`game-record:submit` + `GameRecordStore` JSONL。
 - 实现注册玩家 Profile 和 Game records 查询 API。
-- 实现匿名/guest game record 保存策略。
+- 实现匿名/guest game record 保存策略。已完成第一版：在线玩家以 guest identity 写入服务器棋谱池。
 
 ## 测试清单
 

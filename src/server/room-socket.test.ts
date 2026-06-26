@@ -2,7 +2,7 @@ import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Server } from "socket.io";
 import { describe, expect, it } from "vitest";
-import type { PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
+import type { GameRecordAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
 import {
   RoomStore,
@@ -447,6 +447,104 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("accepts and deduplicates online game record submissions through Socket.IO", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "record-host",
+        playerName: "Record Host"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+
+      expect(
+        await emitAck(guest, "room:join", {
+          playerId: "record-guest",
+          playerName: "Record Guest",
+          roomCode
+        })
+      ).toMatchObject({ ok: true });
+      expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+
+      const guestSawFinished = waitForEventMatching<RoomSnapshot>(
+        guest,
+        "room:state",
+        (snapshot) => snapshot.status === "finished" && snapshot.finishReason === "resign"
+      );
+      const resignAck = await emitAck(host, "game:resign", { roomCode });
+
+      if (!resignAck.ok) {
+        throw new Error(resignAck.error.message);
+      }
+
+      const finished = resignAck.value.snapshot;
+      await guestSawFinished;
+
+      const hostRecord = await emitAck<GameRecordAck>(
+        host,
+        "game-record:submit",
+        createGameRecordPayload(finished)
+      );
+
+      expect(hostRecord).toMatchObject({
+        ok: true,
+        value: {
+          duplicate: false,
+          record: {
+            finishReason: "resign",
+            recordStatus: "partial",
+            winner: "white"
+          }
+        }
+      });
+
+      const guestRecord = await emitAck<GameRecordAck>(
+        guest,
+        "game-record:submit",
+        createGameRecordPayload(finished)
+      );
+
+      expect(guestRecord).toMatchObject({
+        ok: true,
+        value: {
+          duplicate: false,
+          record: {
+            recordStatus: "verified",
+            submissions: [
+              expect.objectContaining({ playerId: "record-host" }),
+              expect.objectContaining({ playerId: "record-guest" })
+            ]
+          }
+        }
+      });
+
+      const duplicate = await emitAck<GameRecordAck>(host, "game-record:submit", createGameRecordPayload(finished));
+
+      expect(duplicate).toMatchObject({
+        ok: true,
+        value: {
+          duplicate: true,
+          record: {
+            recordStatus: "verified",
+            submissions: expect.any(Array)
+          }
+        }
+      });
+      expect(duplicate.ok ? duplicate.value.record.submissions : []).toHaveLength(2);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("lets spectators sit in an open player seat through Socket.IO", async () => {
     const harness = await createSocketHarness();
 
@@ -622,6 +720,23 @@ function emitAck<T = RoomAck>(socket: TestSocket, event: string, payload: unknow
   return new Promise((resolve) => {
     socket.emit(event, payload, resolve);
   });
+}
+
+function createGameRecordPayload(snapshot: RoomSnapshot) {
+  if (!snapshot.finishReason || (snapshot.status !== "finished" && snapshot.status !== "abandoned")) {
+    throw new Error("Snapshot must be finished before submitting a game record.");
+  }
+
+  return {
+    board: snapshot.board,
+    finishReason: snapshot.finishReason,
+    gameId: snapshot.gameId,
+    moveSeq: snapshot.moveSeq,
+    moves: snapshot.moves,
+    roomCode: snapshot.code,
+    status: snapshot.status,
+    winner: snapshot.winner
+  };
 }
 
 function waitForEvent<T = unknown>(socket: TestSocket, event: string): Promise<T> {

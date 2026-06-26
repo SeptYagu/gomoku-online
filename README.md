@@ -142,6 +142,12 @@ npm run smoke:room-chat -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:public-chat -- http://gomoku.yagu.ddns-ip.net
 ```
 
+在线棋谱提交可跑 Socket.IO 冒烟，确认双方提交后从 partial 合并为 verified，重复提交不会产生重复记录：
+
+```bash
+npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net
+```
+
 房间生命周期可跑 Socket.IO 冒烟，确认重复创建会关闭旧房、观战者可补空位、对局中断线 60 秒后判负：
 
 ```bash

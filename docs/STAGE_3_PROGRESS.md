@@ -220,6 +220,62 @@
   - `PASS lobby room deleted - finished room hidden`
   - `PASS REST room list hides finished room`
 - 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过，继续覆盖三客户端三局流程、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+
+## 小步 8：在线棋谱提交、去重和匿名/注册记录保存
+
+状态：本地完成，待推送并等待真实服务器验证。
+
+目标：
+
+- 在线对局结束后，双方客户端都向服务器提交 game record。
+- 服务端保存服务器权威棋谱，不信任客户端棋盘作为最终事实。
+- 只收到一方时记录为 `partial`。
+- 双方都提交且一致时合并为 `verified`。
+- 客户端提交不一致时保留服务器权威棋谱，并标记 `conflicted`。
+- 当前无注册系统，先以 `guest` 身份保存游客棋谱，进入服务器棋谱池。
+- 棋谱持久化保存，后续可导出做本地/离线分析和开局库。
+
+实现：
+
+- `src/server/game-records.ts`
+  - 新增 `GameRecordStore`。
+  - 使用 append-only JSONL 保存 game record 状态更新。
+  - 启动时可从 JSONL 重建最新记录状态。
+  - 记录状态包括 `partial`、`verified`、`conflicted`。
+- `src/server/rooms.ts`
+  - `RoomSnapshot` 新增 `gameId` 和 `finishReason`。
+  - 同一房间重开时递增 `gameId`，避免连续多局互相覆盖。
+  - 对五连、和棋、认输、断线超时和 abandoned 记录终局原因。
+  - 终局时捕获 finalized server snapshot，作为后续提交校验的权威棋谱。
+  - 新增 `submitGameRecord()` 和 `listGameRecords()`。
+- `src/server/room-socket.ts`、`src/server/room-contract.ts`
+  - 新增 `game-record:submit`。
+  - socket 层使用当前 socket 的 `playerId`，避免客户端伪造提交者。
+- `src/components/useFriendRoom.ts`
+  - 玩家端看到 finished/abandoned 房间快照后自动提交一次棋谱。
+  - 使用 `playerId + gameId` 防止同一客户端重复提交。
+- `src/server/room-store.ts`
+  - 生产端默认写入 `data/game-records/records.jsonl`。
+  - 可用 `GOMOKU_GAME_RECORDS_PATH` 覆盖保存路径。
+- `.gitignore`
+  - 忽略 `data/game-records/`，避免真实棋谱进入代码仓库。
+- `tools/smoke-game-records.ts`
+  - 覆盖双方提交、partial -> verified、重复提交去重。
+
+验证：
+
+- `npm test`：通过，6 个测试文件、73 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3036 npm start` 后运行 `npm run smoke:game-records -- http://127.0.0.1:3036`，通过。
+  - `PASS first submit partial - PDP52X-1`
+  - `PASS second submit verified - PDP52X-1`
+  - `PASS duplicate submit deduped - PDP52X-1`
+- 本地确认 JSONL 写入：`data/game-records/records.jsonl` 产生 2 行状态更新，第一行 partial，第二行 verified；本地 smoke 数据已清理。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3036`，通过。
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3036`，通过。
+- 本地生产服务：`npm run smoke:matchmaking -- http://127.0.0.1:3036`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3036`，通过。
 - 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
   - `PASS create room URL - W5H8F2`
   - `PASS copy invite - copied current URL`

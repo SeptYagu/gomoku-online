@@ -1,5 +1,6 @@
 import type { Point } from "../game/types";
-import type { PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
+import type { GameRecordAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
+import type { GameRecordClientSubmission } from "./game-records";
 import {
   RoomStore,
   type LobbyRoomDeletedEvent,
@@ -27,6 +28,10 @@ export type ClientToServerEvents = {
   "game:undo-respond": (
     payload: { accepted: boolean; requestId: string; roomCode: string },
     ack: (response: RoomAck) => void
+  ) => void;
+  "game-record:submit": (
+    payload: Omit<GameRecordClientSubmission, "playerId">,
+    ack: (response: GameRecordAck) => void
   ) => void;
   "lobby:join": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:leave": (payload: undefined, ack: (response: RoomListAck) => void) => void;
@@ -283,6 +288,27 @@ export function registerRoomSocketHandlers(
       );
     });
 
+    socket.on("game-record:submit", (payload, ack) => {
+      const playerId = socket.data.playerId;
+
+      if (!playerId) {
+        acknowledgeGameRecord(
+          socket,
+          {
+            ok: false,
+            error: {
+              code: "not-room-member",
+              message: "This socket has not joined a room."
+            }
+          },
+          ack
+        );
+        return;
+      }
+
+      acknowledgeGameRecord(socket, roomStore.submitGameRecord({ ...payload, playerId }), ack);
+    });
+
     socket.on("room:chat-send", (payload, ack) => {
       acknowledgeAndBroadcastRoomOnly(
         socket,
@@ -525,6 +551,14 @@ function acknowledgeAndBroadcastRoomOnly(socket: RoomSocket, response: RoomAck, 
   }
 
   socket.to(response.value.snapshot.code).emit("room:state", response.value.snapshot);
+}
+
+function acknowledgeGameRecord(socket: RoomSocket, response: GameRecordAck, ack: (response: GameRecordAck) => void) {
+  ack(response);
+
+  if (!response.ok) {
+    socket.emit("room:error", response.error);
+  }
 }
 
 function acknowledgeLobbyList(

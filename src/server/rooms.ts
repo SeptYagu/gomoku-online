@@ -1,6 +1,14 @@
 import { randomInt } from "node:crypto";
 import { createBoard, getGameResult, getOpponent, isValidMove, placeStone } from "../game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "../game/types";
+import {
+  GameRecordStore,
+  type AuthoritativeGameRecord,
+  type GameRecordClientSubmission,
+  type GameRecordFinishReason,
+  type GameRecordSubmitResult,
+  type SavedGameRecord
+} from "./game-records";
 
 export type RoomStatus = "waiting" | "ready" | "playing" | "finished" | "abandoned";
 
@@ -58,6 +66,8 @@ export type RoomSnapshot = {
   code: string;
   createdAt: number;
   currentTurn: Stone;
+  finishReason: GameRecordFinishReason | null;
+  gameId: string;
   hostSeat: RoomPlayerSeat;
   moveSeq: number;
   moves: Move[];
@@ -130,6 +140,9 @@ export type RoomErrorCode =
   | "chat-rate-limited"
   | "game-already-started"
   | "game-not-playing"
+  | "game-record-invalid"
+  | "game-record-not-finished"
+  | "game-record-not-found"
   | "invalid-player"
   | "invalid-room-code"
   | "not-room-host"
@@ -192,6 +205,9 @@ type RoomState = {
   code: string;
   createdAt: number;
   currentTurn: Stone;
+  finishReason: GameRecordFinishReason | null;
+  gameId: string;
+  gameNumber: number;
   hostSeat: RoomPlayerSeat;
   nextChatMessageId: number;
   nextStartingSeat: RoomPlayerSeat;
@@ -214,6 +230,7 @@ type RoomStoreOptions = {
   completedRoomTtlMs?: number;
   disconnectGraceMs?: number;
   emptyRoomTtlMs?: number;
+  gameRecordStore?: GameRecordStore;
   now?: () => number;
   roomTtlMs?: number;
 };
@@ -241,6 +258,8 @@ type RoomLifecycleLimits = {
 
 export class RoomStore {
   private readonly codeGenerator: () => string;
+  private readonly finalizedGames = new Map<string, AuthoritativeGameRecord>();
+  private readonly gameRecordStore: GameRecordStore;
   private readonly lifecycleLimits: RoomLifecycleLimits;
   private lobbyVersion = 0;
   private nextPublicChatMessageId = 1;
@@ -251,6 +270,7 @@ export class RoomStore {
 
   constructor(options: RoomStoreOptions = {}) {
     this.now = options.now ?? Date.now;
+    this.gameRecordStore = options.gameRecordStore ?? new GameRecordStore({ now: this.now });
     this.lifecycleLimits = {
       completedRoomTtlMs: Math.max(1, options.completedRoomTtlMs ?? COMPLETED_ROOM_TTL_MS),
       disconnectGraceMs: Math.max(1, options.disconnectGraceMs ?? DISCONNECT_GRACE_MS),
@@ -281,6 +301,9 @@ export class RoomStore {
       code,
       createdAt: now,
       currentTurn: "black",
+      finishReason: null,
+      gameId: `${code}-1`,
+      gameNumber: 1,
       hostSeat: "black",
       moveSeq: 0,
       moves: [],
@@ -584,6 +607,7 @@ export class RoomStore {
     }
     applyGameResult(room, result);
     room.updatedAt = this.now();
+    this.captureFinishedGame(room);
     this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
@@ -604,9 +628,11 @@ export class RoomStore {
 
     room.undoRequest = null;
     room.status = "finished";
+    room.finishReason = "resign";
     room.winner = getOpponent(player.seat);
     room.winLine = [];
     room.updatedAt = this.now();
+    this.captureFinishedGame(room);
     this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
@@ -739,6 +765,9 @@ export class RoomStore {
     }
 
     room.board = createBoard();
+    room.gameNumber += 1;
+    room.gameId = `${room.code}-${room.gameNumber}`;
+    room.finishReason = null;
     room.nextStartingSeat = getOpponent(room.nextStartingSeat);
     room.currentTurn = room.nextStartingSeat;
     room.moveSeq = 0;
@@ -914,7 +943,9 @@ export class RoomStore {
       return failure("room-not-found", "Room does not exist.");
     }
 
-    advanceRoomLifecycle(room, this.now(), this.lifecycleLimits);
+    if (advanceRoomLifecycle(room, this.now(), this.lifecycleLimits)) {
+      this.captureFinishedGame(room);
+    }
 
     if (this.deleteIfExpired(room, this.now())) {
       return failure("room-not-found", "Room does not exist.");
@@ -931,6 +962,7 @@ export class RoomStore {
       const changed = advanceRoomLifecycle(room, now, this.lifecycleLimits);
 
       if (changed) {
+        this.captureFinishedGame(room);
         this.markRoomListed(room);
       }
 
@@ -1002,6 +1034,36 @@ export class RoomStore {
     return success(getPublicChatSnapshot(this.publicChatMessages, now));
   }
 
+  submitGameRecord(input: GameRecordClientSubmission): RoomResult<GameRecordSubmitResult> {
+    const game = this.finalizedGames.get(input.gameId);
+
+    if (!game) {
+      return failure("game-record-not-found", "Finished game record is no longer available.");
+    }
+
+    if (input.roomCode.trim().toUpperCase() !== game.roomCode) {
+      return failure("game-record-invalid", "Submitted room code does not match this game.");
+    }
+
+    if (game.status !== "finished" && game.status !== "abandoned") {
+      return failure("game-record-not-finished", "Only finished online games can be submitted.");
+    }
+
+    if (!game.players.some((player) => player.playerId === input.playerId)) {
+      return failure("not-room-player", "Only players can submit this game record.");
+    }
+
+    try {
+      return success(this.gameRecordStore.submit(game, input));
+    } catch {
+      return failure("game-record-invalid", "Could not save the submitted game record.");
+    }
+  }
+
+  listGameRecords(limit?: number): SavedGameRecord[] {
+    return this.gameRecordStore.listRecords(limit);
+  }
+
   getPlayerSeat(roomCode: string, playerId: string): RoomPlayerSeat | null {
     const room = this.getRoom(roomCode);
 
@@ -1048,6 +1110,7 @@ export class RoomStore {
       }
 
       if (changed) {
+        this.captureFinishedGame(room);
         this.markRoomListed(room);
         updatedSnapshots.push(getRoomSnapshot(room));
       }
@@ -1083,7 +1146,9 @@ export class RoomStore {
       return null;
     }
 
-    advanceRoomLifecycle(room, this.now(), this.lifecycleLimits);
+    if (advanceRoomLifecycle(room, this.now(), this.lifecycleLimits)) {
+      this.captureFinishedGame(room);
+    }
 
     if (this.deleteIfExpired(room, this.now())) {
       return null;
@@ -1187,6 +1252,36 @@ export class RoomStore {
     room.listVersion = this.nextLobbyVersion();
   }
 
+  private captureFinishedGame(room: RoomState): void {
+    if (room.status !== "finished" && room.status !== "abandoned") {
+      return;
+    }
+
+    if (!room.finishReason) {
+      return;
+    }
+
+    this.finalizedGames.set(room.gameId, {
+      board: room.board,
+      createdAt: room.createdAt,
+      finishReason: room.finishReason,
+      finishedAt: room.updatedAt,
+      gameId: room.gameId,
+      moveSeq: room.moveSeq,
+      moves: room.moves,
+      players: room.players.map((player) => ({
+        identity: "guest",
+        name: player.name,
+        playerId: player.id,
+        seat: player.seat
+      })),
+      roomCode: room.code,
+      status: room.status,
+      winLine: room.winLine,
+      winner: room.winner
+    });
+  }
+
   private nextLobbyVersion(): number {
     this.lobbyVersion += 1;
     return this.lobbyVersion;
@@ -1203,6 +1298,7 @@ function applyGameResult(room: RoomState, result: GameStatus) {
   if (result.state === "playing") {
     room.status = "playing";
     room.currentTurn = result.nextPlayer;
+    room.finishReason = null;
     room.winner = null;
     room.winLine = [];
     return;
@@ -1211,11 +1307,13 @@ function applyGameResult(room: RoomState, result: GameStatus) {
   room.status = "finished";
 
   if (result.state === "won") {
+    room.finishReason = "five";
     room.winner = result.winner;
     room.winLine = result.line;
     return;
   }
 
+  room.finishReason = "draw";
   room.winner = null;
   room.winLine = [];
 }
@@ -1381,6 +1479,7 @@ function shouldDeleteRoom(room: RoomState, now: number, limits: RoomLifecycleLim
 
 function finishRoomByDisconnect(room: RoomState, winner: Stone, now: number) {
   room.status = "finished";
+  room.finishReason = "disconnect";
   room.undoRequest = null;
   room.winner = winner;
   room.winLine = [];
@@ -1389,6 +1488,7 @@ function finishRoomByDisconnect(room: RoomState, winner: Stone, now: number) {
 
 function abandonRoom(room: RoomState, now: number) {
   room.status = "abandoned";
+  room.finishReason = "abandoned";
   room.undoRequest = null;
   room.winner = null;
   room.winLine = [];
@@ -1413,6 +1513,7 @@ function undoLatestMove(room: RoomState, now: number) {
   room.moveSeq = nextMoves.length;
   room.moves = nextMoves;
   room.status = "playing";
+  room.finishReason = null;
   room.winner = null;
   room.winLine = [];
   for (const roomPlayer of room.players) {
@@ -1495,6 +1596,8 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
     code: room.code,
     createdAt: room.createdAt,
     currentTurn: room.currentTurn,
+    finishReason: room.finishReason,
+    gameId: room.gameId,
     hostSeat: room.hostSeat,
     moveSeq: room.moveSeq,
     moves: room.moves.map((move) => ({ ...move })),

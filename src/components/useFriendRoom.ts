@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
-import type { PublicChatAck, RoomAck, RoomClientState, RoomListAck } from "@/server/room-contract";
+import type { GameRecordAck, PublicChatAck, RoomAck, RoomClientState, RoomListAck } from "@/server/room-contract";
 import type {
   LobbyRoomDeletedEvent,
   LobbyRoomUpdatedEvent,
@@ -80,6 +80,7 @@ const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
 
 export function useFriendRoom(): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
+  const submittedGameRecordsRef = useRef<Set<string>>(new Set());
   const [connectionStatus, setConnectionStatus] = useState<FriendRoomController["connectionStatus"]>("idle");
   const [room, setRoom] = useState<RoomClientState | null>(null);
   const [playerName, setPlayerNameState] = useState(getInitialPlayerName);
@@ -529,6 +530,44 @@ export function useFriendRoom(): FriendRoomController {
 
     ensureSocket().emit("room:rejoin", storedSession, applyRoomAck);
   }, [applyRoomAck, ensureSocket, joinRoomByCode, room]);
+
+  useEffect(() => {
+    const snapshot = room?.snapshot;
+
+    if (!room || room.role !== "player" || !snapshot || !snapshot.finishReason) {
+      return;
+    }
+
+    if (snapshot.status !== "finished" && snapshot.status !== "abandoned") {
+      return;
+    }
+
+    const submissionKey = `${room.playerId}:${snapshot.gameId}`;
+
+    if (submittedGameRecordsRef.current.has(submissionKey)) {
+      return;
+    }
+
+    submittedGameRecordsRef.current.add(submissionKey);
+    ensureSocket().emit(
+      "game-record:submit",
+      {
+        board: snapshot.board,
+        finishReason: snapshot.finishReason,
+        gameId: snapshot.gameId,
+        moveSeq: snapshot.moveSeq,
+        moves: snapshot.moves,
+        roomCode: snapshot.code,
+        status: snapshot.status,
+        winner: snapshot.winner
+      },
+      (response: GameRecordAck) => {
+        if (!response.ok) {
+          setError(response.error.message);
+        }
+      }
+    );
+  }, [ensureSocket, room]);
 
   useEffect(() => {
     return () => {

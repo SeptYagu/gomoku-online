@@ -1,4 +1,5 @@
 import type { Stone } from "../game/types";
+import type { GameRecordSubmitResult } from "./game-records";
 import type { PublicChatSnapshot, RoomError, RoomListSnapshot, RoomParticipantRole, RoomSnapshot } from "./rooms";
 
 export type RoomClientState = {
@@ -33,6 +34,16 @@ export type PublicChatAck =
   | {
       ok: true;
       value: PublicChatSnapshot;
+    }
+  | {
+      error: RoomError;
+      ok: false;
+    };
+
+export type GameRecordAck =
+  | {
+      ok: true;
+      value: GameRecordSubmitResult;
     }
   | {
       error: RoomError;

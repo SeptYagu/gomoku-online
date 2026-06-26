@@ -13,3 +13,4 @@ coverage/
 .arena-cache/
 .arena-results/
 .codex-logs/
+data/game-records/

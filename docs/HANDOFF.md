@@ -2304,3 +2304,67 @@ b6faf9e
 - 小步 7：随机匹配，完成并通过真实服务器验证。
 - 联机回归修复：房间生命周期、补位和邀请链接，完成并通过真实服务器验证。
 - 下一步：阶段 3 小步 8，在线棋谱提交、去重和匿名/注册记录保存。
+
+## 49. 2026-06-25 阶段 3 小步 8：在线棋谱提交本地完成
+
+本轮目标：
+
+- 按阶段 3 build plan 推进小步 8。
+- 实现在线棋谱提交、服务端去重、partial/verified/conflicted 状态流和 guest 棋谱保存。
+- 保持 handoff 只在文件末尾追加。
+
+实际完成：
+
+- `src/server/game-records.ts`：
+  - 新增 `GameRecordStore`。
+  - append-only JSONL 保存 game record 状态更新。
+  - 启动时可从 JSONL 重建最新记录状态。
+  - 记录状态包括 `partial`、`verified`、`conflicted`。
+- `src/server/rooms.ts`：
+  - `RoomSnapshot` 新增 `gameId` 和 `finishReason`。
+  - 同一房间连续重开时递增 `gameId`，例如 `ROOM01-1`、`ROOM01-2`。
+  - 终局原因覆盖五连、和棋、认输、断线超时和 abandoned。
+  - 终局时捕获 finalized server snapshot，后续客户端提交只用于一致性校验和双方到齐去重。
+  - 新增 `submitGameRecord()` 和 `listGameRecords()`。
+- `src/server/room-socket.ts`、`src/server/room-contract.ts`：
+  - 新增 `game-record:submit` 和 `GameRecordAck`。
+  - socket 层用当前连接的 `playerId` 作为提交者，避免客户端伪造提交者。
+- `src/components/useFriendRoom.ts`：
+  - 玩家看到 finished/abandoned 快照后自动提交一次棋谱。
+  - 用 `playerId + gameId` 防止同一客户端重复提交。
+- `src/server/room-store.ts`：
+  - 默认保存路径：`data/game-records/records.jsonl`。
+  - 可用 `GOMOKU_GAME_RECORDS_PATH` 覆盖。
+- `.gitignore`：
+  - 忽略 `data/game-records/`，避免真实棋谱进入代码仓库。
+- `src/server/rooms.test.ts`：
+  - 覆盖 partial、verified、重复提交去重、conflicted 且保留服务器权威棋谱。
+- `src/server/game-records.test.ts`：
+  - 覆盖 JSONL 持久化和重启加载。
+- `src/server/room-socket.test.ts`：
+  - 覆盖 Socket.IO 双方提交和重复提交去重。
+- `tools/smoke-game-records.ts`、`package.json`、`README.md`：
+  - 新增 `npm run smoke:game-records`。
+- `docs/logic/rating-leaderboard-module.md`、`docs/STAGE_3_PROGRESS.md`：
+  - 记录小步 8 第一版实现和当前 guest 保存边界。
+
+本地验证：
+
+- `npm test`：通过，6 个测试文件、73 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3036 npm start` 后运行 `npm run smoke:game-records -- http://127.0.0.1:3036`，通过。
+  - `PASS first submit partial - PDP52X-1`
+  - `PASS second submit verified - PDP52X-1`
+  - `PASS duplicate submit deduped - PDP52X-1`
+- 本地确认 JSONL 写入：`data/game-records/records.jsonl` 产生 2 行状态更新，第一行 partial，第二行 verified；本地 smoke 数据已清理。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3036`，通过。
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3036`，通过。
+- 本地生产服务：`npm run smoke:matchmaking -- http://127.0.0.1:3036`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3036`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送小步 8，等待真实服务器更新后跑 `verify:online`、`smoke:game-records`、`smoke:online-room`、`smoke:lobby`、`smoke:matchmaking` 和 `smoke:share-url`。

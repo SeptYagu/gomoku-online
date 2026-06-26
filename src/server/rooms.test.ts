@@ -151,6 +151,51 @@ describe("RoomStore", () => {
     });
   });
 
+  it("deduplicates online game record submissions against the server-authoritative final game", () => {
+    const { room, store } = createStartedRoom();
+    const finished = expectOk(store.resignGame(room.code, "player-1"));
+    const firstSubmission = createGameRecordSubmission(finished, "player-1");
+    const partial = expectOk(store.submitGameRecord(firstSubmission));
+
+    expect(partial.duplicate).toBe(false);
+    expect(partial.record.recordStatus).toBe("partial");
+    expect(partial.record.submissions).toHaveLength(1);
+    expect(partial.record.finishReason).toBe("resign");
+    expect(partial.record.winner).toBe("white");
+
+    const duplicate = expectOk(store.submitGameRecord(firstSubmission));
+
+    expect(duplicate.duplicate).toBe(true);
+    expect(duplicate.record.submissions).toHaveLength(1);
+
+    const verified = expectOk(store.submitGameRecord(createGameRecordSubmission(finished, "player-2")));
+
+    expect(verified.record.recordStatus).toBe("verified");
+    expect(verified.record.submissions.map((submission) => submission.seat)).toEqual(["black", "white"]);
+    expect(store.listGameRecords()).toEqual([verified.record]);
+  });
+
+  it("keeps the authoritative game record when a client submission conflicts", () => {
+    const { room, store } = createStartedRoom();
+    const finished = expectOk(store.resignGame(room.code, "player-1"));
+    const conflicted = expectOk(
+      store.submitGameRecord({
+        ...createGameRecordSubmission(finished, "player-1"),
+        winner: "black"
+      })
+    );
+
+    expect(conflicted.record.recordStatus).toBe("conflicted");
+    expect(conflicted.record.conflicts).toEqual([
+      expect.objectContaining({
+        playerId: "player-1",
+        reason: "winner-mismatch"
+      })
+    ]);
+    expect(conflicted.record.winner).toBe("white");
+    expect(conflicted.record.moves).toEqual(finished.moves);
+  });
+
   it("blocks spectators from player-only actions while keeping them connected to snapshots", () => {
     const { room, store } = createStartedRoom();
     const watched = expectOk(store.joinRoom(room.code, { playerId: "spectator-1", playerName: "Cara" }));
@@ -735,6 +780,24 @@ function playAndRejectUndo(
   expectOk(store.applyMove(roomCode, { playerId: requesterId, point: { row, col } }));
   const requested = expectOk(store.requestUndo(roomCode, requesterId));
   expectOk(store.respondToUndo(roomCode, targetId, requested.undoRequest?.id ?? "", false));
+}
+
+function createGameRecordSubmission(room: RoomSnapshot, playerId: string) {
+  if (!room.finishReason || (room.status !== "finished" && room.status !== "abandoned")) {
+    throw new Error("Room must be finished before creating a game record submission.");
+  }
+
+  return {
+    board: room.board,
+    finishReason: room.finishReason,
+    gameId: room.gameId,
+    moveSeq: room.moveSeq,
+    moves: room.moves,
+    playerId,
+    roomCode: room.code,
+    status: room.status,
+    winner: room.winner
+  };
 }
 
 function expectOk<T>(result: RoomResult<T>): T {
