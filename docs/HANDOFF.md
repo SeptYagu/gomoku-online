@@ -3550,3 +3550,69 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：等待真实服务器部署新版后，运行 `verify:online`，并在线上运行 `analyze:openings` 命令确认生产棋谱池可被读取。
+
+## 71. 2026-06-26 阶段 3 小步 18 线上验证补记
+
+本轮目标：
+
+- 记录服务器棋谱开局分析流程第一版的提交、推送和真实服务器验证结果。
+- 明确 `analyze:openings` 是读取部署机器本地 JSONL 的离线命令，不暴露公网 API。
+
+提交与部署：
+
+- 小步 18 提交：`79d5374 Add game record opening analysis`。
+- 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 79d5374`。
+
+真实服务器验证：
+
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 79d5374`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version 79d5374`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS connect host - websocket`
+  - `PASS connect guest - websocket`
+  - `PASS first submit partial - JEBLTR-1`
+  - `PASS second submit verified - JEBLTR-1`
+  - `PASS duplicate submit deduped - JEBLTR-1`
+
+离线分析命令验证：
+
+- `npm run smoke:opening-analysis`：通过。
+  - `PASS analyzed saved game records - 3`
+  - `PASS opening candidates - 2`
+- `npm run analyze:openings -- --input data/game-records/records.jsonl --output .arena-results/game-record-opening-analysis-online-check.json --limit 10 --prefix-length 3 --min-games 1`：通过。
+  - `Analyzed 2/10 verified game records into 1 opening candidates at .arena-results\game-record-opening-analysis-online-check.json.`
+
+验证边界：
+
+- 真实服务器已部署包含 `analyze:openings` 的版本，并且真实服务器仍能生成 verified game records。
+- `analyze:openings` 读取的是服务器本地 `data/game-records/records.jsonl`，不应为验证方便开放公网全量棋谱 API。
+- 部署机器上可用同一命令读取生产棋谱池；本轮在本地用同一代码路径和保存的 JSONL 验证了分析输出。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 小步 8：在线棋谱提交、去重和 guest 棋谱保存，完成并通过真实服务器验证。
+- 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
+- 小步 10：用户状态 / Presence 第一版，完成并通过真实服务器验证。
+- 小步 11：排行榜第一版，完成并通过真实服务器验证。
+- 小步 12：账号 / 注册玩家身份第一版，完成并通过真实服务器验证。
+- 小步 13：Profile / Game records 页面入口第一版，完成并通过真实服务器验证。
+- 小步 14：注册用户 / 游客排行榜隔离与创建房 UI 收口，完成并通过真实服务器验证。
+- 小步 15：棋谱回看和开局库导出准备，完成并通过真实服务器验证。
+- 小步 16：房间生命周期二次补强，完成并通过真实服务器验证。
+- 小步 17：单局 SGF 下载入口，完成并通过真实服务器验证。
+- 小步 18：服务器棋谱开局分析流程第一版，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进账号完整化、排行榜分页/搜索/增量事件、opening analysis 候选接入 arena 筛线和运行时开局库转换，以及后续 PlayOK 式用户功能。

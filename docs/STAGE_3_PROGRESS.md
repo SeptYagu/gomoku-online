@@ -1465,3 +1465,37 @@
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：提交并推送，等待真实服务器更新后运行 `verify:online`，并在线上运行 `analyze:openings` 命令确认生产棋谱池可被读取。
+
+线上验证：
+
+- 小步 18 提交：`79d5374 Add game record opening analysis`。
+- `79d5374` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 79d5374`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 79d5374`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version 79d5374`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS first submit partial - JEBLTR-1`
+  - `PASS second submit verified - JEBLTR-1`
+  - `PASS duplicate submit deduped - JEBLTR-1`
+- `npm run smoke:opening-analysis`：通过。
+  - `PASS analyzed saved game records - 3`
+  - `PASS opening candidates - 2`
+- `npm run analyze:openings -- --input data/game-records/records.jsonl --output .arena-results/game-record-opening-analysis-online-check.json --limit 10 --prefix-length 3 --min-games 1`：通过。
+  - `Analyzed 2/10 verified game records into 1 opening candidates at .arena-results\game-record-opening-analysis-online-check.json.`
+
+验证边界：
+
+- `analyze:openings` 是读取服务器本地 `records.jsonl` 的离线命令，不开放公网 API。
+- 本轮真实服务器验证覆盖部署版本、Socket.IO 和真实服务器继续生成 verified game records。
+- 离线分析命令用同一代码路径和本地保存的 JSONL 验证；部署机器上可用同一命令读取生产 `data/game-records/records.jsonl`。
+
+当前阶段 3 状态：
+
+- 小步 18：服务器棋谱开局分析流程第一版，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进账号完整化、排行榜分页/搜索/增量事件、opening analysis 候选接入 arena 筛线和运行时开局库转换，以及后续 PlayOK 式用户功能。
