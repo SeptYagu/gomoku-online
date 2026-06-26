@@ -530,3 +530,31 @@ Game 增加：
 - 棋谱导出和开局库生成入口。
 - 正式邮箱/密码/OAuth 登录。
 - 账号改名、合并、注销和 token 轮换。
+
+## 当前落地：棋谱回看和开局库导出准备（2026-06-26）
+
+本轮推进 Game records 的回看和导出准备：
+
+- Profile / Game records 页面不再只显示终局小棋盘。
+- 每张棋谱卡片增加逐手回放：
+  - 上一手 / 下一手按钮。
+  - 手数进度滑块。
+  - 当前手数 `Move {move} / {total}`。
+  - 当前最后一手高亮。
+- 新增 `src/game/record-replay.ts`，把保存的 `moves` 重放为任意手数的棋盘状态。
+- 新增 `src/server/game-record-export.ts`：
+  - `verified|partial|conflicted|all` 状态过滤。
+  - SGF 导出。
+  - JSONL 导出。
+- 新增 `npm run export:game-records`：
+  - 默认读取 `data/game-records/records.jsonl`。
+  - 默认导出 verified 棋谱到 `.arena-results/game-records-export.sgf`。
+  - 可指定 `--format sgf|jsonl`、`--status verified|partial|conflicted|all`、`--limit`。
+- 新增 `npm run smoke:game-record-export`，使用临时棋谱库验证 SGF / JSONL 序列化。
+
+仍保留到后续小步：
+
+- 在页面内提供单局 SGF 下载按钮。
+- 将导出的棋谱池接入自动开局库分析 / 统计 / 筛线流程。
+- 排行榜分页、搜索和增量事件。
+- 正式邮箱/密码/OAuth 登录。

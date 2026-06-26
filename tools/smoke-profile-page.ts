@@ -120,6 +120,22 @@ async function playRegisteredGame(
     }),
     "host move"
   );
+  requireOk(
+    await emitAck<RoomAck>(guest, "game:move", {
+      expectedMoveSeq: 1,
+      point: { col: 8, row: 7 },
+      roomCode
+    }),
+    "guest move"
+  );
+  requireOk(
+    await emitAck<RoomAck>(host, "game:move", {
+      expectedMoveSeq: 2,
+      point: { col: 7, row: 8 },
+      roomCode
+    }),
+    "host second move"
+  );
   const resigned = requireOk(await emitAck<RoomAck>(host, "game:resign", { roomCode }), "host resign").snapshot;
 
   assert(resigned.status === "finished", "room should finish after resign");
@@ -147,6 +163,7 @@ async function verifyProfilePage(baseUrl: string, account: AccountSession, gameI
       await cdp.send("Page.enable");
       await cdp.send("Runtime.enable");
       await waitForProfileText(cdp, account.displayName, gameId);
+      await waitForProfileReplay(cdp);
     } finally {
       cdp.close();
     }
@@ -227,6 +244,35 @@ async function waitForProfileText(cdp: CdpClient, displayName: string, gameId: s
     return bodyText.includes(displayName) && bodyText.includes(gameId) && bodyText.includes("Game records")
       ? true
       : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function waitForProfileReplay(cdp: CdpClient): Promise<void> {
+  await waitForValue(async () => {
+    const bodyText = await evaluate<string>(cdp, "document.body.innerText");
+
+    return bodyText.includes("Move 3 / 3") ? true : null;
+  }, STEP_TIMEOUT_MS);
+
+  const clicked = await evaluate<boolean>(
+    cdp,
+    `(() => {
+      const button = document.querySelector(".profile-replay-controls button");
+      if (!button) {
+        return false;
+      }
+
+      button.click();
+      return true;
+    })()`
+  );
+
+  assert(clicked, "profile replay previous button should exist");
+
+  await waitForValue(async () => {
+    const bodyText = await evaluate<string>(cdp, "document.body.innerText");
+
+    return bodyText.includes("Move 2 / 3") ? true : null;
   }, STEP_TIMEOUT_MS);
 }
 

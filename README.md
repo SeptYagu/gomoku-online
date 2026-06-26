@@ -166,6 +166,15 @@ Profile 页面入口可跑浏览器冒烟，确认注册玩家正式 Profile 页
 npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net
 ```
 
+该冒烟也会检查 Profile 页面里的棋谱逐手回放控件。
+
+服务器已保存的在线棋谱可以导出为 SGF 或 JSONL，供后续离线分析和开局库候选筛选：
+
+```bash
+npm run export:game-records -- --input data/game-records/records.jsonl --output .arena-results/game-records.sgf
+npm run smoke:game-record-export
+```
+
 排行榜可跑 Socket.IO + REST 冒烟，确认一局 verified 在线棋谱会进入总榜、今日榜和连胜榜：
 
 ```bash

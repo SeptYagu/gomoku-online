@@ -1156,3 +1156,68 @@
 下一步：
 
 - 阶段 3 继续推进棋谱逐手回放、棋谱导出与开局库准备、以及后续账号完整化能力。
+
+## 小步 15：棋谱回看和开局库导出准备
+
+状态：本地完成，待提交、推送和真实服务器验证。
+
+目标：
+
+- 注册玩家 Profile / Game records 页面支持逐手回看，而不是只展示终局棋盘。
+- 服务器保存的在线棋谱可导出为后续离线分析和开局库候选输入。
+- 保持游客棋谱也在导出范围内，默认导出 verified 棋谱池。
+
+实现：
+
+- `src/game/record-replay.ts`
+  - 新增 `replayBoardAtMove(moves, moveNumber)`。
+  - 新增 `clampReplayMove()`，把回放手数限制在合法范围。
+- `src/components/profile/PlayerProfilePage.tsx`
+  - 每张 Game record 卡片新增逐手回放状态。
+  - 小棋盘从终局棋盘改为当前回放手数的棋盘。
+  - 新增上一手 / 下一手按钮、手数滑块、`Move {move} / {total}` 状态。
+  - 当前最后一手高亮。
+- `src/app/globals.css`
+  - 新增 Profile 棋谱回放控件和当前手高亮样式。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增 replay move / previous / next 文案。
+- `src/server/game-record-export.ts`
+  - 新增 `verified|partial|conflicted|all` 过滤。
+  - 新增 SGF 导出。
+  - 新增 JSONL 导出。
+- `tools/export-game-records.ts`
+  - 新增 `npm run export:game-records`。
+  - 默认读取 `data/game-records/records.jsonl`。
+  - 默认输出 `.arena-results/game-records-export.sgf`。
+  - 支持 `--format sgf|jsonl`、`--status verified|partial|conflicted|all`、`--limit`。
+- `tools/smoke-game-record-export.ts`
+  - 新增导出 smoke，使用临时棋谱库验证 SGF / JSONL 序列化。
+- `tools/smoke-profile-page.ts`
+  - 对局从 1 手扩展到 3 手。
+  - 浏览器冒烟新增回放验证：页面出现 `Move 3 / 3`，点击上一手后出现 `Move 2 / 3`。
+- `README.md`、`docs/logic/rating-leaderboard-module.md`
+  - 记录回放和导出命令。
+
+本地验证：
+
+- `npm test`：通过，9 个测试文件、91 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- `npm run smoke:game-record-export`：通过。
+  - `PASS export verified records - EXPORT1-1`
+  - `PASS export SGF and JSONL serialization`
+- `npm run export:game-records -- --output .arena-results/game-records-export-check.sgf --limit 5`：通过。
+  - `Exported 5 verified game records to .arena-results\game-records-export-check.sgf (sgf).`
+- 本地生产服务：`PORT=3044 npm run start:online`。
+- `npm run smoke:profile-page -- http://127.0.0.1:3044`：通过。
+  - `PASS register host - acct_0KA2oRGtHaA`
+  - `PASS register guest - acct_xeVEBLoKCFM`
+  - `PASS profile page readback - TF9NAV-1`
+- `npm run smoke:profile-records -- http://127.0.0.1:3044`：通过。
+  - `PASS submitted verified record - 7FMQVJ-1`
+  - `PASS profile readback - 7FMQVJ-1`
+
+下一步：
+
+- 提交并推送小步 15。
+- 等待真实服务器更新后运行 `verify:online`、`smoke:profile-page`、`smoke:profile-records` 和必要回归。

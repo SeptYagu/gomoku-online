@@ -134,6 +134,8 @@ export type LeaderboardSnapshot = {
   version: number;
 };
 
+const MAX_GAME_RECORD_LIST_LIMIT = 100_000;
+
 type GameRecordStoreOptions = {
   filePath?: false | string;
   now?: () => number;
@@ -160,7 +162,7 @@ export class GameRecordStore {
   listRecords(limit = 50): SavedGameRecord[] {
     return [...this.records.values()]
       .sort((left, right) => right.updatedAt - left.updatedAt)
-      .slice(0, Math.max(1, Math.min(200, Math.floor(limit))));
+      .slice(0, Math.max(1, Math.min(MAX_GAME_RECORD_LIST_LIMIT, Math.floor(limit))));
   }
 
   getLeaderboard(query: LeaderboardQuery = {}): LeaderboardSnapshot {

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, RefreshCw, UserRound } from "lucide-react";
-import type { Board } from "@/game/types";
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, UserRound } from "lucide-react";
+import { replayBoardAtMove } from "@/game/record-replay";
+import type { Board, Move } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import type {
@@ -171,9 +172,14 @@ function ProfileRecordCard({
   labels: GameDictionary["room"];
   record: PlayerGameRecordSummary;
 }) {
+  const [replayMove, setReplayMove] = useState(record.moves.length);
+  const currentMove = Math.min(record.moves.length, Math.max(0, replayMove));
+  const replayBoard = useMemo(() => replayBoardAtMove(record.moves, currentMove), [currentMove, record.moves]);
+  const lastMove = currentMove > 0 ? record.moves[currentMove - 1] : null;
+
   return (
     <article className={`profile-record-card ${record.result}`}>
-      <MiniBoard board={record.board} />
+      <MiniBoard board={replayBoard} lastMove={lastMove} />
       <div className="profile-record-main">
         <strong>
           {getPlayerResultLabel(record.result, labels)}
@@ -194,18 +200,53 @@ function ProfileRecordCard({
           <span>{getRecordStatusLabel(record.recordStatus, labels)}</span>
           <span>{record.playerSeat === "black" ? labels.blackSeat : labels.whiteSeat}</span>
         </div>
+        <div className="profile-replay-controls">
+          <button
+            className="icon-button"
+            disabled={currentMove <= 0}
+            onClick={() => setReplayMove((value) => Math.max(0, value - 1))}
+            title={labels.replayPrevious}
+            type="button"
+          >
+            <ChevronLeft aria-hidden="true" focusable={false} />
+          </button>
+          <input
+            aria-label={labels.replayMove
+              .replace("{move}", String(currentMove))
+              .replace("{total}", String(record.moves.length))}
+            max={record.moves.length}
+            min={0}
+            onChange={(event) => setReplayMove(Number.parseInt(event.target.value, 10))}
+            type="range"
+            value={currentMove}
+          />
+          <button
+            className="icon-button"
+            disabled={currentMove >= record.moves.length}
+            onClick={() => setReplayMove((value) => Math.min(record.moves.length, value + 1))}
+            title={labels.replayNext}
+            type="button"
+          >
+            <ChevronRight aria-hidden="true" focusable={false} />
+          </button>
+          <span>
+            {labels.replayMove.replace("{move}", String(currentMove)).replace("{total}", String(record.moves.length))}
+          </span>
+        </div>
       </div>
     </article>
   );
 }
 
-function MiniBoard({ board }: { board: Board }) {
+function MiniBoard({ board, lastMove }: { board: Board; lastMove: Move | null }) {
   return (
     <div className="profile-mini-board" aria-hidden="true">
       {board.map((row, rowIndex) =>
         row.map((stone, colIndex) => (
           <span
-            className={`profile-mini-cell${stone ? ` ${stone}` : ""}`}
+            className={`profile-mini-cell${stone ? ` ${stone}` : ""}${
+              lastMove?.row === rowIndex && lastMove.col === colIndex ? " last" : ""
+            }`}
             key={`${rowIndex}-${colIndex}`}
           />
         ))

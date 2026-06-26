@@ -103,6 +103,9 @@ export type GameDictionary = {
     refreshPresence: string;
     refreshLeaderboard: string;
     refreshProfile: string;
+    replayMove: string;
+    replayNext: string;
+    replayPrevious: string;
     resign: string;
     resultAbandoned: string;
     resultDraw: string;
@@ -273,6 +276,9 @@ const en = {
       refreshPresence: "Refresh users",
       refreshLeaderboard: "Refresh rankings",
       refreshProfile: "Refresh profile",
+      replayMove: "Move {move} / {total}",
+      replayNext: "Next move",
+      replayPrevious: "Previous move",
       resign: "Resign",
       resultAbandoned: "Abandoned",
       resultDraw: "Draw",
@@ -439,6 +445,9 @@ const zh = {
       refreshPresence: "刷新用户",
       refreshLeaderboard: "刷新排行",
       refreshProfile: "刷新资料",
+      replayMove: "第 {move} / {total} 手",
+      replayNext: "下一手",
+      replayPrevious: "上一手",
       resign: "认输",
       resultAbandoned: "中止",
       resultDraw: "和棋",
@@ -605,6 +614,9 @@ const fr = {
       refreshPresence: "Actualiser les utilisateurs",
       refreshLeaderboard: "Actualiser le classement",
       refreshProfile: "Actualiser le profil",
+      replayMove: "Coup {move} / {total}",
+      replayNext: "Coup suivant",
+      replayPrevious: "Coup précédent",
       resign: "Abandonner",
       resultAbandoned: "Abandon",
       resultDraw: "Nulle",
@@ -771,6 +783,9 @@ const es = {
       refreshPresence: "Actualizar usuarios",
       refreshLeaderboard: "Actualizar ranking",
       refreshProfile: "Actualizar perfil",
+      replayMove: "Movimiento {move} / {total}",
+      replayNext: "Movimiento siguiente",
+      replayPrevious: "Movimiento anterior",
       resign: "Rendirse",
       resultAbandoned: "Abandonada",
       resultDraw: "Empate",
@@ -937,6 +952,9 @@ const ru = {
       refreshPresence: "Обновить пользователей",
       refreshLeaderboard: "Обновить рейтинг",
       refreshProfile: "Обновить профиль",
+      replayMove: "Ход {move} / {total}",
+      replayNext: "Следующий ход",
+      replayPrevious: "Предыдущий ход",
       resign: "Сдаться",
       resultAbandoned: "Прервана",
       resultDraw: "Ничья",
@@ -1103,6 +1121,9 @@ const ar = {
       refreshPresence: "تحديث المستخدمين",
       refreshLeaderboard: "تحديث الترتيب",
       refreshProfile: "تحديث الملف",
+      replayMove: "النقلة {move} / {total}",
+      replayNext: "النقلة التالية",
+      replayPrevious: "النقلة السابقة",
       resign: "استسلام",
       resultAbandoned: "متروكة",
       resultDraw: "تعادل",

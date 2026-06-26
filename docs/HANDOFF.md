@@ -3169,3 +3169,61 @@ b6faf9e
 下一步：
 
 - 阶段 3 继续推进棋谱逐手回放、棋谱导出与开局库准备、以及后续账号完整化能力。
+
+## 64. 2026-06-26 阶段 3 小步 15 本地完成：棋谱回看和开局库导出准备
+
+本轮目标：
+
+- 按阶段 3 计划继续推进小步 15：棋谱回看和开局库导出准备。
+- 保持 HANDOFF 追加规则，不修改过去窗口记录。
+
+实现记录：
+
+- `src/game/record-replay.ts`
+  - 新增按手数重放棋盘的 helper。
+  - 回放手数会 clamp 到 `0..moves.length`。
+- `src/components/profile/PlayerProfilePage.tsx`
+  - Profile / Game records 页面每张棋谱卡片新增逐手回放。
+  - 小棋盘根据当前手数重放，不再固定展示终局。
+  - 增加上一手 / 下一手按钮、range 滑块、`Move {move} / {total}` 状态。
+  - 当前最后一手高亮。
+- `src/app/globals.css`
+  - 新增棋谱回放控件样式和最后一手高亮。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增 replay move / previous / next 文案。
+- `src/server/game-record-export.ts`
+  - 新增棋谱导出序列化模块。
+  - 支持 SGF 和 JSONL。
+  - 支持按 `verified|partial|conflicted|all` 过滤。
+- `tools/export-game-records.ts`
+  - 新增 `npm run export:game-records`。
+  - 默认读取 `data/game-records/records.jsonl`，默认导出 verified 棋谱到 `.arena-results/game-records-export.sgf`。
+- `tools/smoke-game-record-export.ts`
+  - 新增本地导出 smoke。
+- `tools/smoke-profile-page.ts`
+  - 对局扩展为 3 手后认输。
+  - 浏览器冒烟验证 Profile 页面回放从 `Move 3 / 3` 点击上一手变成 `Move 2 / 3`。
+- `README.md`、`docs/STAGE_3_PROGRESS.md`、`docs/logic/rating-leaderboard-module.md`
+  - 记录本小步命令、实现和验证。
+
+本地验证：
+
+- `npm test`：通过，9 个测试文件、91 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- `npm run smoke:game-record-export`：通过。
+  - `PASS export verified records - EXPORT1-1`
+  - `PASS export SGF and JSONL serialization`
+- `npm run export:game-records -- --output .arena-results/game-records-export-check.sgf --limit 5`：通过。
+  - `Exported 5 verified game records to .arena-results\game-records-export-check.sgf (sgf).`
+- 本地生产服务：`PORT=3044 npm run start:online`。
+- `npm run smoke:profile-page -- http://127.0.0.1:3044`：通过。
+  - `PASS profile page readback - TF9NAV-1`
+- `npm run smoke:profile-records -- http://127.0.0.1:3044`：通过。
+  - `PASS profile readback - 7FMQVJ-1`
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:profile-page`、`smoke:profile-records` 和必要回归。
