@@ -2994,3 +2994,51 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:profile-page`、`smoke:account` 和 `smoke:leaderboard`。
+
+## 61. 2026-06-25 阶段 3 小步 13 线上验证补记
+
+本轮目标：
+
+- 记录阶段 3 小步 13 Profile / Game records 页面入口的提交、推送和真实服务器验证结果。
+
+实际结果：
+
+- 阶段 3 小步 13 提交：`400c82e Add stage 3 profile pages`。
+- `400c82e` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 400c82e`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 400c82e`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version 400c82e`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS register host - acct_JLGCuW-9tt8`
+  - `PASS register guest - acct_eNDIItuJJJ8`
+  - `PASS profile page readback - P4F2NF-1`
+- `npm run smoke:account -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS registered record verified - CWPEAC-1`
+  - `PASS registered profile readback`
+  - `PASS registered leaderboard readback`
+- `npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS submitted verified ranked record - MRJ2ND-1`
+  - `PASS leaderboard readback - MRJ2ND-1`
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 小步 8：在线棋谱提交、去重和 guest 棋谱保存，完成并通过真实服务器验证。
+- 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
+- 小步 10：用户状态 / Presence 第一版，完成并通过真实服务器验证。
+- 小步 11：排行榜第一版，完成并通过真实服务器验证。
+- 小步 12：账号 / 注册玩家身份第一版，完成并通过真实服务器验证。
+- 小步 13：Profile / Game records 页面入口第一版，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进注册用户和游客排行榜隔离、棋谱逐手回放、棋谱导出与开局库准备。

@@ -976,7 +976,7 @@
 
 ## 小步 13：注册玩家正式 Profile / Game records 页面入口
 
-状态：本地完成，待提交、推送和真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 目标：
 
@@ -1026,5 +1026,26 @@
 
 下一步：
 
-- 提交并推送。
-- 等待真实服务器更新到新短提交号后，运行 `verify:online`、`smoke:profile-page`、`smoke:account` 和 `smoke:leaderboard`。
+- 小步 13 提交：`400c82e Add stage 3 profile pages`。
+- `400c82e` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器已更新到 `version 400c82e`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 400c82e`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version 400c82e`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS register host - acct_JLGCuW-9tt8`
+  - `PASS register guest - acct_eNDIItuJJJ8`
+  - `PASS profile page readback - P4F2NF-1`
+- `npm run smoke:account -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS registered record verified - CWPEAC-1`
+  - `PASS registered profile readback`
+  - `PASS registered leaderboard readback`
+- `npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS submitted verified ranked record - MRJ2ND-1`
+  - `PASS leaderboard readback - MRJ2ND-1`
+
+下一步：
+
+- 阶段 3 继续推进注册用户和游客排行榜隔离、棋谱逐手回放、棋谱导出与开局库准备。
