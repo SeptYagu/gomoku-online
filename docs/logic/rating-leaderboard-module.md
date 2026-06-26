@@ -597,3 +597,21 @@ Game 增加：
 - 将 opening analysis 候选 JSON 接入自动筛线 / arena 复核 / 运行时开局库转换。
 - 排行榜分页、搜索和增量事件。
 - 正式邮箱/密码/OAuth 登录。
+
+## 当前落地：排行榜分页和搜索第一版（2026-06-26）
+
+本轮推进 Ranking 的基础浏览能力：
+
+- `GET /api/leaderboard` 新增 `offset` 和 `search` 查询参数。
+- 返回体新增 `limit`、`offset`、`search` 和 `totalEntries`，前端可以判断上一页/下一页。
+- `search` 会按玩家显示名或 `playerId` 过滤，并在过滤后的结果内重新排名。
+- 好友房 Rankings 面板新增搜索框和上一页/下一页按钮。
+- 切换 Registered / Guests / All、Overall / Today / Streak 或搜索文本时回到第一页。
+- `tools/smoke-leaderboard.ts` 增加搜索和分页断言。
+- 房间生命周期同轮补强：同一连接在当前一人等待房里重复 `room:create` 会复用当前房间，不再分配新房号；不同连接上的同玩家/同游客名 disposable waiting room 仍会被关闭。
+
+仍保留到后续小步：
+
+- `leaderboard:ratingChanged` 或等价排行榜增量事件。
+- 将 opening analysis 候选 JSON 接入自动筛线 / arena 复核 / 运行时开局库转换。
+- 正式邮箱/密码/OAuth 登录。

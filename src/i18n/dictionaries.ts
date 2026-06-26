@@ -60,11 +60,15 @@ export type GameDictionary = {
     leaderboardAll: string;
     leaderboardDaily: string;
     leaderboardGuests: string;
+    leaderboardNext: string;
     leaderboardNoEntries: string;
     leaderboardOverall: string;
+    leaderboardPage: string;
+    leaderboardPrevious: string;
     leaderboardRating: string;
     leaderboardRecord: string;
     leaderboardRegistered: string;
+    leaderboardSearchPlaceholder: string;
     leaderboardStreak: string;
     leaderboardStreakValue: string;
     leaderboardTodayWins: string;
@@ -234,11 +238,15 @@ const en = {
       leaderboardAll: "All",
       leaderboardDaily: "Today",
       leaderboardGuests: "Guests",
+      leaderboardNext: "Next page",
       leaderboardNoEntries: "No ranked games yet",
       leaderboardOverall: "Overall",
+      leaderboardPage: "{start}-{end} / {total}",
+      leaderboardPrevious: "Previous page",
       leaderboardRating: "Rating {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "Registered",
+      leaderboardSearchPlaceholder: "Search player",
       leaderboardStreak: "Streak",
       leaderboardStreakValue: "Streak {count}",
       leaderboardTodayWins: "Today {count}",
@@ -404,11 +412,15 @@ const zh = {
       leaderboardAll: "全部",
       leaderboardDaily: "今日",
       leaderboardGuests: "游客",
+      leaderboardNext: "下一页",
       leaderboardNoEntries: "暂无排行",
       leaderboardOverall: "总榜",
+      leaderboardPage: "{start}-{end} / {total}",
+      leaderboardPrevious: "上一页",
       leaderboardRating: "积分 {rating}",
       leaderboardRecord: "{wins}胜 {losses}负 {draws}和",
       leaderboardRegistered: "注册",
+      leaderboardSearchPlaceholder: "搜索玩家",
       leaderboardStreak: "连胜",
       leaderboardStreakValue: "连胜 {count}",
       leaderboardTodayWins: "今日胜 {count}",
@@ -574,11 +586,15 @@ const fr = {
       leaderboardAll: "Tous",
       leaderboardDaily: "Aujourd'hui",
       leaderboardGuests: "Invités",
+      leaderboardNext: "Page suivante",
       leaderboardNoEntries: "Aucun classement",
       leaderboardOverall: "Global",
+      leaderboardPage: "{start}-{end} / {total}",
+      leaderboardPrevious: "Page précédente",
       leaderboardRating: "Score {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "Inscrits",
+      leaderboardSearchPlaceholder: "Rechercher un joueur",
       leaderboardStreak: "Série",
       leaderboardStreakValue: "Série {count}",
       leaderboardTodayWins: "Jour {count}",
@@ -744,11 +760,15 @@ const es = {
       leaderboardAll: "Todos",
       leaderboardDaily: "Hoy",
       leaderboardGuests: "Invitados",
+      leaderboardNext: "Página siguiente",
       leaderboardNoEntries: "Sin ranking",
       leaderboardOverall: "General",
+      leaderboardPage: "{start}-{end} / {total}",
+      leaderboardPrevious: "Página anterior",
       leaderboardRating: "Puntos {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "Registrados",
+      leaderboardSearchPlaceholder: "Buscar jugador",
       leaderboardStreak: "Racha",
       leaderboardStreakValue: "Racha {count}",
       leaderboardTodayWins: "Hoy {count}",
@@ -914,11 +934,15 @@ const ru = {
       leaderboardAll: "Все",
       leaderboardDaily: "Сегодня",
       leaderboardGuests: "Гости",
+      leaderboardNext: "Следующая",
       leaderboardNoEntries: "Рейтинга пока нет",
       leaderboardOverall: "Общий",
+      leaderboardPage: "{start}-{end} / {total}",
+      leaderboardPrevious: "Предыдущая",
       leaderboardRating: "Рейтинг {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "Зарегистр.",
+      leaderboardSearchPlaceholder: "Поиск игрока",
       leaderboardStreak: "Серия",
       leaderboardStreakValue: "Серия {count}",
       leaderboardTodayWins: "Сегодня {count}",
@@ -1084,11 +1108,15 @@ const ar = {
       leaderboardAll: "الكل",
       leaderboardDaily: "اليوم",
       leaderboardGuests: "ضيوف",
+      leaderboardNext: "التالي",
       leaderboardNoEntries: "لا يوجد ترتيب",
       leaderboardOverall: "عام",
+      leaderboardPage: "{start}-{end} / {total}",
+      leaderboardPrevious: "السابق",
       leaderboardRating: "التقييم {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "مسجلون",
+      leaderboardSearchPlaceholder: "بحث عن لاعب",
       leaderboardStreak: "سلسلة",
       leaderboardStreakValue: "سلسلة {count}",
       leaderboardTodayWins: "اليوم {count}",

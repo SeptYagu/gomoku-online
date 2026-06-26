@@ -603,6 +603,37 @@ h1 {
   padding: 0 10px;
 }
 
+.room-leaderboard-search {
+  align-items: center;
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.room-leaderboard-search svg {
+  color: var(--muted);
+  height: 18px;
+  width: 18px;
+}
+
+.room-leaderboard-search input {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  min-width: 0;
+  outline: none;
+}
+
+.room-leaderboard-search input::placeholder {
+  color: var(--muted);
+}
+
 .room-leaderboard-list {
   display: grid;
   gap: 8px;
@@ -668,6 +699,29 @@ h1 {
   min-width: 0;
   overflow-wrap: anywhere;
   padding: 5px 8px;
+}
+
+.room-leaderboard-pagination {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.room-leaderboard-pagination .icon-button {
+  min-height: 36px;
+  min-width: 42px;
+  padding: 0 8px;
+}
+
+.room-leaderboard-pagination span {
+  color: var(--muted);
+  flex: 1 1 auto;
+  font-size: 0.78rem;
+  font-weight: 800;
+  min-width: 0;
+  text-align: center;
 }
 
 .profile-page-shell {

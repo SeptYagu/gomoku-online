@@ -328,7 +328,7 @@ describe("room socket handlers", () => {
     }
   });
 
-  it("leaves the previous room when the same socket creates another room", async () => {
+  it("reuses the current waiting room when the same socket creates again", async () => {
     const harness = await createSocketHarness();
 
     try {
@@ -347,19 +347,16 @@ describe("room socket handlers", () => {
       }
 
       const firstRoomCode = firstAck.value.snapshot.code;
-      const lobbySawFirstDelete = waitForEventMatching<LobbyRoomDeletedEvent>(
-        lobby,
-        "lobby:room-deleted",
-        (event) => event.code === firstRoomCode
-      );
       const secondAck = await emitAck(host, "room:create", {
         playerId: "host-player",
         playerName: "Host"
       });
 
       expect(secondAck.ok).toBe(true);
-      expect(secondAck.ok ? secondAck.value.snapshot.code : firstRoomCode).not.toBe(firstRoomCode);
-      expect(await lobbySawFirstDelete).toMatchObject({ code: firstRoomCode });
+      expect(secondAck.ok ? secondAck.value.snapshot.code : "").toBe(firstRoomCode);
+
+      const finalList = await emitAck<RoomListAck>(lobby, "lobby:list", { limit: 20 });
+      expect(finalList.ok ? finalList.value.rooms.filter((room) => room.code === firstRoomCode) : []).toHaveLength(1);
     } finally {
       await harness.close();
     }

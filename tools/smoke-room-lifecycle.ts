@@ -37,7 +37,7 @@ async function main(): Promise<void> {
     console.log(`PASS connect spectator - ${spectator.io.engine.transport.name}`);
     console.log(`PASS connect mirror - ${mirror.io.engine.transport.name}`);
 
-    await verifyRepeatedCreateClosesPreviousRoom(baseUrl, host, suffix);
+    await verifyRepeatedCreateReusesCurrentRoom(baseUrl, host, suffix);
     await verifySamePlayerCreateClosesPreviousRoom(baseUrl, host, mirror, suffix);
     await verifySameGuestNameCreateClosesPreviousRoom(baseUrl, host, mirror, suffix);
     await verifyWaitingRoomClosesAfterCreatorDisconnects(baseUrl, suffix);
@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   }
 }
 
-async function verifyRepeatedCreateClosesPreviousRoom(
+async function verifyRepeatedCreateReusesCurrentRoom(
   baseUrl: string,
   host: SmokeSocket,
   suffix: string
@@ -71,13 +71,12 @@ async function verifyRepeatedCreateClosesPreviousRoom(
     "second room:create"
   ).snapshot;
 
-  assert(first.code !== second.code, "second create should allocate a new room");
+  assert(first.code === second.code, "second create on same socket should reuse the current waiting room");
 
   const rooms = await fetchRoomList(baseUrl);
 
-  assert(!rooms.rooms.some((room) => room.code === first.code), "first room should be closed after second create");
-  assert(rooms.rooms.some((room) => room.code === second.code), "second room should remain listed");
-  console.log(`PASS repeated create closes previous room - ${first.code} -> ${second.code}`);
+  assert(rooms.rooms.filter((room) => room.code === first.code).length === 1, "current room should remain listed once");
+  console.log(`PASS repeated create reuses current room - ${first.code}`);
 }
 
 async function verifySamePlayerCreateClosesPreviousRoom(

@@ -159,6 +159,14 @@ export function registerRoomSocketHandlers(
         return;
       }
 
+      const currentWaitingRoom = getCurrentDisposableWaitingRoom(socket, roomStore, player.value.playerId);
+
+      if (currentWaitingRoom) {
+        const response = handleJoinedRoom(socket, roomStore, currentWaitingRoom, player.value.playerId);
+        acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
+        return;
+      }
+
       leaveRoomsBeforeEntry(io, socket, roomStore, player.value);
       const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(player.value), player.value.playerId);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
@@ -464,6 +472,8 @@ function leaveRoomsBeforeEntry(
   const playerIds = new Set([socket.data.playerId, nextPlayer.playerId].filter((playerId): playerId is string => Boolean(playerId)));
   const normalizedNextRoomCode = nextRoomCode?.trim().toUpperCase();
 
+  closeRoomsWithoutSocketMembers(io, roomStore);
+
   for (const playerId of playerIds) {
     broadcastRoomCleanup(io, roomStore, roomStore.leaveParticipantRooms(playerId, normalizedNextRoomCode));
   }
@@ -480,6 +490,38 @@ function leaveRoomsBeforeEntry(
   }
 
   closeRoomsWithoutSocketMembers(io, roomStore);
+}
+
+function getCurrentDisposableWaitingRoom(
+  socket: RoomSocket,
+  roomStore: RoomStore,
+  playerId: string
+): RoomResult<RoomSnapshot> | null {
+  const roomCode = socket.data.roomCode;
+
+  if (!roomCode || socket.data.playerId !== playerId) {
+    return null;
+  }
+
+  const currentRoom = roomStore.getSnapshot(roomCode);
+
+  if (!currentRoom.ok) {
+    return null;
+  }
+
+  const snapshot = currentRoom.value;
+
+  if (
+    snapshot.status !== "waiting" ||
+    snapshot.moves.length > 0 ||
+    snapshot.players.length !== 1 ||
+    snapshot.players[0]?.connected !== true ||
+    snapshot.spectators.length > 0
+  ) {
+    return null;
+  }
+
+  return currentRoom;
 }
 
 function broadcastRoomCleanup(io: RoomSocketServer, roomStore: RoomStore, cleanup: RoomCleanupResult) {

@@ -107,6 +107,8 @@ export type LeaderboardIdentity = "all" | PlayerIdentityKind;
 export type LeaderboardQuery = {
   identity?: LeaderboardIdentity;
   limit?: number;
+  offset?: number;
+  search?: string;
   scope?: LeaderboardScope;
 };
 
@@ -130,7 +132,11 @@ export type LeaderboardSnapshot = {
   entries: LeaderboardEntry[];
   generatedAt: number;
   identity: LeaderboardIdentity;
+  limit: number;
+  offset: number;
+  search: string;
   scope: LeaderboardScope;
+  totalEntries: number;
   version: number;
 };
 
@@ -168,21 +174,35 @@ export class GameRecordStore {
   getLeaderboard(query: LeaderboardQuery = {}): LeaderboardSnapshot {
     const identity = normalizeLeaderboardIdentity(query.identity);
     const scope = normalizeLeaderboardScope(query.scope);
-    const entries = calculateLeaderboardEntries([...this.records.values()], this.now()).filter(
-      (entry) => identity === "all" || entry.identity === identity
+    const limit = clampLeaderboardLimit(query.limit);
+    const offset = clampLeaderboardOffset(query.offset);
+    const search = normalizeLeaderboardSearch(query.search);
+    const entries = sortLeaderboardEntries(
+      calculateLeaderboardEntries([...this.records.values()], this.now()).filter(
+        (entry) =>
+          (identity === "all" || entry.identity === identity) &&
+          (!search ||
+            entry.displayName.toLocaleLowerCase().includes(search) ||
+            entry.playerId.toLocaleLowerCase().includes(search))
+      ),
+      scope
     );
-    const sortedEntries = sortLeaderboardEntries(entries, scope)
-      .slice(0, clampLeaderboardLimit(query.limit))
+    const sortedEntries = entries
+      .slice(offset, offset + limit)
       .map((entry, index) => ({
         ...entry,
-        rank: index + 1
+        rank: offset + index + 1
       }));
 
     return {
       entries: sortedEntries,
       generatedAt: this.now(),
       identity,
+      limit,
+      offset,
+      search,
       scope,
+      totalEntries: entries.length,
       version: getLeaderboardVersion([...this.records.values()])
     };
   }
@@ -592,6 +612,18 @@ function clampLeaderboardLimit(limit: number | undefined): number {
   }
 
   return Math.min(100, Math.max(1, Math.floor(limit)));
+}
+
+function clampLeaderboardOffset(offset: number | undefined): number {
+  if (offset === undefined || !Number.isFinite(offset)) {
+    return 0;
+  }
+
+  return Math.min(100_000, Math.max(0, Math.floor(offset)));
+}
+
+function normalizeLeaderboardSearch(search: string | undefined): string {
+  return search?.trim().replace(/\s+/g, " ").slice(0, 64).toLocaleLowerCase() ?? "";
 }
 
 function getLocalDayStart(now: number): number {

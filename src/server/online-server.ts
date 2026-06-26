@@ -237,12 +237,16 @@ function writeJson(
 
 function parseLeaderboardQuery(url: URL): LeaderboardQuery {
   const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+  const rawOffset = Number.parseInt(url.searchParams.get("offset") ?? "", 10);
   const identity = url.searchParams.get("identity");
+  const search = url.searchParams.get("search")?.trim() ?? "";
   const scope = url.searchParams.get("scope");
 
   return {
     identity: identity === "registered" || identity === "guest" || identity === "all" ? identity : undefined,
     limit: Number.isFinite(rawLimit) ? rawLimit : undefined,
+    offset: Number.isFinite(rawOffset) ? rawOffset : undefined,
+    search: search || undefined,
     scope: scope === "overall" || scope === "daily" || scope === "streak" ? scope : undefined
   };
 }

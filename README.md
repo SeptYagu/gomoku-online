@@ -182,7 +182,7 @@ npm run analyze:openings -- --input data/game-records/records.jsonl --output .ar
 npm run smoke:opening-analysis
 ```
 
-排行榜可跑 Socket.IO + REST 冒烟，确认一局 verified 在线棋谱会进入总榜、今日榜和连胜榜：
+排行榜可跑 Socket.IO + REST 冒烟，确认一局 verified 在线棋谱会进入总榜、今日榜和连胜榜，并验证搜索和分页参数：
 
 ```bash
 npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net
@@ -200,7 +200,7 @@ npm run smoke:leaderboard-audience -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:account -- http://gomoku.yagu.ddns-ip.net
 ```
 
-房间生命周期可跑 Socket.IO 冒烟，确认重复创建会关闭旧房、同名游客在不同标签页创建新房会关闭旧的一人等待房、观战者可补空位、对局中断线 60 秒后判负：
+房间生命周期可跑 Socket.IO 冒烟，确认同一连接重复创建会复用当前等待房、同玩家/同名游客在不同标签页创建新房会关闭旧的一人等待房、空等待房断线后关闭、观战者可补空位、对局中断线 60 秒后判负：
 
 ```bash
 npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net

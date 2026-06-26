@@ -1499,3 +1499,67 @@
 下一步：
 
 - 阶段 3 继续推进账号完整化、排行榜分页/搜索/增量事件、opening analysis 候选接入 arena 筛线和运行时开局库转换，以及后续 PlayOK 式用户功能。
+
+## 小步 19：排行榜分页和搜索第一版 + 房间创建幂等补强
+
+状态：本地完成，待提交、推送和真实服务器验证。
+
+目标：
+
+- 补齐排行榜基础浏览能力：搜索、分页和总数回传。
+- 修复用户实测发现的“同一浏览器/连接可一直点创建新房”的体验问题。
+- 保持空等待房无人时关闭，并继续验证对局中断线 60 秒后判负。
+
+实现：
+
+- `src/server/game-records.ts`
+  - `LeaderboardQuery` 新增 `offset` 和 `search`。
+  - `LeaderboardSnapshot` 新增 `limit`、`offset`、`search` 和 `totalEntries`。
+  - 排行榜按 identity 过滤后，再按显示名或 `playerId` 搜索，排序后按 `offset + limit` 切页。
+  - 分页后的 `rank` 保持全局页内序号：`offset + index + 1`。
+- `src/server/online-server.ts`
+  - `GET /api/leaderboard` 解析 `offset` 和 `search` 查询参数。
+- `src/components/useFriendRoom.ts`、`src/components/GameShell.tsx`、`src/app/globals.css`、`src/i18n/dictionaries.ts`
+  - Rankings 面板新增搜索框、上一页 / 下一页按钮和页码摘要。
+  - 切换身份、榜单范围或搜索文本时回到第一页。
+  - 翻页状态进入 `refreshLeaderboard()` 参数。
+- `src/server/room-socket.ts`
+  - 同一个 socket 已在只有自己的 waiting 房中时，再次 `room:create` 直接复用当前房间，不再分配新 room code。
+  - 进入新房前先清理无 socket 成员的残留房，再按 playerId / 昵称释放旧 disposable waiting room。
+- `src/server/game-records.test.ts`、`src/server/room-socket.test.ts`
+  - 覆盖 leaderboard 搜索、offset 分页、totalEntries 和 rank。
+  - 覆盖同一 socket 重复创建房间时复用当前 waiting 房。
+- `tools/smoke-leaderboard.ts`
+  - 增加真实 REST 搜索和分页断言。
+- `tools/smoke-room-lifecycle.ts`
+  - 重复创建断言改为“同一连接复用当前 waiting 房”。
+  - 继续覆盖同玩家/同名旧房关闭、空 waiting 房断线关闭、观战补位和断线超时判负。
+- `README.md`、`docs/logic/lobby-matchmaking-module.md`、`docs/logic/rating-leaderboard-module.md`
+  - 更新 smoke 口径和当前落地范围。
+
+本地验证：
+
+- `npx vitest run src/server/game-records.test.ts src/server/rooms.test.ts src/server/room-socket.test.ts`：通过，3 个测试文件、52 个测试用例。
+- `npm test`：通过，11 个测试文件、99 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务 `http://127.0.0.1:3200`：`npm run smoke:leaderboard -- http://127.0.0.1:3200`：通过。
+  - `PASS leaderboard readback - D9GMGL-1`
+  - `PASS leaderboard search and pagination - rank-guest-mquhmn9b`
+- 本地生产服务 `http://127.0.0.1:3200`：`npm run smoke:room-lifecycle -- http://127.0.0.1:3200`：通过。
+  - `PASS repeated create reuses current room - QWLXG2`
+  - `PASS same player create closes previous room - Q778CL -> GQW37D`
+  - `PASS same guest name create closes previous room - YV8HB2 -> RVDE9P`
+  - `PASS empty waiting room closes on disconnect - D3ZP3Y`
+  - `PASS spectator sits in open seat - Y7VSZE`
+  - `PASS disconnect timeout forfeit - E2B2F4`
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后运行 `verify:online`、`smoke:leaderboard` 和 `smoke:room-lifecycle`。
+
+下一步：
+
+- 阶段 3 继续推进账号完整化、排行榜增量事件、opening analysis 候选接入 arena 筛线和运行时开局库转换，以及后续 PlayOK 式用户功能。

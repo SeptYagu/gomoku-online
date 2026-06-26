@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CircleDot,
   Copy,
   Eye,
@@ -1101,6 +1103,19 @@ function LeaderboardPanel({
   const labels = dictionary.room;
   const { refreshLeaderboard } = room;
   const entries = room.leaderboard?.entries ?? [];
+  const pageOffset = room.leaderboard?.offset ?? room.leaderboardOffset;
+  const pageStart = entries.length > 0 ? pageOffset + 1 : 0;
+  const pageEnd = pageOffset + entries.length;
+  const totalEntries = room.leaderboard?.totalEntries ?? 0;
+  const canPreviousPage = pageOffset > 0 && room.leaderboardStatus !== "loading";
+  const canNextPage =
+    room.leaderboard !== null &&
+    room.leaderboard.offset + room.leaderboard.limit < room.leaderboard.totalEntries &&
+    room.leaderboardStatus !== "loading";
+  const pageLabel = labels.leaderboardPage
+    .replace("{start}", String(pageStart))
+    .replace("{end}", String(pageEnd))
+    .replace("{total}", String(totalEntries));
 
   useEffect(() => {
     refreshLeaderboard();
@@ -1147,6 +1162,24 @@ function LeaderboardPanel({
         ))}
       </div>
 
+      <form
+        className="room-leaderboard-search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          room.refreshLeaderboard();
+        }}
+      >
+        <Search aria-hidden="true" focusable={false} />
+        <input
+          aria-label={labels.leaderboardSearchPlaceholder}
+          maxLength={64}
+          onChange={(event) => room.setLeaderboardSearch(event.target.value)}
+          placeholder={labels.leaderboardSearchPlaceholder}
+          type="search"
+          value={room.leaderboardSearch}
+        />
+      </form>
+
       {entries.length > 0 ? (
         <div className="room-leaderboard-list">
           {entries.map((entry) => (
@@ -1164,6 +1197,28 @@ function LeaderboardPanel({
           {room.leaderboardStatus === "loading" ? labels.refreshLeaderboard : labels.leaderboardNoEntries}
         </p>
       )}
+
+      <div className="room-leaderboard-pagination">
+        <button
+          className="icon-button"
+          disabled={!canPreviousPage}
+          onClick={room.previousLeaderboardPage}
+          title={labels.leaderboardPrevious}
+          type="button"
+        >
+          <ChevronLeft aria-hidden="true" focusable={false} />
+        </button>
+        <span>{pageLabel}</span>
+        <button
+          className="icon-button"
+          disabled={!canNextPage}
+          onClick={room.nextLeaderboardPage}
+          title={labels.leaderboardNext}
+          type="button"
+        >
+          <ChevronRight aria-hidden="true" focusable={false} />
+        </button>
+      </div>
     </section>
   );
 }

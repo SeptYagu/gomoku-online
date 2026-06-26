@@ -156,6 +156,44 @@ describe("GameRecordStore", () => {
     expect(all.entries).toHaveLength(4);
     expect(new Set(all.entries.map((entry) => entry.identity))).toEqual(new Set(["guest", "registered"]));
   });
+
+  it("supports leaderboard search and offset pagination", () => {
+    const store = new GameRecordStore({ now: createClock() });
+    const firstRecord = createAuthoritativeGameRecord();
+    const secondRecord = createAuthoritativeGameRecord({
+      gameId: "ROOM02-1",
+      players: [
+        { identity: "guest", name: "Delta", playerId: "player-4", seat: "black" },
+        { identity: "guest", name: "Echo", playerId: "player-5", seat: "white" }
+      ],
+      roomCode: "ROOM02",
+      winner: "white"
+    });
+
+    store.submit(firstRecord, createSubmission(firstRecord, "player-1"));
+    store.submit(firstRecord, createSubmission(firstRecord, "player-2"));
+    store.submit(secondRecord, createSubmission(secondRecord, "player-4"));
+    store.submit(secondRecord, createSubmission(secondRecord, "player-5"));
+
+    const firstPage = store.getLeaderboard({ identity: "guest", limit: 1, offset: 0 });
+    const secondPage = store.getLeaderboard({ identity: "guest", limit: 1, offset: 1 });
+    const searched = store.getLeaderboard({ identity: "guest", limit: 10, search: " player-4 " });
+
+    expect(firstPage.limit).toBe(1);
+    expect(firstPage.offset).toBe(0);
+    expect(firstPage.totalEntries).toBe(4);
+    expect(firstPage.entries).toHaveLength(1);
+    expect(firstPage.entries[0]?.rank).toBe(1);
+    expect(secondPage.offset).toBe(1);
+    expect(secondPage.entries[0]?.rank).toBe(2);
+    expect(searched.search).toBe("player-4");
+    expect(searched.totalEntries).toBe(1);
+    expect(searched.entries[0]).toMatchObject({
+      displayName: "Delta",
+      playerId: "player-4",
+      rank: 1
+    });
+  });
 });
 
 function createAuthoritativeGameRecord(

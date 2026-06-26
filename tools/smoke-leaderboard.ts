@@ -92,18 +92,45 @@ async function main(): Promise<void> {
     assert(dailyGuest?.dailyWins === 1, "winner should appear in daily ranking");
     assert(streakGuest?.currentStreak === 1, "winner should appear in streak ranking");
     console.log(`PASS leaderboard readback - ${finished.gameId}`);
+
+    const searched = await fetchLeaderboard(baseUrl, "overall", { limit: 1, search: guestId });
+    const paged = await fetchLeaderboard(baseUrl, "overall", { limit: 1, offset: 1 });
+
+    assert(searched.search === guestId.toLocaleLowerCase(), "search term should be normalized in the snapshot");
+    assert(searched.totalEntries === 1, "search should narrow the leaderboard to the created winner");
+    assert(searched.entries[0]?.playerId === guestId, "search should return the created winner");
+    assert(searched.entries[0]?.rank === 1, "search results should rank from the filtered set");
+    assert(paged.limit === 1, "paged leaderboard should echo limit");
+    assert(paged.offset === 1, "paged leaderboard should echo offset");
+    assert(paged.totalEntries >= 2, "paged leaderboard should have at least the smoke players");
+    assert(paged.entries.length === 1, "paged leaderboard should return one entry");
+    assert(paged.entries[0]?.rank === 2, "paged leaderboard should preserve global page rank");
+    console.log(`PASS leaderboard search and pagination - ${guestId}`);
   } finally {
     host.disconnect();
     guest.disconnect();
   }
 }
 
-async function fetchLeaderboard(baseUrl: string, scope: "daily" | "overall" | "streak"): Promise<LeaderboardSnapshot> {
+async function fetchLeaderboard(
+  baseUrl: string,
+  scope: "daily" | "overall" | "streak",
+  options: { limit?: number; offset?: number; search?: string } = {}
+): Promise<LeaderboardSnapshot> {
   const params = new URLSearchParams({
     identity: "guest",
-    limit: "100",
+    limit: String(options.limit ?? 100),
     scope
   });
+
+  if (options.offset !== undefined) {
+    params.set("offset", String(options.offset));
+  }
+
+  if (options.search) {
+    params.set("search", options.search);
+  }
+
   const response = await fetch(`${baseUrl}/api/leaderboard?${params.toString()}`, {
     headers: {
       "accept": "application/json"

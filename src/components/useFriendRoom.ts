@@ -77,6 +77,8 @@ export type FriendRoomController = {
   lobbyStatus: "idle" | "loading" | "ready" | "error";
   leaderboard: LeaderboardSnapshot | null;
   leaderboardIdentity: LeaderboardIdentity;
+  leaderboardOffset: number;
+  leaderboardSearch: string;
   leaderboardScope: LeaderboardScope;
   leaderboardStatus: "idle" | "loading" | "ready" | "error";
   matchmakingStatus: "idle" | "searching";
@@ -90,6 +92,8 @@ export type FriendRoomController = {
   publicChatStatus: "idle" | "loading" | "ready" | "error";
   publicChatText: string;
   ready: boolean;
+  nextLeaderboardPage: () => void;
+  previousLeaderboardPage: () => void;
   registerAccount: () => void;
   refreshPresence: () => void;
   refreshLeaderboard: () => void;
@@ -106,6 +110,7 @@ export type FriendRoomController = {
   setChatText: (value: string) => void;
   setJoinCode: (value: string) => void;
   setLeaderboardIdentity: (identity: LeaderboardIdentity) => void;
+  setLeaderboardSearch: (value: string) => void;
   setLeaderboardScope: (scope: LeaderboardScope) => void;
   setPlayerName: (value: string) => void;
   setPublicChatText: (value: string) => void;
@@ -119,6 +124,7 @@ const PLAYER_ID_STORAGE_KEY = "gomoku-room-player-id";
 const PLAYER_NAME_STORAGE_KEY = "gomoku-room-player-name";
 const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
 const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
+const LEADERBOARD_PAGE_SIZE = 10;
 
 export function useFriendRoom(): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
@@ -143,6 +149,8 @@ export function useFriendRoom(): FriendRoomController {
   const [presenceStatus, setPresenceStatus] = useState<FriendRoomController["presenceStatus"]>("idle");
   const [leaderboard, setLeaderboard] = useState<LeaderboardSnapshot | null>(null);
   const [leaderboardIdentity, setLeaderboardIdentityState] = useState<LeaderboardIdentity>("registered");
+  const [leaderboardOffset, setLeaderboardOffset] = useState(0);
+  const [leaderboardSearch, setLeaderboardSearchState] = useState("");
   const [leaderboardScope, setLeaderboardScopeState] = useState<LeaderboardScope>("overall");
   const [leaderboardStatus, setLeaderboardStatus] = useState<FriendRoomController["leaderboardStatus"]>("idle");
   const [matchmakingStatus, setMatchmakingStatus] = useState<FriendRoomController["matchmakingStatus"]>("idle");
@@ -460,9 +468,15 @@ export function useFriendRoom(): FriendRoomController {
   const refreshLeaderboard = useCallback(() => {
     const params = new URLSearchParams({
       identity: leaderboardIdentity,
-      limit: "10",
+      limit: String(LEADERBOARD_PAGE_SIZE),
+      offset: String(leaderboardOffset),
       scope: leaderboardScope
     });
+    const search = leaderboardSearch.trim();
+
+    if (search) {
+      params.set("search", search);
+    }
 
     setLeaderboardStatus("loading");
     void fetch(`/api/leaderboard?${params.toString()}`, {
@@ -485,7 +499,7 @@ export function useFriendRoom(): FriendRoomController {
         setLeaderboardStatus("error");
         setError(leaderboardError instanceof Error ? leaderboardError.message : "Leaderboard request failed.");
       });
-  }, [leaderboardIdentity, leaderboardScope]);
+  }, [leaderboardIdentity, leaderboardOffset, leaderboardScope, leaderboardSearch]);
 
   const refreshProfile = useCallback(() => {
     const player = getActivePlayer();
@@ -742,10 +756,33 @@ export function useFriendRoom(): FriendRoomController {
 
   const setLeaderboardScope = useCallback((scope: LeaderboardScope) => {
     setLeaderboardScopeState(scope);
+    setLeaderboardOffset(0);
   }, []);
 
   const setLeaderboardIdentity = useCallback((identity: LeaderboardIdentity) => {
     setLeaderboardIdentityState(identity);
+    setLeaderboardOffset(0);
+  }, []);
+
+  const setLeaderboardSearch = useCallback((value: string) => {
+    setLeaderboardSearchState(value);
+    setLeaderboardOffset(0);
+  }, []);
+
+  const nextLeaderboardPage = useCallback(() => {
+    setLeaderboardOffset((currentOffset) => {
+      const nextOffset = currentOffset + LEADERBOARD_PAGE_SIZE;
+
+      if (leaderboard && nextOffset >= leaderboard.totalEntries) {
+        return currentOffset;
+      }
+
+      return nextOffset;
+    });
+  }, [leaderboard]);
+
+  const previousLeaderboardPage = useCallback(() => {
+    setLeaderboardOffset((currentOffset) => Math.max(0, currentOffset - LEADERBOARD_PAGE_SIZE));
   }, []);
 
   useEffect(() => {
@@ -902,6 +939,8 @@ export function useFriendRoom(): FriendRoomController {
     leaveRoom,
     leaderboard,
     leaderboardIdentity,
+    leaderboardOffset,
+    leaderboardSearch,
     leaderboardScope,
     leaderboardStatus,
     lobbyRooms,
@@ -917,6 +956,8 @@ export function useFriendRoom(): FriendRoomController {
     publicChatStatus,
     publicChatText,
     ready,
+    nextLeaderboardPage,
+    previousLeaderboardPage,
     registerAccount,
     refreshPresence,
     refreshLeaderboard,
@@ -933,6 +974,7 @@ export function useFriendRoom(): FriendRoomController {
     setChatText,
     setJoinCode,
     setLeaderboardIdentity,
+    setLeaderboardSearch,
     setLeaderboardScope,
     setPlayerName,
     setPublicChatText,
