@@ -3677,3 +3677,68 @@ b6faf9e
 - 提交并推送本轮改动。
 - 推送后等待真实服务器更新，再运行 `verify:online`、`smoke:leaderboard` 和 `smoke:room-lifecycle`。
 - 阶段 3 后续继续做排行榜增量事件、账号完整化、opening analysis 候选接入 arena 筛线和运行时开局库转换。
+
+## 73. 2026-06-26 阶段 3 小步 19 线上验证补记
+
+本轮目标：
+
+- 记录排行榜分页/搜索和房间创建幂等补强的提交、推送和真实服务器验证结果。
+- 明确部署更新期间曾短暂出现 502，第二轮等待后恢复并完成验证。
+
+提交与部署：
+
+- 小步 19 提交：`dfdf1ec Add leaderboard paging and room create guard`。
+- 已推送到 `origin/main`。
+- 推送后等待 90 秒，第一次 `verify:online` 返回 HTTP 502。
+- 再等待 90 秒后复查，真实服务器显示 `version dfdf1ec`。
+
+真实服务器验证：
+
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net dfdf1ec`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version dfdf1ec`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS connect host - websocket`
+  - `PASS connect guest - websocket`
+  - `PASS submitted verified ranked record - C4FBCH-1`
+  - `PASS leaderboard readback - C4FBCH-1`
+  - `PASS leaderboard search and pagination - rank-guest-mquhy3dr`
+- `npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS connect host - websocket`
+  - `PASS connect guest - websocket`
+  - `PASS connect spectator - websocket`
+  - `PASS connect mirror - websocket`
+  - `PASS repeated create reuses current room - UFV85C`
+  - `PASS same player create closes previous room - SHEWV4 -> K9EE9R`
+  - `PASS same guest name create closes previous room - RDT8NU -> 2D9MZU`
+  - `PASS empty waiting room closes on disconnect - 6HEKWB`
+  - `PASS spectator sits in open seat - BCBNPN`
+  - `PASS disconnect timeout forfeit - LS3LC5`
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 小步 8：在线棋谱提交、去重和 guest 棋谱保存，完成并通过真实服务器验证。
+- 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
+- 小步 10：用户状态 / Presence 第一版，完成并通过真实服务器验证。
+- 小步 11：排行榜第一版，完成并通过真实服务器验证。
+- 小步 12：账号 / 注册玩家身份第一版，完成并通过真实服务器验证。
+- 小步 13：Profile / Game records 页面入口第一版，完成并通过真实服务器验证。
+- 小步 14：注册用户 / 游客排行榜隔离与创建房 UI 收口，完成并通过真实服务器验证。
+- 小步 15：棋谱回看和开局库导出准备，完成并通过真实服务器验证。
+- 小步 16：房间生命周期二次补强，完成并通过真实服务器验证。
+- 小步 17：单局 SGF 下载入口，完成并通过真实服务器验证。
+- 小步 18：服务器棋谱开局分析流程第一版，完成并通过真实服务器验证。
+- 小步 19：排行榜分页和搜索第一版 + 房间创建幂等补强，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进账号完整化、排行榜增量事件、opening analysis 候选接入 arena 筛线和运行时开局库转换，以及后续 PlayOK 式用户功能。

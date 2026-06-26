@@ -1563,3 +1563,34 @@
 下一步：
 
 - 阶段 3 继续推进账号完整化、排行榜增量事件、opening analysis 候选接入 arena 筛线和运行时开局库转换，以及后续 PlayOK 式用户功能。
+
+线上验证：
+
+- 小步 19 提交：`dfdf1ec Add leaderboard paging and room create guard`。
+- `dfdf1ec` 已推送到 `origin/main`。
+- 推送后等待 90 秒，第一次 `verify:online` 返回 HTTP 502，判断为部署重启窗口。
+- 再等待 90 秒，真实服务器显示 `version dfdf1ec`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net dfdf1ec`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version dfdf1ec`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS submitted verified ranked record - C4FBCH-1`
+  - `PASS leaderboard readback - C4FBCH-1`
+  - `PASS leaderboard search and pagination - rank-guest-mquhy3dr`
+- `npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS repeated create reuses current room - UFV85C`
+  - `PASS same player create closes previous room - SHEWV4 -> K9EE9R`
+  - `PASS same guest name create closes previous room - RDT8NU -> 2D9MZU`
+  - `PASS empty waiting room closes on disconnect - 6HEKWB`
+  - `PASS spectator sits in open seat - BCBNPN`
+  - `PASS disconnect timeout forfeit - LS3LC5`
+
+当前阶段 3 状态：
+
+- 小步 19：排行榜分页和搜索第一版 + 房间创建幂等补强，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进账号完整化、排行榜增量事件、opening analysis 候选接入 arena 筛线和运行时开局库转换，以及后续 PlayOK 式用户功能。
