@@ -1119,3 +1119,40 @@
 
 - 提交并推送本轮小步 14。
 - 等待真实服务器更新后运行 `verify:online`、`smoke:share-url`、`smoke:room-lifecycle`、`smoke:leaderboard-audience`、`smoke:leaderboard` 和 `smoke:account`。
+
+线上验证：
+
+- 小步 14 提交：`a57dece Implement leaderboard audience filters`。
+- `a57dece` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器已更新到 `version a57dece`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net a57dece`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version a57dece`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS create room URL - SLUJ3Z`
+  - `PASS create room locked while already in room`
+  - `PASS empty room closed after leave - SLUJ3Z`
+- `npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS repeated create closes previous room - PE6RRP -> AWNKLB`
+  - `PASS same player create closes previous room - FLZ9RB -> A6GRYB`
+  - `PASS empty waiting room closes on disconnect - 57KTTU`
+  - `PASS disconnect timeout forfeit - UEH6JX`
+- `npm run smoke:leaderboard-audience -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS guest ranked record - 6YPBY3-1`
+  - `PASS registered ranked record - AGNK2L-1`
+  - `PASS leaderboard audience split`
+- `npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS leaderboard readback - U7LJXL-1`
+- `npm run smoke:account -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS registered record verified - LBV7AW-1`
+  - `PASS registered leaderboard readback`
+
+当前阶段 3 状态：
+
+- 小步 14：注册用户 / 游客排行榜隔离与创建房 UI 收口，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进棋谱逐手回放、棋谱导出与开局库准备、以及后续账号完整化能力。
