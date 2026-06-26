@@ -118,6 +118,12 @@ npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net
 ```
 
+随机匹配可跑 Socket.IO 冒烟，确认第一个玩家创建等待房、第二个玩家加入同房、第三个玩家不会超员、取消匹配会关闭单人等待房：
+
+```bash
+npm run smoke:matchmaking -- http://gomoku.yagu.ddns-ip.net
+```
+
 房间列表 UI 可用系统 Chrome 做真实页面冒烟，确认列表里的 Join / Watch 按钮能进入对应房间：
 
 ```bash

@@ -363,6 +363,90 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("finds and cancels random matches through Socket.IO", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const lobby = await harness.connectClient();
+      const first = await harness.connectClient();
+      const second = await harness.connectClient();
+      const third = await harness.connectClient();
+
+      expect(await emitAck<RoomListAck>(lobby, "lobby:join", { limit: 20 })).toMatchObject({ ok: true });
+
+      const lobbySawFirstRoom = waitForEventMatching<LobbyRoomUpdatedEvent>(
+        lobby,
+        "lobby:room-updated",
+        (event) => event.room.playerCount === 1 && event.room.canJoin
+      );
+      const firstAck = await emitAck(first, "matchmaking:find", {
+        playerId: "match-player-1",
+        playerName: "Match One"
+      });
+
+      expect(firstAck).toMatchObject({
+        ok: true,
+        value: {
+          role: "player",
+          seat: "black"
+        }
+      });
+
+      if (!firstAck.ok) {
+        throw new Error(firstAck.error.message);
+      }
+
+      const firstRoomCode = firstAck.value.snapshot.code;
+      expect((await lobbySawFirstRoom).room).toMatchObject({ code: firstRoomCode, playerCount: 1 });
+
+      const firstSawSecondJoin = waitForEventMatching<RoomSnapshot>(
+        first,
+        "room:state",
+        (snapshot) => snapshot.code === firstRoomCode && snapshot.players.length === 2
+      );
+      const lobbySawMatchedRoom = waitForEventMatching<LobbyRoomUpdatedEvent>(
+        lobby,
+        "lobby:room-updated",
+        (event) => event.room.code === firstRoomCode && event.room.playerCount === 2 && !event.room.canJoin
+      );
+      const secondAck = await emitAck(second, "matchmaking:find", {
+        playerId: "match-player-2",
+        playerName: "Match Two"
+      });
+
+      expect(secondAck).toMatchObject({
+        ok: true,
+        value: {
+          role: "player",
+          seat: "white",
+          snapshot: { code: firstRoomCode }
+        }
+      });
+      expect((await firstSawSecondJoin).players).toHaveLength(2);
+      expect((await lobbySawMatchedRoom).room).toMatchObject({ code: firstRoomCode, playerCount: 2 });
+
+      const thirdAck = await emitAck(third, "matchmaking:find", {
+        playerId: "match-player-3",
+        playerName: "Match Three"
+      });
+
+      expect(thirdAck.ok ? thirdAck.value.snapshot.code : firstRoomCode).not.toBe(firstRoomCode);
+      expect(thirdAck.ok ? thirdAck.value.snapshot.players : []).toHaveLength(1);
+
+      const thirdRoomCode = thirdAck.ok ? thirdAck.value.snapshot.code : "";
+      const lobbySawCancel = waitForEventMatching<LobbyRoomDeletedEvent>(
+        lobby,
+        "lobby:room-deleted",
+        (event) => event.code === thirdRoomCode
+      );
+
+      expect(await emitAck(third, "matchmaking:cancel", { roomCode: thirdRoomCode })).toMatchObject({ ok: true });
+      expect(await lobbySawCancel).toMatchObject({ code: thirdRoomCode });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("lets spectators sit in an open player seat through Socket.IO", async () => {
     const harness = await createSocketHarness();
 

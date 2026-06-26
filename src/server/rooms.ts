@@ -315,6 +315,30 @@ export class RoomStore {
     return success(getRoomSnapshot(room));
   }
 
+  findMatch(input: JoinRoomInput): RoomResult<RoomSnapshot> {
+    const player = normalizePlayerInput(input);
+
+    if (!player) {
+      return failure("invalid-player", "Player id and name are required.");
+    }
+
+    const room = [...this.rooms.values()]
+      .filter(
+        (candidate) =>
+          candidate.status === "waiting" &&
+          candidate.players.length < 2 &&
+          !hasParticipantId(candidate, player.id) &&
+          !hasParticipantName(candidate, player.name)
+      )
+      .sort((left, right) => left.createdAt - right.createdAt)[0];
+
+    if (!room) {
+      return this.createRoom(input);
+    }
+
+    return this.joinRoom(room.code, input);
+  }
+
   joinRoom(roomCode: string, input: JoinRoomInput): RoomResult<RoomSnapshot> {
     const room = this.getRoom(roomCode);
 

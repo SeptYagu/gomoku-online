@@ -31,6 +31,8 @@ export type ClientToServerEvents = {
   "lobby:join": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:leave": (payload: undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:list": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
+  "matchmaking:cancel": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
+  "matchmaking:find": (payload: { playerId: string; playerName: string }, ack: (response: RoomAck) => void) => void;
   "public-chat:join": (payload: undefined, ack: (response: PublicChatAck) => void) => void;
   "public-chat:leave": (payload: undefined, ack: (response: PublicChatAck) => void) => void;
   "public-chat:send": (
@@ -143,6 +145,26 @@ export function registerRoomSocketHandlers(
         payload.playerId
       );
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
+    });
+
+    socket.on("matchmaking:find", (payload, ack) => {
+      leaveCurrentRoomIfNeeded(io, socket, roomStore);
+      const response = handleJoinedRoom(socket, roomStore, roomStore.findMatch(payload), payload.playerId);
+      acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
+    });
+
+    socket.on("matchmaking:cancel", (payload, ack) => {
+      acknowledgeAndBroadcast(
+        io,
+        socket,
+        roomStore,
+        runForCurrentMember(socket, roomStore, payload.roomCode, (playerId) =>
+          roomStore.leaveRoom(payload.roomCode, playerId)
+        ),
+        ack
+      );
+      socket.leave(payload.roomCode.trim().toUpperCase());
+      socket.data.roomCode = undefined;
     });
 
     socket.on("lobby:join", (payload, ack) => {

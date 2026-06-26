@@ -19,6 +19,7 @@
     "smoke:lobby": "tsx tools/smoke-lobby.ts",
     "smoke:lobby-ui": "tsx tools/smoke-lobby-ui.ts",
     "smoke:online-room": "tsx tools/smoke-online-room.ts",
+    "smoke:matchmaking": "tsx tools/smoke-matchmaking.ts",
     "smoke:public-chat": "tsx tools/smoke-public-chat.ts",
     "smoke:room-chat": "tsx tools/smoke-room-chat.ts",
     "smoke:room-lifecycle": "tsx tools/smoke-room-lifecycle.ts",

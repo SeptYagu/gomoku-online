@@ -12,6 +12,7 @@ import {
   LogOut,
   RefreshCw,
   RotateCcw,
+  Search,
   Send,
   Undo2,
   UserRound,
@@ -741,6 +742,17 @@ function FriendRoomControls({
       </div>
 
       <div className="room-actions">
+        {room.canCancelMatch ? (
+          <button className="mode-pill danger" onClick={room.cancelMatch} type="button">
+            <X aria-hidden="true" focusable={false} />
+            {labels.cancelMatch}
+          </button>
+        ) : (
+          <button className="mode-pill" disabled={!room.canFindMatch} onClick={room.findMatch} type="button">
+            <Search aria-hidden="true" focusable={false} />
+            {room.matchmakingStatus === "searching" ? labels.matchmakingSearching : labels.findMatch}
+          </button>
+        )}
         <button className="mode-pill" onClick={room.createRoom} type="button">
           <Wifi aria-hidden="true" focusable={false} />
           {labels.createRoom}

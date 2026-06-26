@@ -2207,3 +2207,58 @@ b6faf9e
 - 小步 6：公共聊天频道，完成并通过真实服务器验证。
 - 联机回归修复：房间生命周期、补位和邀请链接，完成并通过真实服务器验证。
 - 下一步：回到阶段 3 小步 7，随机匹配。
+
+## 47. 2026-06-25 阶段 3 小步 7：随机匹配本地完成
+
+本轮目标：
+
+- 回到阶段 3 主线，完成小步 7 随机匹配。
+- 保持 handoff 只在文件末尾追加。
+
+实际完成：
+
+- `src/server/rooms.ts`：
+  - 新增 `RoomStore.findMatch()`。
+  - 服务端优先匹配最早创建、未满员的 waiting 房。
+  - 满员、playing、finished、abandoned 房不参与匹配。
+  - 同玩家或同名冲突房会被跳过。
+  - 没有可用 waiting 房时创建新的 waiting 房。
+- `src/server/room-socket.ts`：
+  - 新增 `matchmaking:find`。
+  - 新增 `matchmaking:cancel`。
+  - `matchmaking:find` 会先释放当前 socket 的旧房间身份，避免重复占房。
+- `src/components/useFriendRoom.ts`：
+  - 新增 `findMatch()`、`cancelMatch()`、`matchmakingStatus`、`canFindMatch`、`canCancelMatch`。
+- `src/components/GameShell.tsx`：
+  - 好友房工具栏新增 Find match / Cancel match 按钮。
+- `src/i18n/dictionaries.ts`：
+  - 六语言新增随机匹配文案。
+- `src/server/rooms.test.ts`：
+  - 覆盖空大厅匹配创建 waiting 房、第二人加入同房、第三人不超员、同名冲突跳过。
+- `src/server/room-socket.test.ts`：
+  - 覆盖 socket `matchmaking:find` / `matchmaking:cancel` 和 lobby 增量事件。
+- `tools/smoke-matchmaking.ts`、`package.json`、`README.md`：
+  - 新增 `npm run smoke:matchmaking` 及说明。
+- `docs/logic/lobby-matchmaking-module.md`、`docs/STAGE_3_PROGRESS.md`：
+  - 记录小步 7 随机匹配实现和当前单进程边界。
+
+本地验证：
+
+- `npm test`：通过，5 个测试文件、69 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3035 npm start` 后运行 `npm run smoke:matchmaking -- http://127.0.0.1:3035`，通过。
+  - `PASS first find creates waiting room - MCYBBV`
+  - `PASS second find joins waiting room - MCYBBV`
+  - `PASS third find does not overfill - Y9K6LD`
+  - `PASS cancel closes solo waiting match - Y9K6LD`
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3035`，通过。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3035`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3035`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3035`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送小步 7，等待真实服务器更新后跑 `verify:online`、`smoke:matchmaking`、`smoke:lobby`、`smoke:lobby-ui`、`smoke:share-url` 和 `smoke:online-room`。

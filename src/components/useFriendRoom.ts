@@ -27,6 +27,8 @@ type StoredRoomSession = {
 };
 
 export type FriendRoomController = {
+  canCancelMatch: boolean;
+  canFindMatch: boolean;
   canPlay: boolean;
   canReady: boolean;
   canResign: boolean;
@@ -35,6 +37,7 @@ export type FriendRoomController = {
   canUndo: boolean;
   chatText: string;
   connectionStatus: "idle" | "connecting" | "connected" | "disconnected";
+  cancelMatch: () => void;
   copyInvite: () => void;
   copiedInvite: boolean;
   createRoom: () => void;
@@ -46,6 +49,7 @@ export type FriendRoomController = {
   leaveRoom: () => void;
   lobbyRooms: RoomListItem[];
   lobbyStatus: "idle" | "loading" | "ready" | "error";
+  matchmakingStatus: "idle" | "searching";
   playerName: string;
   playMove: (point: Point) => void;
   publicChatMessages: PublicChatMessage[];
@@ -64,6 +68,7 @@ export type FriendRoomController = {
   setJoinCode: (value: string) => void;
   setPlayerName: (value: string) => void;
   setPublicChatText: (value: string) => void;
+  findMatch: () => void;
   sitRoom: () => void;
   toggleReady: () => void;
   undoMove: () => void;
@@ -85,6 +90,7 @@ export function useFriendRoom(): FriendRoomController {
   const [publicChatMessages, setPublicChatMessages] = useState<PublicChatMessage[]>([]);
   const [publicChatStatus, setPublicChatStatus] = useState<FriendRoomController["publicChatStatus"]>("idle");
   const [publicChatText, setPublicChatText] = useState("");
+  const [matchmakingStatus, setMatchmakingStatus] = useState<FriendRoomController["matchmakingStatus"]>("idle");
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const autoJoinRoomCodeRef = useRef<string | null>(null);
@@ -99,6 +105,12 @@ export function useFriendRoom(): FriendRoomController {
   const canResign = isPlayer && room?.snapshot.status === "playing";
   const canRestart = isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
   const canSit = room?.role === "spectator" && hasOpenPlayerSeat(room.snapshot);
+  const canFindMatch = matchmakingStatus !== "searching" && room?.snapshot.status !== "playing";
+  const canCancelMatch =
+    matchmakingStatus !== "searching" &&
+    isPlayer &&
+    room?.snapshot.status === "waiting" &&
+    room.snapshot.players.length === 1;
   const canUndo =
     isPlayer &&
     room?.snapshot.status === "playing" &&
@@ -238,6 +250,46 @@ export function useFriendRoom(): FriendRoomController {
   const joinListedRoom = useCallback((roomCode: string) => {
     joinRoomByCode(roomCode);
   }, [joinRoomByCode]);
+
+  const findMatch = useCallback(() => {
+    if (!canFindMatch) {
+      return;
+    }
+
+    const socket = ensureSocket();
+    const nextPlayerId = getOrCreatePlayerId();
+    const nextPlayerName = normalizePlayerName(playerName);
+
+    setMatchmakingStatus("searching");
+    setPlayerNameState(nextPlayerName);
+    persistPlayerName(nextPlayerName);
+    socket.emit("matchmaking:find", { playerId: nextPlayerId, playerName: nextPlayerName }, (response: RoomAck) => {
+      setMatchmakingStatus("idle");
+      applyRoomAck(response);
+    });
+  }, [applyRoomAck, canFindMatch, ensureSocket, playerName]);
+
+  const cancelMatch = useCallback(() => {
+    if (!room) {
+      return;
+    }
+
+    setMatchmakingStatus("searching");
+    ensureSocket().emit("matchmaking:cancel", { roomCode: room.snapshot.code }, (response: RoomAck) => {
+      setMatchmakingStatus("idle");
+
+      if (!response.ok) {
+        setError(response.error.message);
+        return;
+      }
+
+      clearRoomSession();
+      clearRoomUrl();
+      setRoom(null);
+      setChatText("");
+      setError(null);
+    });
+  }, [ensureSocket, room]);
 
   const refreshLobby = useCallback(() => {
     setLobbyStatus("loading");
@@ -401,6 +453,7 @@ export function useFriendRoom(): FriendRoomController {
       clearRoomUrl();
       setRoom(null);
       setChatText("");
+      setMatchmakingStatus("idle");
       setError(null);
     });
   }, [ensureSocket, room]);
@@ -495,6 +548,8 @@ export function useFriendRoom(): FriendRoomController {
   }, [copiedInvite]);
 
   return {
+    canCancelMatch,
+    canFindMatch,
     canPlay,
     canReady,
     canResign,
@@ -503,6 +558,7 @@ export function useFriendRoom(): FriendRoomController {
     canUndo,
     chatText,
     connectionStatus,
+    cancelMatch,
     copyInvite,
     copiedInvite,
     createRoom,
@@ -514,6 +570,7 @@ export function useFriendRoom(): FriendRoomController {
     leaveRoom,
     lobbyRooms,
     lobbyStatus,
+    matchmakingStatus,
     playerName,
     playMove,
     publicChatMessages,
@@ -532,6 +589,7 @@ export function useFriendRoom(): FriendRoomController {
     setJoinCode,
     setPlayerName,
     setPublicChatText,
+    findMatch,
     sitRoom,
     toggleReady,
     undoMove

@@ -449,3 +449,51 @@
   - `PASS lobby playing row watch - XB9Q2P`
 - 真实服务器：`npm run smoke:room-chat -- http://gomoku.yagu.ddns-ip.net`，通过。
 - 真实服务器：`npm run smoke:public-chat -- http://gomoku.yagu.ddns-ip.net`，通过。
+
+## 小步 7：随机匹配
+
+状态：本地完成，待推送并等待真实服务器验证。
+
+目标：
+
+- Find Match 优先加入可用公开 waiting 房。
+- 没有可用 waiting 房时创建公开 waiting 房。
+- 第三个匹配者不能挤进已满员房。
+- Cancel Match 能释放单人等待房，并从大厅移除空房。
+- 前端好友房面板提供 Find match / Cancel match 按钮。
+
+实现：
+
+- `src/server/rooms.ts`
+  - 新增 `RoomStore.findMatch()`。
+  - 服务端按最早创建的 waiting 房匹配，跳过满员、playing、finished、abandoned、同玩家和同名冲突房。
+  - 没有可用房时创建新的 waiting 房。
+- `src/server/room-socket.ts`
+  - 新增 `matchmaking:find`。
+  - 新增 `matchmaking:cancel`。
+  - `matchmaking:find` 会先释放当前 socket 的旧房间身份，再进入服务端匹配。
+- `src/components/useFriendRoom.ts`
+  - 新增 `findMatch()`、`cancelMatch()`、`matchmakingStatus`、`canFindMatch`、`canCancelMatch`。
+- `src/components/GameShell.tsx`
+  - 好友房工具栏新增 Find match / Cancel match 按钮。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增随机匹配文案。
+- `tools/smoke-matchmaking.ts`
+  - 覆盖第一个匹配创建等待房、第二个匹配加入同房、第三个匹配不超员、取消匹配关闭单人等待房。
+- `README.md`、`docs/logic/lobby-matchmaking-module.md`
+  - 增加随机匹配命令和当前单进程实现边界说明。
+
+验证：
+
+- `npm test`：通过，5 个测试文件、69 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3035 npm start` 后运行 `npm run smoke:matchmaking -- http://127.0.0.1:3035`，通过。
+  - `PASS first find creates waiting room - MCYBBV`
+  - `PASS second find joins waiting room - MCYBBV`
+  - `PASS third find does not overfill - Y9K6LD`
+  - `PASS cancel closes solo waiting match - Y9K6LD`
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3035`，通过。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3035`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3035`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3035`，通过。

@@ -273,6 +273,17 @@ Custom Game：
   - `lobby:room-updated` / `lobby:room-deleted` 增量事件。
   - `tools/smoke-lobby.ts` 覆盖 REST 全量列表、lobby 初始列表、创建/加入/开局/结束的增量更新。
 
+随机匹配：
+
+- 当前小步 7 已实现单进程基础版：
+  - `RoomStore.findMatch()` 在服务端原子执行“找 waiting 房或创建 waiting 房”。
+  - socket `matchmaking:find` 优先加入最早创建、未满员的 waiting 房；没有可用 waiting 房时创建新房。
+  - socket `matchmaking:cancel` 释放当前等待房身份；若房间无人则立即从大厅移除。
+  - 满员房、playing、finished、abandoned 房不会进入随机匹配。
+  - 好友房面板新增 Find match / Cancel match 按钮，继续使用游客随机名和 session 级玩家身份。
+  - `tools/smoke-matchmaking.ts` 覆盖第一个匹配创建等待房、第二个匹配加入同房、第三个匹配不超员、取消匹配关闭单人等待房。
+- 多实例部署前仍需把匹配队列迁移到 Redis/PostgreSQL 原子锁；当前真实服务器是单进程内存版。
+
 聊天：
 
 - 公共聊天频道：大厅范围。
@@ -337,6 +348,12 @@ Custom Game：
 - `publicChat`
 - `publicChatPlaceholder`
 
+小步 7 已新增并接入的 UI 文案 key：
+
+- `findMatch`
+- `cancelMatch`
+- `matchmakingSearching`
+
 小步 4 已新增并接入的 UI 文案 key：
 
 - `availableRooms`
@@ -359,23 +376,23 @@ Custom Game：
 
 ## 实现任务清单
 
-- 定义 `RoomSummary`、`LobbyQuery`、`MatchmakingRequest` 类型。`RoomListItem` / `RoomListQuery` 已完成；`MatchmakingRequest` 留到随机匹配小步。
+- 定义 `RoomSummary`、`LobbyQuery`、`MatchmakingRequest` 类型。`RoomListItem` / `RoomListQuery` 已完成；当前随机匹配第一版直接复用 `JoinRoomInput`。
 - 实现服务端房间列表分页 API。已完成基础版：`GET /api/rooms` 支持 `limit` 和 `status`。
 - 实现 lobby socket channel。已完成基础版：`lobby:join` / `lobby:list` / `lobby:leave`。
 - 实现 room 增量事件和版本号。已完成基础版：`lobby:room-updated` / `lobby:room-deleted` 带全局 `version`，每个房间 item 带自身 `version`。
-- 实现服务端随机匹配。
+- 实现服务端随机匹配。已完成单进程基础版：`RoomStore.findMatch()` + socket `matchmaking:find` / `matchmaking:cancel`。
 - 实现私密房 password hash。
 - 实现房间名/房间码服务端唯一约束。
 - 移除客户端直接修改玩家数组的模式。
 
 ## 测试清单
 
-- 空大厅找局会创建等待房。
-- 有可用公开空房时加入该房。
+- 空大厅找局会创建等待房。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`、`tools/smoke-matchmaking.ts`。
+- 有可用公开空房时加入该房。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`、`tools/smoke-matchmaking.ts`。
 - 私密房不会进入随机匹配。
 - 密码错误不能加入。
 - 密码不下发到客户端。
-- 并发两人找局不会超员。
+- 并发两人找局不会超员。当前单进程版覆盖顺序并发不超员；多实例原子锁留到 Redis/PostgreSQL 阶段。
 - 搜索无结果显示空状态。
 - 公共聊天在大厅范围广播，空/超长/过快消息会被拒绝。已覆盖：`src/server/room-socket.test.ts`、`tools/smoke-public-chat.ts`。
 - 房间聊天只在同房间内广播，玩家和观战者可发言，非成员不能发言。已覆盖：`src/server/room-socket.test.ts`、`tools/smoke-room-chat.ts`。

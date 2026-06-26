@@ -52,6 +52,42 @@ describe("RoomStore", () => {
     });
   });
 
+  it("finds a random match by joining the oldest available waiting room", () => {
+    const store = createTestRoomStore(["ROOM01", "ROOM02"]);
+
+    const first = expectOk(store.findMatch({ playerId: "player-1", playerName: "Alice" }));
+
+    expect(first.code).toBe("ROOM01");
+    expect(first.players).toHaveLength(1);
+    expect(first.players[0]).toMatchObject({ name: "Alice", seat: "black" });
+
+    const second = expectOk(store.findMatch({ playerId: "player-2", playerName: "Bob" }));
+
+    expect(second.code).toBe("ROOM01");
+    expect(second.players).toHaveLength(2);
+    expect(second.players.map((player) => player.name)).toEqual(["Alice", "Bob"]);
+    expect(second.players.map((player) => player.seat)).toEqual(["black", "white"]);
+
+    const third = expectOk(store.findMatch({ playerId: "player-3", playerName: "Cara" }));
+
+    expect(third.code).toBe("ROOM02");
+    expect(third.players).toHaveLength(1);
+    expect(third.players[0]).toMatchObject({ name: "Cara", seat: "black" });
+    expect(store.listRooms({ status: "waiting" }).rooms.map((room) => room.code)).toEqual(["ROOM02", "ROOM01"]);
+  });
+
+  it("skips waiting rooms that would duplicate a player name during random matching", () => {
+    const store = createTestRoomStore(["ROOM01", "ROOM02"]);
+
+    expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    const matched = expectOk(store.findMatch({ playerId: "player-2", playerName: " Alice " }));
+
+    expect(matched.code).toBe("ROOM02");
+    expect(matched.players).toHaveLength(1);
+    expect(matched.players[0]).toMatchObject({ name: "Alice", seat: "black" });
+  });
+
   it("puts third and later room members into spectator seats", () => {
     const store = createTestRoomStore(["ROOM01"]);
     const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
