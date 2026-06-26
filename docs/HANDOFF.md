@@ -2262,3 +2262,45 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：提交并推送小步 7，等待真实服务器更新后跑 `verify:online`、`smoke:matchmaking`、`smoke:lobby`、`smoke:lobby-ui`、`smoke:share-url` 和 `smoke:online-room`。
+
+## 48. 2026-06-25 阶段 3 小步 7 线上验证补记
+
+本轮目标：
+
+- 按 handoff 追加规则，补记阶段 3 小步 7 随机匹配的推送和真实服务器验证结果。
+- 更新阶段 3 进度文件，把小步 7 标记为完成并通过真实服务器验证。
+
+实际结果：
+
+- 阶段 3 小步 7 随机匹配提交：`c7e4f6b Implement stage 3 random matchmaking`。
+- `c7e4f6b` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version c7e4f6b`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net c7e4f6b`：通过。
+- `npm run smoke:matchmaking -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS first find creates waiting room - BGGTCB`
+  - `PASS second find joins waiting room - BGGTCB`
+  - `PASS third find does not overfill - 8EMSJY`
+  - `PASS cancel closes solo waiting match - 8EMSJY`
+- `npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`：通过，lobby REST/socket 无回归。
+- `npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS lobby waiting row join - FWU5NW`
+  - `PASS lobby playing row watch - MYX36G`
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS create room URL - Q6RHFZ`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+- `npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`：通过，继续覆盖三客户端三局流程、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- `docs/STAGE_3_PROGRESS.md` 已更新小步 7 为完成并通过真实服务器验证。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 联机回归修复：房间生命周期、补位和邀请链接，完成并通过真实服务器验证。
+- 下一步：阶段 3 小步 8，在线棋谱提交、去重和匿名/注册记录保存。
