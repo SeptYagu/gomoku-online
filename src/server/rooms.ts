@@ -1284,6 +1284,49 @@ export class RoomStore {
     return { deletedRoomCodes, updatedSnapshots };
   }
 
+  leaveDisposableWaitingRoomsByParticipantName(playerName: string, keepRoomCode?: string): RoomCleanupResult {
+    const normalizedPlayerName = playerName.trim();
+
+    if (!normalizedPlayerName) {
+      return { deletedRoomCodes: [], updatedSnapshots: [] };
+    }
+
+    const normalizedKeepRoomCode = keepRoomCode ? normalizeRoomCode(keepRoomCode) : null;
+    const roomCodes = [...this.rooms.values()]
+      .filter(
+        (room) =>
+          room.code !== normalizedKeepRoomCode &&
+          isDisposableWaitingRoom(room) &&
+          hasParticipantName(room, normalizedPlayerName)
+      )
+      .map((room) => room.code);
+    const deletedRoomCodes: string[] = [];
+    const updatedSnapshots: RoomSnapshot[] = [];
+
+    for (const roomCode of roomCodes) {
+      const room = this.getRoom(roomCode);
+      const participant = room ? findParticipantByName(room, normalizedPlayerName) : null;
+
+      if (!participant) {
+        continue;
+      }
+
+      const result = this.leaveRoom(roomCode, participant.id);
+
+      if (!result.ok) {
+        continue;
+      }
+
+      if (this.rooms.has(roomCode)) {
+        updatedSnapshots.push(result.value);
+      } else {
+        deletedRoomCodes.push(roomCode);
+      }
+    }
+
+    return { deletedRoomCodes, updatedSnapshots };
+  }
+
   sweepExpiredRooms(): RoomLifecycleSweep {
     const now = this.now();
     const deletedRoomCodes: string[] = [];
@@ -1602,6 +1645,15 @@ function removeSpectator(room: RoomState, playerId: string): RoomSpectator | nul
   return spectator;
 }
 
+function isDisposableWaitingRoom(room: RoomState): boolean {
+  return (
+    (room.status === "waiting" || room.status === "ready") &&
+    room.players.length <= 1 &&
+    room.spectators.length === 0 &&
+    room.moves.length === 0
+  );
+}
+
 function isRoomVisibleInLobby(room: RoomState, status: RoomListQuery["status"] = "all"): boolean {
   if (room.status === "abandoned") {
     return false;
@@ -1872,6 +1924,14 @@ function findParticipant(room: RoomState, playerId: string): RoomPlayer | RoomSp
   return (
     room.players.find((candidate) => candidate.id === playerId) ??
     room.spectators.find((candidate) => candidate.id === playerId) ??
+    null
+  );
+}
+
+function findParticipantByName(room: RoomState, playerName: string): RoomPlayer | RoomSpectator | null {
+  return (
+    room.players.find((candidate) => namesMatch(candidate.name, playerName)) ??
+    room.spectators.find((candidate) => namesMatch(candidate.name, playerName)) ??
     null
   );
 }

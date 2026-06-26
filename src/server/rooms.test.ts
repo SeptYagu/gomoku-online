@@ -202,6 +202,36 @@ describe("RoomStore", () => {
     expect(expectOk(store.getSnapshot(second.code)).players[0]).toMatchObject({ name: "Alice", seat: "black" });
   });
 
+  it("closes disposable one-player waiting rooms by participant name", () => {
+    const store = createTestRoomStore(["ROOM01", "ROOM02"]);
+    const first = expectOk(store.createRoom({ playerId: "tab-1", playerName: "Shared Guest" }));
+    const second = expectOk(store.createRoom({ playerId: "tab-2", playerName: "Shared Guest" }));
+    const cleanup = store.leaveDisposableWaitingRoomsByParticipantName("shared guest", second.code);
+
+    expect(cleanup.deletedRoomCodes).toEqual([first.code]);
+    expect(cleanup.updatedSnapshots).toEqual([]);
+    expect(store.getSnapshot(first.code)).toMatchObject({
+      ok: false,
+      error: { code: "room-not-found" }
+    });
+    expect(expectOk(store.getSnapshot(second.code)).players[0]).toMatchObject({
+      name: "Shared Guest",
+      seat: "black"
+    });
+  });
+
+  it("keeps occupied waiting rooms when closing disposable rooms by name", () => {
+    const store = createTestRoomStore(["ROOM01", "ROOM02"]);
+    const occupied = expectOk(store.createRoom({ playerId: "player-1", playerName: "Shared Guest" }));
+    expectOk(store.joinRoom(occupied.code, { playerId: "player-2", playerName: "Bob" }));
+    const second = expectOk(store.createRoom({ playerId: "tab-2", playerName: "Shared Guest" }));
+    const cleanup = store.leaveDisposableWaitingRoomsByParticipantName("Shared Guest", second.code);
+
+    expect(cleanup.deletedRoomCodes).toEqual([]);
+    expect(cleanup.updatedSnapshots).toEqual([]);
+    expect(expectOk(store.getSnapshot(occupied.code)).players).toHaveLength(2);
+  });
+
   it("lets a spectator take an open waiting room player seat", () => {
     const store = createTestRoomStore(["ROOM01"]);
     const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));

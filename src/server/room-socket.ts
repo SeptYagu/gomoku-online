@@ -159,7 +159,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, player.value.playerId);
+      leaveRoomsBeforeEntry(io, socket, roomStore, player.value);
       const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(player.value), player.value.playerId);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
@@ -172,7 +172,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, player.value.playerId, payload.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, player.value, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -190,7 +190,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, player.value.playerId, payload.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, player.value, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -208,7 +208,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, player.value.playerId);
+      leaveRoomsBeforeEntry(io, socket, roomStore, player.value);
       const response = handleJoinedRoom(socket, roomStore, roomStore.findMatch(player.value), player.value.playerId);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
@@ -457,16 +457,22 @@ function leaveRoomsBeforeEntry(
   io: RoomSocketServer,
   socket: RoomSocket,
   roomStore: RoomStore,
-  nextPlayerId: string,
+  nextPlayer: { playerId: string; playerName: string },
   nextRoomCode?: string
 ) {
   const previousRoomCode = socket.data.roomCode;
-  const playerIds = new Set([socket.data.playerId, nextPlayerId].filter((playerId): playerId is string => Boolean(playerId)));
+  const playerIds = new Set([socket.data.playerId, nextPlayer.playerId].filter((playerId): playerId is string => Boolean(playerId)));
   const normalizedNextRoomCode = nextRoomCode?.trim().toUpperCase();
 
   for (const playerId of playerIds) {
     broadcastRoomCleanup(io, roomStore, roomStore.leaveParticipantRooms(playerId, normalizedNextRoomCode));
   }
+
+  broadcastRoomCleanup(
+    io,
+    roomStore,
+    roomStore.leaveDisposableWaitingRoomsByParticipantName(nextPlayer.playerName, normalizedNextRoomCode)
+  );
 
   if (previousRoomCode && previousRoomCode !== normalizedNextRoomCode) {
     socket.leave(previousRoomCode);
@@ -508,6 +514,8 @@ function closeRoomsWithoutSocketMembers(io: RoomSocketServer, roomStore: RoomSto
 }
 
 function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
+  closeRoomsWithoutSocketMembers(io, roomStore);
+
   const sweep = roomStore.sweepExpiredRooms();
 
   for (const snapshot of sweep.updatedSnapshots) {

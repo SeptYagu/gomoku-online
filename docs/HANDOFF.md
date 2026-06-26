@@ -3286,3 +3286,53 @@ b6faf9e
 下一步：
 
 - 阶段 3 继续推进账号完整化、棋谱下载入口、开局库分析流程接入，以及后续 PlayOK 式用户功能。
+
+## 66. 2026-06-26 阶段 3 小步 16 本地完成：房间生命周期二次补强
+
+本轮目标：
+
+- 回应用户反馈：“房间里没有人的话，需要关房”“可以一直点创建新房，创好多个新房”。
+- 不修改过去 handoff 内容，只追加本窗口记录。
+
+实现记录：
+
+- `src/server/rooms.ts`
+  - 新增 `leaveDisposableWaitingRoomsByParticipantName()`。
+  - 同名游客在不同标签页或连接里创建新房时，旧的一人等待房会被关闭。
+  - 清理范围限定为一人等待房，避免误伤已有两名玩家或正在对局的同名房间。
+- `src/server/room-socket.ts`
+  - 进入新房前按 `playerId` 和游客昵称两层清理旧等待房。
+  - 定时 lifecycle sweep 增加 `closeRoomsWithoutSocketMembers()`，主动关闭没有任何 Socket.IO 成员的残留房。
+- `src/server/rooms.test.ts`
+  - 覆盖同名一人等待房清理。
+  - 覆盖已有两名玩家的等待房不会被同名清理误伤。
+- `src/server/room-socket.test.ts`
+  - 覆盖两个 socket、不同 `playerId`、同一游客昵称重复创建房间时旧房关闭。
+- `tools/smoke-room-lifecycle.ts`
+  - 新增真实服务器可复用断言：`PASS same guest name create closes previous room`。
+- `README.md`、`docs/STAGE_3_PROGRESS.md`、`docs/logic/lobby-matchmaking-module.md`
+  - 记录本轮补强范围和验证命令。
+
+本地验证：
+
+- `npx vitest run src/server/rooms.test.ts src/server/room-socket.test.ts`：通过，2 个测试文件、47 个测试用例。
+- `npm run lint`：通过。
+- `npm test`：通过，9 个测试文件、94 个测试用例。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3046 npm run start:online`。
+- `npm run smoke:room-lifecycle -- http://127.0.0.1:3046`：通过。
+  - `PASS repeated create closes previous room - 5RRH76 -> S3TXWW`
+  - `PASS same player create closes previous room - V86LH3 -> G67LTS`
+  - `PASS same guest name create closes previous room - 854PUP -> 9U8XE4`
+  - `PASS empty waiting room closes on disconnect - MP2UQS`
+  - `PASS spectator sits in open seat - ADL2CG`
+  - `PASS disconnect timeout forfeit - BKA32W`
+- `npm run smoke:share-url -- http://127.0.0.1:3046`：通过。
+  - `PASS create room locked while already in room`
+  - `PASS empty room closed after leave - UK3HDB`
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：等待真实服务器部署新版后，运行 `verify:online`、`smoke:room-lifecycle` 和 `smoke:share-url`。

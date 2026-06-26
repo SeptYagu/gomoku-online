@@ -39,6 +39,7 @@ async function main(): Promise<void> {
 
     await verifyRepeatedCreateClosesPreviousRoom(baseUrl, host, suffix);
     await verifySamePlayerCreateClosesPreviousRoom(baseUrl, host, mirror, suffix);
+    await verifySameGuestNameCreateClosesPreviousRoom(baseUrl, host, mirror, suffix);
     await verifyWaitingRoomClosesAfterCreatorDisconnects(baseUrl, suffix);
     await verifySpectatorCanSitInOpenSeat(host, guest, spectator, suffix);
     await verifyDisconnectTimeoutForfeit(host, guest, suffix);
@@ -109,6 +110,38 @@ async function verifySamePlayerCreateClosesPreviousRoom(
   assert(!rooms.rooms.some((room) => room.code === first.code), "first mirror room should be closed");
   assert(rooms.rooms.some((room) => room.code === second.code), "second mirror room should remain listed");
   console.log(`PASS same player create closes previous room - ${first.code} -> ${second.code}`);
+}
+
+async function verifySameGuestNameCreateClosesPreviousRoom(
+  baseUrl: string,
+  firstSocket: SmokeSocket,
+  secondSocket: SmokeSocket,
+  suffix: string
+): Promise<void> {
+  const first = requireOk(
+    await emitAck(firstSocket, "room:create", {
+      playerId: `name-tab-a-${suffix}`,
+      playerName: `Name Shared ${suffix}`
+    }),
+    "same-name first room:create"
+  ).snapshot;
+  const firstClosed = waitForRoomClosed(firstSocket, first.code);
+  const second = requireOk(
+    await emitAck(secondSocket, "room:create", {
+      playerId: `name-tab-b-${suffix}`,
+      playerName: `Name Shared ${suffix}`
+    }),
+    "same-name second room:create"
+  ).snapshot;
+
+  await firstClosed;
+  assert(first.code !== second.code, "same guest name on another socket should allocate a new room");
+
+  const rooms = await fetchRoomList(baseUrl);
+
+  assert(!rooms.rooms.some((room) => room.code === first.code), "first same-name room should be closed");
+  assert(rooms.rooms.some((room) => room.code === second.code), "second same-name room should remain listed");
+  console.log(`PASS same guest name create closes previous room - ${first.code} -> ${second.code}`);
 }
 
 async function verifyWaitingRoomClosesAfterCreatorDisconnects(baseUrl: string, suffix: string): Promise<void> {
