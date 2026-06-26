@@ -61,6 +61,31 @@ export type PublicChatSnapshot = {
   messages: PublicChatMessage[];
 };
 
+export type PresenceStatus = "online" | "in_room" | "playing" | "spectating" | "offline";
+
+export type UserPresenceSnapshot = {
+  connected: boolean;
+  identity: "guest" | "registered";
+  lastSeenAt: number;
+  name: string;
+  playerId: string;
+  role: RoomParticipantRole | null;
+  roomCode: string | null;
+  roomStatus: RoomStatus | null;
+  status: PresenceStatus;
+};
+
+export type PresenceListQuery = {
+  includeOffline?: boolean;
+  limit?: number;
+};
+
+export type PresenceSnapshot = {
+  generatedAt: number;
+  users: UserPresenceSnapshot[];
+  version: number;
+};
+
 export type RoomSnapshot = {
   board: Board;
   chatMessages: RoomChatMessage[];
@@ -205,6 +230,14 @@ type RoomSpectator = {
   name: string;
 };
 
+type PresenceEntry = {
+  connectionCount: number;
+  identity: "guest" | "registered";
+  lastSeenAt: number;
+  name: string;
+  playerId: string;
+};
+
 type RoomState = {
   board: Board;
   chatMessages: RoomChatMessage[];
@@ -270,6 +303,8 @@ export class RoomStore {
   private lobbyVersion = 0;
   private nextPublicChatMessageId = 1;
   private readonly now: () => number;
+  private readonly presences = new Map<string, PresenceEntry>();
+  private presenceVersion = 0;
   private readonly publicChatLastSentAt = new Map<string, number>();
   private readonly publicChatMessages: PublicChatMessage[] = [];
   private readonly rooms = new Map<string, RoomState>();
@@ -1009,6 +1044,90 @@ export class RoomStore {
     return getPublicChatSnapshot(this.publicChatMessages, this.now());
   }
 
+  connectPresence(input: CreateRoomInput): RoomResult<PresenceSnapshot> {
+    const player = normalizePlayerInput(input);
+
+    if (!player) {
+      return failure("invalid-player", "Player id and name are required.");
+    }
+
+    const now = this.now();
+    const entry =
+      this.presences.get(player.id) ??
+      ({
+        connectionCount: 0,
+        identity: "guest",
+        lastSeenAt: now,
+        name: player.name,
+        playerId: player.id
+      } satisfies PresenceEntry);
+
+    entry.connectionCount += 1;
+    entry.lastSeenAt = now;
+    entry.name = player.name;
+    this.presences.set(player.id, entry);
+    this.nextPresenceVersion();
+
+    return success(this.listPresence());
+  }
+
+  updatePresence(input: CreateRoomInput): RoomResult<PresenceSnapshot> {
+    const player = normalizePlayerInput(input);
+
+    if (!player) {
+      return failure("invalid-player", "Player id and name are required.");
+    }
+
+    const now = this.now();
+    const entry =
+      this.presences.get(player.id) ??
+      ({
+        connectionCount: 0,
+        identity: "guest",
+        lastSeenAt: now,
+        name: player.name,
+        playerId: player.id
+      } satisfies PresenceEntry);
+
+    entry.lastSeenAt = now;
+    entry.name = player.name;
+    this.presences.set(player.id, entry);
+    this.nextPresenceVersion();
+
+    return success(this.listPresence());
+  }
+
+  disconnectPresence(playerId: string): PresenceSnapshot {
+    const normalizedPlayerId = playerId.trim();
+    const entry = this.presences.get(normalizedPlayerId);
+
+    if (!entry) {
+      return this.listPresence();
+    }
+
+    entry.connectionCount = Math.max(0, entry.connectionCount - 1);
+    entry.lastSeenAt = this.now();
+    this.nextPresenceVersion();
+
+    return this.listPresence();
+  }
+
+  listPresence(query: PresenceListQuery = {}): PresenceSnapshot {
+    const now = this.now();
+    const limit = clampPresenceListLimit(query.limit);
+    const users = [...this.presences.values()]
+      .map((entry) => getPresenceSnapshotForEntry(entry, [...this.rooms.values()]))
+      .filter((presence) => query.includeOffline || presence.connected)
+      .sort(comparePresence)
+      .slice(0, limit);
+
+    return {
+      generatedAt: now,
+      users,
+      version: this.presenceVersion + this.lobbyVersion
+    };
+  }
+
   sendPublicChat(input: CreateRoomInput & { text: string }): RoomResult<PublicChatSnapshot> {
     const player = normalizePlayerInput(input);
 
@@ -1336,6 +1455,11 @@ export class RoomStore {
     this.lobbyVersion += 1;
     return this.lobbyVersion;
   }
+
+  private nextPresenceVersion(): number {
+    this.presenceVersion += 1;
+    return this.presenceVersion;
+  }
 }
 
 export function createRoomCode(length = DEFAULT_ROOM_CODE_LENGTH): string {
@@ -1463,12 +1587,106 @@ function hasConnectedParticipant(room: RoomState): boolean {
   return [...room.players, ...room.spectators].some((participant) => participant.connected);
 }
 
+function getPresenceSnapshotForEntry(entry: PresenceEntry, rooms: RoomState[]): UserPresenceSnapshot {
+  const roomPresence = findRoomPresence(entry.playerId, rooms);
+  const connected = entry.connectionCount > 0;
+
+  return {
+    connected,
+    identity: entry.identity,
+    lastSeenAt: entry.lastSeenAt,
+    name: entry.name,
+    playerId: entry.playerId,
+    role: roomPresence?.role ?? null,
+    roomCode: roomPresence?.room.code ?? null,
+    roomStatus: roomPresence?.room.status ?? null,
+    status: getPresenceStatus(connected, roomPresence)
+  };
+}
+
+function findRoomPresence(
+  playerId: string,
+  rooms: RoomState[]
+): { role: RoomParticipantRole; room: RoomState } | null {
+  for (const room of rooms) {
+    if (room.players.some((player) => player.id === playerId)) {
+      return { role: "player", room };
+    }
+
+    if (room.spectators.some((spectator) => spectator.id === playerId)) {
+      return { role: "spectator", room };
+    }
+  }
+
+  return null;
+}
+
+function getPresenceStatus(
+  connected: boolean,
+  roomPresence: { role: RoomParticipantRole; room: RoomState } | null
+): PresenceStatus {
+  if (!connected) {
+    return "offline";
+  }
+
+  if (!roomPresence) {
+    return "online";
+  }
+
+  if (roomPresence.role === "spectator") {
+    return "spectating";
+  }
+
+  return roomPresence.room.status === "playing" ? "playing" : "in_room";
+}
+
+function comparePresence(first: UserPresenceSnapshot, second: UserPresenceSnapshot): number {
+  const firstStatusRank = getPresenceStatusRank(first.status);
+  const secondStatusRank = getPresenceStatusRank(second.status);
+
+  return (
+    Number(second.connected) - Number(first.connected) ||
+    firstStatusRank - secondStatusRank ||
+    second.lastSeenAt - first.lastSeenAt ||
+    first.name.localeCompare(second.name) ||
+    first.playerId.localeCompare(second.playerId)
+  );
+}
+
+function getPresenceStatusRank(status: PresenceStatus): number {
+  if (status === "playing") {
+    return 0;
+  }
+
+  if (status === "in_room") {
+    return 1;
+  }
+
+  if (status === "spectating") {
+    return 2;
+  }
+
+  if (status === "online") {
+    return 3;
+  }
+
+  return 4;
+}
+
 function clampRoomListLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) {
     return 50;
   }
 
   return Math.min(MAX_ROOM_LIST_LIMIT, Math.max(1, Math.floor(limit)));
+}
+
+function clampPresenceListLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return 50;
+  }
+
+  return Math.min(100, Math.max(1, Math.floor(limit)));
 }
 
 function advanceRoomLifecycle(room: RoomState, now: number, limits: RoomLifecycleLimits): boolean {

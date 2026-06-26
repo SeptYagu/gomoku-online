@@ -142,6 +142,12 @@ npm run smoke:room-chat -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:public-chat -- http://gomoku.yagu.ddns-ip.net
 ```
 
+用户状态频道可跑 Socket.IO + REST 冒烟，确认大厅在线用户、房间中、对局中和观战中状态：
+
+```bash
+npm run smoke:presence -- http://gomoku.yagu.ddns-ip.net
+```
+
 在线棋谱提交可跑 Socket.IO 冒烟，确认双方提交后从 partial 合并为 verified，重复提交不会产生重复记录：
 
 ```bash

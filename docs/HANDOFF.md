@@ -2543,3 +2543,62 @@ b6faf9e
 - 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
 - 联机回归修复：房间生命周期、补位和邀请链接，完成并通过真实服务器验证。
 - 下一步：继续阶段 3 剩余主线，账号/注册玩家身份、Ranking、用户状态和更完整的 Game records 回看仍未完成。
+
+## 53. 2026-06-25 阶段 3 小步 10：用户状态 / Presence 本地完成
+
+本轮目标：
+
+- 按阶段 3 build plan 继续推进剩余主线。
+- 在 Ranking 和账号系统之前，先完成用户状态 / Presence 第一版。
+- 继续执行每个小步实现、验证、文档、提交推送和真实服务器验证的规则。
+
+实际完成：
+
+- `src/server/rooms.ts`：
+  - 新增 `PresenceStatus`、`UserPresenceSnapshot`、`PresenceSnapshot`。
+  - `RoomStore` 新增 presence 表、连接计数、`connectPresence()`、`updatePresence()`、`disconnectPresence()`、`listPresence()`。
+  - Presence 状态由服务端事实推导：`online`、`in_room`、`playing`、`spectating`、`offline`。
+  - `listPresence()` 默认只返回在线用户，`includeOffline=true` 时可返回离线快照。
+- `src/server/room-socket.ts`、`src/server/room-contract.ts`：
+  - 新增 `presence:join`、`presence:list`、`presence:leave`。
+  - 新增 `presence:users` 实时广播。
+  - 成功创建/加入/重连/匹配房间时自动绑定 socket presence。
+  - 房间状态变化、断线、空房清理和公共聊天发送后广播最新 presence。
+- `src/server/online-server.ts`：
+  - 新增 `GET /api/presence`。
+- `src/components/useFriendRoom.ts`：
+  - 新增 `presenceUsers`、`presenceStatus`、`refreshPresence()`。
+  - 监听 `presence:users` 实时更新在线用户。
+- `src/components/GameShell.tsx`、`src/app/globals.css`：
+  - 好友房面板新增 Online users 小面板。
+  - 显示用户昵称、状态和房号。
+- `src/i18n/dictionaries.ts`：
+  - 六语言新增用户状态面板文案。
+- `tools/smoke-presence.ts`、`package.json`、`README.md`：
+  - 新增 `npm run smoke:presence`。
+  - 覆盖 Socket.IO presence channel 和 `GET /api/presence`。
+- `docs/STAGE_3_PLAN.md`：
+  - 建议小步顺序补入“用户状态 / Presence 第一版”，Ranking 顺延。
+- `docs/logic/rating-leaderboard-module.md`、`docs/STAGE_3_PROGRESS.md`：
+  - 记录小步 10 第一版设计边界和本地验证结果。
+
+本地验证：
+
+- `npx vitest run src/server/rooms.test.ts src/server/room-socket.test.ts`：通过，2 个测试文件、40 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- `npm test`：通过，6 个测试文件、79 个测试用例。
+- 本地生产服务：`PORT=3038 npm start` 后运行 `npm run smoke:presence -- http://127.0.0.1:3038`，通过。
+  - `PASS presence lobby online`
+  - `PASS presence host in room - T2559G`
+  - `PASS presence playing and spectating`
+  - `PASS presence REST readback`
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3038`，通过。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3038`，通过。
+- 本地生产服务：`npm run smoke:profile-records -- http://127.0.0.1:3038`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:presence`、`smoke:online-room`、`smoke:lobby-ui` 和 `smoke:profile-records`。

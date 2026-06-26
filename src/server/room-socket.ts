@@ -1,10 +1,12 @@
 import type { Point } from "../game/types";
-import type { GameRecordAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
+import type { GameRecordAck, PresenceAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import type { GameRecordClientSubmission } from "./game-records";
 import {
   RoomStore,
   type LobbyRoomDeletedEvent,
   type LobbyRoomUpdatedEvent,
+  type PresenceListQuery,
+  type PresenceSnapshot,
   type PublicChatSnapshot,
   type RoomCleanupResult,
   type RoomError,
@@ -15,6 +17,7 @@ import {
 } from "./rooms";
 
 const LOBBY_ROOM = "lobby";
+const PRESENCE_ROOM = "presence";
 const PUBLIC_CHAT_ROOM = "public-chat";
 
 export type ClientToServerEvents = {
@@ -39,6 +42,12 @@ export type ClientToServerEvents = {
   "lobby:list": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
   "matchmaking:cancel": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
   "matchmaking:find": (payload: { playerId: string; playerName: string }, ack: (response: RoomAck) => void) => void;
+  "presence:join": (
+    payload: { includeOffline?: boolean; limit?: number; playerId: string; playerName: string },
+    ack: (response: PresenceAck) => void
+  ) => void;
+  "presence:leave": (payload: undefined, ack: (response: PresenceAck) => void) => void;
+  "presence:list": (payload: PresenceListQuery | undefined, ack: (response: PresenceAck) => void) => void;
   "public-chat:join": (payload: undefined, ack: (response: PublicChatAck) => void) => void;
   "public-chat:leave": (payload: undefined, ack: (response: PublicChatAck) => void) => void;
   "public-chat:send": (
@@ -67,6 +76,7 @@ export type ServerToClientEvents = {
   "lobby:room-deleted": (event: LobbyRoomDeletedEvent) => void;
   "lobby:room-updated": (event: LobbyRoomUpdatedEvent) => void;
   "lobby:rooms": (snapshot: RoomListSnapshot) => void;
+  "presence:users": (snapshot: PresenceSnapshot) => void;
   "public-chat:messages": (snapshot: PublicChatSnapshot) => void;
   "room:closed": (event: LobbyRoomDeletedEvent) => void;
   "room:error": (error: RoomError) => void;
@@ -75,6 +85,7 @@ export type ServerToClientEvents = {
 
 type SocketData = {
   playerId?: string;
+  presencePlayerId?: string;
   roomCode?: string;
 };
 
@@ -188,6 +199,21 @@ export function registerRoomSocketHandlers(
       acknowledgeLobbyList(roomStore, undefined, ack);
     });
 
+    socket.on("presence:join", (payload, ack) => {
+      socket.join(PRESENCE_ROOM);
+      acknowledgePresence(identifySocketPresence(socket, roomStore, payload), ack);
+      broadcastPresence(io, roomStore);
+    });
+
+    socket.on("presence:list", (payload, ack) => {
+      acknowledgePresenceList(roomStore, payload, ack);
+    });
+
+    socket.on("presence:leave", (_payload, ack) => {
+      socket.leave(PRESENCE_ROOM);
+      acknowledgePresenceList(roomStore, undefined, ack);
+    });
+
     socket.on("public-chat:join", (_payload, ack) => {
       socket.join(PUBLIC_CHAT_ROOM);
       acknowledgePublicChatList(roomStore, ack);
@@ -199,7 +225,9 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("public-chat:send", (payload, ack) => {
+      identifySocketPresence(socket, roomStore, payload);
       acknowledgeAndBroadcastPublicChat(io, socket, roomStore.sendPublicChat(payload), ack);
+      broadcastPresence(io, roomStore);
     });
 
     socket.on("room:ready", (payload, ack) => {
@@ -351,6 +379,8 @@ export function registerRoomSocketHandlers(
       const { playerId, roomCode } = socket.data;
 
       if (!playerId || !roomCode) {
+        releaseSocketPresence(socket, roomStore);
+        broadcastPresence(io, roomStore);
         return;
       }
 
@@ -359,6 +389,9 @@ export function registerRoomSocketHandlers(
       if (result.ok) {
         broadcastRoomSnapshotOrClosure(io, roomStore, roomCode, result.value);
       }
+
+      releaseSocketPresence(socket, roomStore);
+      broadcastPresence(io, roomStore);
     });
   });
 }
@@ -393,6 +426,10 @@ function broadcastRoomCleanup(io: RoomSocketServer, roomStore: RoomStore, cleanu
   for (const code of cleanup.deletedRoomCodes) {
     broadcastRoomClosed(io, roomStore, code);
   }
+
+  if (cleanup.updatedSnapshots.length > 0 || cleanup.deletedRoomCodes.length > 0) {
+    broadcastPresence(io, roomStore);
+  }
 }
 
 function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
@@ -405,6 +442,10 @@ function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
 
   for (const code of sweep.deletedRoomCodes) {
     broadcastRoomClosed(io, roomStore, code);
+  }
+
+  if (sweep.updatedSnapshots.length > 0 || sweep.deletedRoomCodes.length > 0) {
+    broadcastPresence(io, roomStore);
   }
 }
 
@@ -425,6 +466,7 @@ function handleJoinedRoom(
     return { ok: false, error: { code: "not-room-member", message: "Player is not in this room." } };
   }
 
+  identifySocketPresence(socket, roomStore, { playerId, playerName: participant.name });
   socket.data.playerId = playerId;
   socket.data.roomCode = roomCode;
   socket.join(roomCode);
@@ -543,6 +585,7 @@ function acknowledgeAndBroadcast(
 
   socket.to(response.value.snapshot.code).emit("room:state", response.value.snapshot);
   broadcastLobbyRoomChange(io, roomStore, response.value.snapshot.code);
+  broadcastPresence(io, roomStore);
 }
 
 function acknowledgeAndBroadcastRoomOnly(socket: RoomSocket, response: RoomAck, ack: (response: RoomAck) => void) {
@@ -579,6 +622,21 @@ function acknowledgePublicChatList(roomStore: RoomStore, ack: (response: PublicC
   ack({
     ok: true,
     value: roomStore.listPublicChatMessages()
+  });
+}
+
+function acknowledgePresence(response: PresenceAck, ack: (response: PresenceAck) => void) {
+  ack(response);
+}
+
+function acknowledgePresenceList(
+  roomStore: RoomStore,
+  payload: PresenceListQuery | undefined,
+  ack: (response: PresenceAck) => void
+) {
+  ack({
+    ok: true,
+    value: roomStore.listPresence(parsePresenceListQuery(payload))
   });
 }
 
@@ -629,6 +687,7 @@ function broadcastRoomSnapshotOrClosure(
 
   io.to(roomCode).emit("room:state", snapshot);
   broadcastLobbyRoomChange(io, roomStore, roomCode);
+  broadcastPresence(io, roomStore);
 }
 
 function broadcastRoomClosed(io: RoomSocketServer, roomStore: RoomStore, roomCode: string) {
@@ -639,6 +698,54 @@ function broadcastRoomClosed(io: RoomSocketServer, roomStore: RoomStore, roomCod
 
   io.to(roomCode).emit("room:closed", event);
   io.to(LOBBY_ROOM).emit("lobby:room-deleted", event);
+  broadcastPresence(io, roomStore);
+}
+
+function broadcastPresence(io: RoomSocketServer, roomStore: RoomStore) {
+  io.to(PRESENCE_ROOM).emit("presence:users", roomStore.listPresence());
+}
+
+function identifySocketPresence(
+  socket: RoomSocket,
+  roomStore: RoomStore,
+  input: { playerId: string; playerName: string }
+): PresenceAck {
+  const nextPlayerId = input.playerId.trim();
+
+  if (!nextPlayerId) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid-player",
+        message: "Player id and name are required."
+      }
+    };
+  }
+
+  if (socket.data.presencePlayerId === nextPlayerId) {
+    return roomStore.updatePresence(input);
+  }
+
+  releaseSocketPresence(socket, roomStore);
+
+  const response = roomStore.connectPresence(input);
+
+  if (response.ok) {
+    socket.data.presencePlayerId = nextPlayerId;
+  }
+
+  return response;
+}
+
+function releaseSocketPresence(socket: RoomSocket, roomStore: RoomStore) {
+  const previousPlayerId = socket.data.presencePlayerId;
+
+  if (!previousPlayerId) {
+    return;
+  }
+
+  roomStore.disconnectPresence(previousPlayerId);
+  socket.data.presencePlayerId = undefined;
 }
 
 function parseRoomListQuery(payload: RoomListQuery | undefined): RoomListQuery {
@@ -655,5 +762,16 @@ function parseRoomListQuery(payload: RoomListQuery | undefined): RoomListQuery {
       payload.status === "all"
         ? payload.status
         : undefined
+  };
+}
+
+function parsePresenceListQuery(payload: PresenceListQuery | undefined): PresenceListQuery {
+  if (!payload || typeof payload !== "object") {
+    return {};
+  }
+
+  return {
+    includeOffline: payload.includeOffline === true,
+    limit: typeof payload.limit === "number" ? payload.limit : undefined
   };
 }

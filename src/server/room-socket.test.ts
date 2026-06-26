@@ -2,12 +2,13 @@ import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Server } from "socket.io";
 import { describe, expect, it } from "vitest";
-import type { GameRecordAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
+import type { GameRecordAck, PresenceAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
 import {
   RoomStore,
   type LobbyRoomDeletedEvent,
   type LobbyRoomUpdatedEvent,
+  type PresenceSnapshot,
   type PublicChatSnapshot,
   type RoomSnapshot
 } from "./rooms";
@@ -402,6 +403,79 @@ describe("room socket handlers", () => {
       expect(secondAck.ok ? secondAck.value.snapshot.code : firstRoomCode).not.toBe(firstRoomCode);
       expect(await firstSocketSawClosed).toMatchObject({ code: firstRoomCode });
       expect(await lobbySawFirstDelete).toMatchObject({ code: firstRoomCode });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("broadcasts live user presence as sockets enter rooms and games", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const lobby = await harness.connectClient();
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+      const spectator = await harness.connectClient();
+
+      const joinedPresence = await emitAck<PresenceAck>(lobby, "presence:join", {
+        playerId: "lobby-player",
+        playerName: "Lobby"
+      });
+
+      expect(joinedPresence.ok).toBe(true);
+      expect(joinedPresence.ok ? joinedPresence.value.users[0] : null).toMatchObject({
+        name: "Lobby",
+        status: "online"
+      });
+
+      const lobbySawHost = waitForEventMatching<PresenceSnapshot>(
+        lobby,
+        "presence:users",
+        (snapshot) => snapshot.users.some((user) => user.name === "Host" && user.status === "in_room")
+      );
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "host-player",
+        playerName: "Host"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      expect(await lobbySawHost).toEqual(
+        expect.objectContaining({
+          users: expect.arrayContaining([expect.objectContaining({ name: "Host", status: "in_room" })])
+        })
+      );
+
+      const roomCode = createAck.value.snapshot.code;
+      const lobbySawPlayingAndSpectator = waitForEventMatching<PresenceSnapshot>(
+        lobby,
+        "presence:users",
+        (snapshot) =>
+          snapshot.users.some((user) => user.name === "Host" && user.status === "playing") &&
+          snapshot.users.some((user) => user.name === "Guest" && user.status === "playing") &&
+          snapshot.users.some((user) => user.name === "Watcher" && user.status === "spectating")
+      );
+
+      expect(
+        await emitAck(guest, "room:join", {
+          playerId: "guest-player",
+          playerName: "Guest",
+          roomCode
+        })
+      ).toMatchObject({ ok: true });
+      expect(
+        await emitAck(spectator, "room:join", {
+          playerId: "spectator-player",
+          playerName: "Watcher",
+          roomCode
+        })
+      ).toMatchObject({ ok: true });
+      expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+
+      await lobbySawPlayingAndSpectator;
     } finally {
       await harness.close();
     }

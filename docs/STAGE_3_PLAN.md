@@ -137,8 +137,9 @@ PlayOK 当前 gomoku 页面列出的成熟能力包括 live opponents、game roo
 7. 随机匹配。
 8. 在线棋谱提交、去重和匿名/注册记录保存。
 9. 注册玩家 Profile 和 Game records 回看。
-10. 排行榜。
-11. 可选账号登录。
+10. 用户状态 / Presence 第一版。
+11. 排行榜。
+12. 可选账号登录。
 
 执行进度见 `docs/STAGE_3_PROGRESS.md`。
 

@@ -4,14 +4,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
 import type { PlayerProfileSnapshot } from "@/server/game-records";
-import type { GameRecordAck, PublicChatAck, RoomAck, RoomClientState, RoomListAck } from "@/server/room-contract";
+import type {
+  GameRecordAck,
+  PresenceAck,
+  PublicChatAck,
+  RoomAck,
+  RoomClientState,
+  RoomListAck
+} from "@/server/room-contract";
 import type {
   LobbyRoomDeletedEvent,
   LobbyRoomUpdatedEvent,
+  PresenceSnapshot,
   PublicChatMessage,
   PublicChatSnapshot,
   RoomListItem,
-  RoomSnapshot
+  RoomSnapshot,
+  UserPresenceSnapshot
 } from "@/server/rooms";
 import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
 
@@ -54,12 +63,15 @@ export type FriendRoomController = {
   matchmakingStatus: "idle" | "searching";
   playerName: string;
   playMove: (point: Point) => void;
+  presenceStatus: "idle" | "loading" | "ready" | "error";
+  presenceUsers: UserPresenceSnapshot[];
   profile: PlayerProfileSnapshot | null;
   profileStatus: "idle" | "loading" | "ready" | "error";
   publicChatMessages: PublicChatMessage[];
   publicChatStatus: "idle" | "loading" | "ready" | "error";
   publicChatText: string;
   ready: boolean;
+  refreshPresence: () => void;
   refreshProfile: () => void;
   refreshPublicChat: () => void;
   refreshLobby: () => void;
@@ -98,6 +110,8 @@ export function useFriendRoom(): FriendRoomController {
   const [publicChatMessages, setPublicChatMessages] = useState<PublicChatMessage[]>([]);
   const [publicChatStatus, setPublicChatStatus] = useState<FriendRoomController["publicChatStatus"]>("idle");
   const [publicChatText, setPublicChatText] = useState("");
+  const [presenceUsers, setPresenceUsers] = useState<UserPresenceSnapshot[]>([]);
+  const [presenceStatus, setPresenceStatus] = useState<FriendRoomController["presenceStatus"]>("idle");
   const [matchmakingStatus, setMatchmakingStatus] = useState<FriendRoomController["matchmakingStatus"]>("idle");
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -199,6 +213,12 @@ export function useFriendRoom(): FriendRoomController {
       if (isPublicChatSnapshot(snapshot)) {
         setPublicChatMessages(snapshot.messages);
         setPublicChatStatus("ready");
+      }
+    });
+    socket.on("presence:users", (snapshot: unknown) => {
+      if (isPresenceSnapshot(snapshot)) {
+        setPresenceUsers(snapshot.users);
+        setPresenceStatus("ready");
       }
     });
 
@@ -359,6 +379,33 @@ export function useFriendRoom(): FriendRoomController {
       setPublicChatStatus("ready");
     });
   }, [ensureSocket]);
+
+  const refreshPresence = useCallback(() => {
+    const nextPlayerId = getOrCreatePlayerId();
+    const nextPlayerName = normalizePlayerName(playerName);
+
+    setPresenceStatus("loading");
+    setPlayerNameState(nextPlayerName);
+    persistPlayerName(nextPlayerName);
+    ensureSocket().emit(
+      "presence:join",
+      {
+        limit: 30,
+        playerId: nextPlayerId,
+        playerName: nextPlayerName
+      },
+      (response: PresenceAck) => {
+        if (!response.ok) {
+          setPresenceStatus("error");
+          setError(response.error.message);
+          return;
+        }
+
+        setPresenceUsers(response.value.users);
+        setPresenceStatus("ready");
+      }
+    );
+  }, [ensureSocket, playerName]);
 
   const refreshProfile = useCallback(() => {
     const nextPlayerId = getOrCreatePlayerId();
@@ -688,12 +735,15 @@ export function useFriendRoom(): FriendRoomController {
     matchmakingStatus,
     playerName,
     playMove,
+    presenceStatus,
+    presenceUsers,
     profile,
     profileStatus,
     publicChatMessages,
     publicChatStatus,
     publicChatText,
     ready,
+    refreshPresence,
     refreshProfile,
     refreshPublicChat,
     refreshLobby,
@@ -760,6 +810,10 @@ function isPublicChatSnapshot(value: unknown): value is PublicChatSnapshot {
     "messages" in value &&
     Array.isArray(value.messages)
   );
+}
+
+function isPresenceSnapshot(value: unknown): value is PresenceSnapshot {
+  return typeof value === "object" && value !== null && "users" in value && Array.isArray(value.users);
 }
 
 function upsertLobbyRoom(rooms: RoomListItem[], room: RoomListItem): RoomListItem[] {

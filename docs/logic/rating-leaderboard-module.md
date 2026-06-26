@@ -289,6 +289,14 @@ K 值：
 - 好友房面板显示当前游客 Profile、胜负统计和最近在线棋谱摘要。
 - 当前身份仍为 `guest`；注册系统接入后，保留接口形状，把 identity 与 playerId 映射升级为注册账号。
 
+当前小步 10 已实现第一版用户状态 / Presence：
+
+- `GET /api/presence?limit=...&includeOffline=...` 返回当前在线用户状态快照。
+- Socket.IO 新增 `presence:join`、`presence:list`、`presence:leave` 和 `presence:users`。
+- Presence 状态由服务端当前连接和房间事实推导：`online`、`in_room`、`playing`、`spectating`、`offline`。
+- 好友房面板显示在线用户列表、状态和房号。
+- 当前仍以 guest/current-session playerId 为身份；后续账号系统接入后可把同一接口挂到注册用户身份。
+
 ### 排行榜 API
 
 推荐：
@@ -378,6 +386,7 @@ Game 增加：
 - 实现在线对局棋谱提交、去重、partial/verified/conflicted 状态流。已完成第一版：`game-record:submit` + `GameRecordStore` JSONL。
 - 实现注册玩家 Profile 和 Game records 查询 API。已完成第一版 guest/current-session 读回接口和 UI，注册账号绑定留到账号系统小步。
 - 实现匿名/guest game record 保存策略。已完成第一版：在线玩家以 guest identity 写入服务器棋谱池。
+- 实现用户状态 / Presence。已完成第一版：guest/current-session presence API、socket channel 和好友房在线用户面板。
 
 ## 测试清单
 

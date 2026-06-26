@@ -3,7 +3,7 @@ import next from "next";
 import { Server } from "socket.io";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
 import { roomStore } from "./room-store";
-import type { RoomListQuery } from "./rooms";
+import type { PresenceListQuery, RoomListQuery } from "./rooms";
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
@@ -19,6 +19,10 @@ const httpServer = createServer((request, response) => {
   }
 
   if (handleProfileApi(request, response)) {
+    return;
+  }
+
+  if (handlePresenceApi(request, response)) {
     return;
   }
 
@@ -55,6 +59,31 @@ function handleRoomsApi(request: IncomingMessage, response: ServerResponse): boo
     "content-type": "application/json; charset=utf-8"
   });
   response.end(JSON.stringify(roomStore.listRooms(parseRoomListQuery(url))));
+
+  return true;
+}
+
+function handlePresenceApi(request: IncomingMessage, response: ServerResponse): boolean {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+  if (url.pathname !== "/api/presence") {
+    return false;
+  }
+
+  if (request.method !== "GET") {
+    response.writeHead(405, {
+      "allow": "GET",
+      "content-type": "application/json; charset=utf-8"
+    });
+    response.end(JSON.stringify({ error: "Method not allowed" }));
+    return true;
+  }
+
+  response.writeHead(200, {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8"
+  });
+  response.end(JSON.stringify(roomStore.listPresence(parsePresenceListQuery(url))));
 
   return true;
 }
@@ -100,6 +129,16 @@ function handleProfileApi(request: IncomingMessage, response: ServerResponse): b
   );
 
   return true;
+}
+
+function parsePresenceListQuery(url: URL): PresenceListQuery {
+  const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+  const includeOffline = url.searchParams.get("includeOffline");
+
+  return {
+    includeOffline: includeOffline === "1" || includeOffline === "true",
+    limit: Number.isFinite(rawLimit) ? rawLimit : undefined
+  };
 }
 
 function parseRoomListQuery(url: URL): RoomListQuery {

@@ -701,3 +701,61 @@
   - `PASS lobby room created - QNTLP7`
   - `PASS lobby room playing - status updated`
   - `PASS lobby room deleted - finished room hidden`
+
+## 小步 10：用户状态 / Presence 第一版
+
+状态：本地完成，待提交、推送并通过真实服务器验证。
+
+目标：
+
+- 补齐阶段 3 剩余主线中的用户状态能力。
+- 让大厅/好友房能看到当前在线用户、房间中、对局中、观战中等状态。
+- 不先引入密码账号系统，第一版继续使用 guest/current-session playerId。
+- 为后续注册玩家 Profile、Ranking、好友/私信等功能提供可复用的 presence API 和 socket channel。
+
+实现：
+
+- `src/server/rooms.ts`
+  - 新增 `PresenceStatus`、`UserPresenceSnapshot`、`PresenceSnapshot`。
+  - `RoomStore` 新增 presence 表、连接计数、`connectPresence()`、`updatePresence()`、`disconnectPresence()`、`listPresence()`。
+  - Presence 状态由服务端房间事实推导：未进房为 `online`，等待/准备房为 `in_room`，对局中为 `playing`，观战者为 `spectating`，断开连接为 `offline`。
+  - `listPresence()` 默认只返回在线用户，`includeOffline=true` 时可返回离线快照。
+- `src/server/room-socket.ts`、`src/server/room-contract.ts`
+  - 新增 `presence:join`、`presence:list`、`presence:leave`。
+  - 新增 `presence:users` 实时广播。
+  - 成功创建/加入/重连/匹配房间时自动绑定 socket presence。
+  - 房间状态变化、断线、空房清理和公共聊天发送后广播最新 presence。
+- `src/server/online-server.ts`
+  - 新增 `GET /api/presence`。
+- `src/components/useFriendRoom.ts`
+  - 新增 `presenceUsers`、`presenceStatus`、`refreshPresence()`。
+  - 监听 `presence:users` 实时更新在线用户。
+- `src/components/GameShell.tsx`、`src/app/globals.css`
+  - 好友房面板新增 Online users 小面板。
+  - 显示用户昵称、状态和房号。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增用户状态面板文案。
+- `tools/smoke-presence.ts`
+  - 新增 `npm run smoke:presence`。
+  - 覆盖 Socket.IO presence channel 和 `GET /api/presence`。
+
+本地验证：
+
+- `npx vitest run src/server/rooms.test.ts src/server/room-socket.test.ts`：通过，2 个测试文件、40 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- `npm test`：通过，6 个测试文件、79 个测试用例。
+- 本地生产服务：`PORT=3038 npm start` 后运行 `npm run smoke:presence -- http://127.0.0.1:3038`，通过。
+  - `PASS presence lobby online`
+  - `PASS presence host in room - T2559G`
+  - `PASS presence playing and spectating`
+  - `PASS presence REST readback`
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3038`，通过，继续覆盖三客户端三局、换先、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3038`，通过。
+- 本地生产服务：`npm run smoke:profile-records -- http://127.0.0.1:3038`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:presence`、`smoke:online-room`、`smoke:lobby-ui` 和 `smoke:profile-records`。

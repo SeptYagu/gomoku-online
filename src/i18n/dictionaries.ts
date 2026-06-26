@@ -58,10 +58,12 @@ export type GameDictionary = {
     lobbyWaiting: string;
     matchmakingSearching: string;
     noGameRecords: string;
+    noOnlineUsers: string;
     noRooms: string;
     noMessages: string;
     notInRoom: string;
     notReady: string;
+    onlineUsers: string;
     opponentTurn: string;
     panelLabel: string;
     playerName: string;
@@ -82,6 +84,7 @@ export type GameDictionary = {
     recordPartial: string;
     recordVerified: string;
     refreshRooms: string;
+    refreshPresence: string;
     refreshProfile: string;
     resign: string;
     resultAbandoned: string;
@@ -99,6 +102,11 @@ export type GameDictionary = {
     spectatorSeat: string;
     spectatorStatus: string;
     spectators: string;
+    presenceInRoom: string;
+    presenceOffline: string;
+    presenceOnline: string;
+    presencePlaying: string;
+    presenceSpectating: string;
     startGame: string;
     unready: string;
     undoRequestCopy: string;
@@ -202,10 +210,12 @@ const en = {
       lobbyWaiting: "Waiting",
       matchmakingSearching: "Finding match",
       noGameRecords: "No records yet",
+      noOnlineUsers: "No users online",
       noRooms: "No rooms open",
       noMessages: "No messages yet",
       notInRoom: "No room joined",
       notReady: "Not ready",
+      onlineUsers: "Online users",
       opponentTurn: "Opponent to move",
       panelLabel: "Friend room",
       playerName: "Name",
@@ -226,6 +236,7 @@ const en = {
       recordPartial: "Partial",
       recordVerified: "Verified",
       refreshRooms: "Refresh rooms",
+      refreshPresence: "Refresh users",
       refreshProfile: "Refresh profile",
       resign: "Resign",
       resultAbandoned: "Abandoned",
@@ -243,6 +254,11 @@ const en = {
       spectatorSeat: "Spectator",
       spectatorStatus: "{name} is watching.",
       spectators: "Spectators",
+      presenceInRoom: "In room",
+      presenceOffline: "Offline",
+      presenceOnline: "Online",
+      presencePlaying: "Playing",
+      presenceSpectating: "Watching",
       startGame: "Start",
       unready: "Unready",
       undoRequestCopy: "{name} asks to undo the last move.",
@@ -342,10 +358,12 @@ const zh = {
       lobbyWaiting: "等待中",
       matchmakingSearching: "匹配中",
       noGameRecords: "暂无棋谱",
+      noOnlineUsers: "暂无在线用户",
       noRooms: "暂无房间",
       noMessages: "暂无消息",
       notInRoom: "尚未加入房间",
       notReady: "未准备",
+      onlineUsers: "在线用户",
       opponentTurn: "对手回合",
       panelLabel: "好友房",
       playerName: "昵称",
@@ -366,6 +384,7 @@ const zh = {
       recordPartial: "部分",
       recordVerified: "已验证",
       refreshRooms: "刷新房间",
+      refreshPresence: "刷新用户",
       refreshProfile: "刷新资料",
       resign: "认输",
       resultAbandoned: "中止",
@@ -383,6 +402,11 @@ const zh = {
       spectatorSeat: "观战席",
       spectatorStatus: "{name} 正在观战。",
       spectators: "观战者",
+      presenceInRoom: "房间中",
+      presenceOffline: "离线",
+      presenceOnline: "在线",
+      presencePlaying: "对局中",
+      presenceSpectating: "观战中",
       startGame: "开始",
       unready: "取消准备",
       undoRequestCopy: "{name} 请求悔回上一手。",
@@ -482,10 +506,12 @@ const fr = {
       lobbyWaiting: "En attente",
       matchmakingSearching: "Recherche en cours",
       noGameRecords: "Aucune partie",
+      noOnlineUsers: "Aucun utilisateur en ligne",
       noRooms: "Aucun salon ouvert",
       noMessages: "Aucun message",
       notInRoom: "Aucun salon rejoint",
       notReady: "Pas prêt",
+      onlineUsers: "Utilisateurs en ligne",
       opponentTurn: "À l'adversaire",
       panelLabel: "Salon ami",
       playerName: "Nom",
@@ -506,6 +532,7 @@ const fr = {
       recordPartial: "Partiel",
       recordVerified: "Vérifié",
       refreshRooms: "Actualiser les salons",
+      refreshPresence: "Actualiser les utilisateurs",
       refreshProfile: "Actualiser le profil",
       resign: "Abandonner",
       resultAbandoned: "Abandon",
@@ -523,6 +550,11 @@ const fr = {
       spectatorSeat: "Spectateur",
       spectatorStatus: "{name} regarde la partie.",
       spectators: "Spectateurs",
+      presenceInRoom: "Dans un salon",
+      presenceOffline: "Hors ligne",
+      presenceOnline: "En ligne",
+      presencePlaying: "En partie",
+      presenceSpectating: "Regarde",
       startGame: "Démarrer",
       unready: "Annuler prêt",
       undoRequestCopy: "{name} demande d'annuler le dernier coup.",
@@ -622,10 +654,12 @@ const es = {
       lobbyWaiting: "Esperando",
       matchmakingSearching: "Buscando partida",
       noGameRecords: "Sin partidas",
+      noOnlineUsers: "Sin usuarios en línea",
       noRooms: "No hay salas",
       noMessages: "Sin mensajes",
       notInRoom: "Sin sala",
       notReady: "No listo",
+      onlineUsers: "Usuarios en línea",
       opponentTurn: "Turno del rival",
       panelLabel: "Sala de amigos",
       playerName: "Nombre",
@@ -646,6 +680,7 @@ const es = {
       recordPartial: "Parcial",
       recordVerified: "Verificada",
       refreshRooms: "Actualizar salas",
+      refreshPresence: "Actualizar usuarios",
       refreshProfile: "Actualizar perfil",
       resign: "Rendirse",
       resultAbandoned: "Abandonada",
@@ -663,6 +698,11 @@ const es = {
       spectatorSeat: "Espectador",
       spectatorStatus: "{name} está mirando.",
       spectators: "Espectadores",
+      presenceInRoom: "En sala",
+      presenceOffline: "Desconectado",
+      presenceOnline: "En línea",
+      presencePlaying: "Jugando",
+      presenceSpectating: "Mirando",
       startGame: "Empezar",
       unready: "No listo",
       undoRequestCopy: "{name} pide deshacer el último movimiento.",
@@ -762,10 +802,12 @@ const ru = {
       lobbyWaiting: "Ожидание",
       matchmakingSearching: "Поиск игры",
       noGameRecords: "Нет партий",
+      noOnlineUsers: "Нет пользователей онлайн",
       noRooms: "Нет открытых комнат",
       noMessages: "Сообщений пока нет",
       notInRoom: "Комната не выбрана",
       notReady: "Не готов",
+      onlineUsers: "Пользователи онлайн",
       opponentTurn: "Ход соперника",
       panelLabel: "Комната друга",
       playerName: "Имя",
@@ -786,6 +828,7 @@ const ru = {
       recordPartial: "Частично",
       recordVerified: "Проверено",
       refreshRooms: "Обновить комнаты",
+      refreshPresence: "Обновить пользователей",
       refreshProfile: "Обновить профиль",
       resign: "Сдаться",
       resultAbandoned: "Прервана",
@@ -803,6 +846,11 @@ const ru = {
       spectatorSeat: "Зритель",
       spectatorStatus: "{name} наблюдает за игрой.",
       spectators: "Зрители",
+      presenceInRoom: "В комнате",
+      presenceOffline: "Офлайн",
+      presenceOnline: "Онлайн",
+      presencePlaying: "Играет",
+      presenceSpectating: "Смотрит",
       startGame: "Старт",
       unready: "Не готов",
       undoRequestCopy: "{name} просит отменить последний ход.",
@@ -902,10 +950,12 @@ const ar = {
       lobbyWaiting: "انتظار",
       matchmakingSearching: "جار البحث",
       noGameRecords: "لا توجد سجلات",
+      noOnlineUsers: "لا يوجد مستخدمون متصلون",
       noRooms: "لا توجد غرف مفتوحة",
       noMessages: "لا توجد رسائل بعد",
       notInRoom: "لا توجد غرفة",
       notReady: "غير جاهز",
+      onlineUsers: "المستخدمون المتصلون",
       opponentTurn: "دور الخصم",
       panelLabel: "غرفة صديق",
       playerName: "الاسم",
@@ -926,6 +976,7 @@ const ar = {
       recordPartial: "جزئي",
       recordVerified: "مؤكد",
       refreshRooms: "تحديث الغرف",
+      refreshPresence: "تحديث المستخدمين",
       refreshProfile: "تحديث الملف",
       resign: "استسلام",
       resultAbandoned: "متروكة",
@@ -943,6 +994,11 @@ const ar = {
       spectatorSeat: "مشاهد",
       spectatorStatus: "{name} يشاهد المباراة.",
       spectators: "المشاهدون",
+      presenceInRoom: "داخل غرفة",
+      presenceOffline: "غير متصل",
+      presenceOnline: "متصل",
+      presencePlaying: "يلعب",
+      presenceSpectating: "يشاهد",
       startGame: "بدء",
       unready: "إلغاء الجاهزية",
       undoRequestCopy: "{name} يطلب التراجع عن النقلة الأخيرة.",

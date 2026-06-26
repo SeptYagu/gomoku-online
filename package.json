@@ -23,6 +23,7 @@
     "smoke:public-chat": "tsx tools/smoke-public-chat.ts",
     "smoke:room-chat": "tsx tools/smoke-room-chat.ts",
     "smoke:room-lifecycle": "tsx tools/smoke-room-lifecycle.ts",
+    "smoke:presence": "tsx tools/smoke-presence.ts",
     "smoke:game-records": "tsx tools/smoke-game-records.ts",
     "smoke:profile-records": "tsx tools/smoke-profile-records.ts",
     "verify:online": "tsx tools/verify-online-server.ts"

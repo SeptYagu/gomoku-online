@@ -88,6 +88,46 @@ describe("RoomStore", () => {
     expect(matched.players[0]).toMatchObject({ name: "Alice", seat: "black" });
   });
 
+  it("derives live user presence from connection and room state", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+
+    expectOk(store.connectPresence({ playerId: "lobby-player", playerName: "Lobby User" }));
+    expectOk(store.connectPresence({ playerId: "player-1", playerName: "Alice" }));
+    expectOk(store.connectPresence({ playerId: "player-2", playerName: "Bob" }));
+    expectOk(store.connectPresence({ playerId: "spectator-1", playerName: "Cara" }));
+
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+    expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
+    expectOk(store.joinRoom(created.code, { playerId: "spectator-1", playerName: "Cara" }));
+
+    expect(store.listPresence().users).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Lobby User", roomCode: null, status: "online" }),
+        expect.objectContaining({ name: "Alice", roomCode: created.code, status: "in_room" }),
+        expect.objectContaining({ name: "Bob", roomCode: created.code, status: "in_room" }),
+        expect.objectContaining({ name: "Cara", roomCode: created.code, status: "spectating" })
+      ])
+    );
+
+    expectOk(store.setPlayerReady(created.code, "player-1"));
+    expectOk(store.setPlayerReady(created.code, "player-2"));
+
+    expect(store.listPresence().users).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Alice", status: "playing" }),
+        expect.objectContaining({ name: "Bob", status: "playing" }),
+        expect.objectContaining({ name: "Cara", status: "spectating" })
+      ])
+    );
+
+    store.disconnectPresence("lobby-player");
+
+    expect(store.listPresence().users.some((user) => user.playerId === "lobby-player")).toBe(false);
+    expect(store.listPresence({ includeOffline: true }).users).toContainEqual(
+      expect.objectContaining({ connected: false, name: "Lobby User", status: "offline" })
+    );
+  });
+
   it("puts third and later room members into spectator seats", () => {
     const store = createTestRoomStore(["ROOM01"]);
     const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
