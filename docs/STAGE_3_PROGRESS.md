@@ -371,7 +371,7 @@
 
 ## 阶段 3 联机回归修复：房间生命周期、补位和邀请链接
 
-状态：本地完成，待推送并等待真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 触发问题：
 
@@ -426,3 +426,26 @@
 - 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3034`，通过。
 - 本地生产服务：`npm run smoke:room-chat -- http://127.0.0.1:3034`，通过。
 - 本地生产服务：`npm run smoke:public-chat -- http://127.0.0.1:3034`，通过。
+
+线上验证：
+
+- 本轮提交：`93ac3a5 Fix room lifecycle and invite joins`。
+- `93ac3a5` 已推送到 `origin/main`。
+- 第一次等待 90 秒后，真实服务器仍显示 `version 036e40d`；第二次等待 90 秒后，真实服务器显示 `version 93ac3a5`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 93ac3a5`：通过。
+- 真实服务器：`npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS repeated create closes previous room - U4P4VG -> 3XR2TN`
+  - `PASS spectator sits in open seat - YWMS3U`
+  - `PASS disconnect timeout forfeit - CRSTWY`
+- 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS create room URL - 6N9LDX`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+- 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过，覆盖三客户端三局流程、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- 真实服务器：`npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`，通过。
+- 真实服务器：`npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS lobby waiting row join - 6FKKJ7`
+  - `PASS lobby playing row watch - XB9Q2P`
+- 真实服务器：`npm run smoke:room-chat -- http://gomoku.yagu.ddns-ip.net`，通过。
+- 真实服务器：`npm run smoke:public-chat -- http://gomoku.yagu.ddns-ip.net`，通过。
