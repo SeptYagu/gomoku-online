@@ -3336,3 +3336,61 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：等待真实服务器部署新版后，运行 `verify:online`、`smoke:room-lifecycle` 和 `smoke:share-url`。
+
+## 67. 2026-06-26 阶段 3 小步 16 线上验证补记
+
+本轮目标：
+
+- 记录房间生命周期二次补强的提交、推送和真实服务器验证结果。
+- 确认用户反馈的重复创建房间和空房关闭路径在真实站通过。
+
+提交与部署：
+
+- 小步 16 提交：`ad0fd9f Tighten room lifecycle cleanup`。
+- 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version ad0fd9f`。
+
+真实服务器验证：
+
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net ad0fd9f`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version ad0fd9f`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS repeated create closes previous room - WYBKU8 -> S6XU76`
+  - `PASS same player create closes previous room - KPF4E8 -> DL3F69`
+  - `PASS same guest name create closes previous room - PLG2MB -> YCDPBJ`
+  - `PASS empty waiting room closes on disconnect - Z2WC43`
+  - `PASS spectator sits in open seat - JUTEA2`
+  - `PASS disconnect timeout forfeit - 9FNLHN`
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS create room URL - JKFSQX`
+  - `PASS create room locked while already in room`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+  - `PASS empty room closed after leave - JKFSQX`
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 小步 8：在线棋谱提交、去重和 guest 棋谱保存，完成并通过真实服务器验证。
+- 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
+- 小步 10：用户状态 / Presence 第一版，完成并通过真实服务器验证。
+- 小步 11：排行榜第一版，完成并通过真实服务器验证。
+- 小步 12：账号 / 注册玩家身份第一版，完成并通过真实服务器验证。
+- 小步 13：Profile / Game records 页面入口第一版，完成并通过真实服务器验证。
+- 小步 14：注册用户 / 游客排行榜隔离与创建房 UI 收口，完成并通过真实服务器验证。
+- 小步 15：棋谱回看和开局库导出准备，完成并通过真实服务器验证。
+- 小步 16：房间生命周期二次补强，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进棋谱下载入口、开局库分析流程接入、账号完整化，以及后续 PlayOK 式用户功能。
