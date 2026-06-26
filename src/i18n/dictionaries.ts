@@ -56,6 +56,8 @@ export type GameDictionary = {
     playerName: string;
     playerNamePlaceholder: string;
     playersCount: string;
+    publicChat: string;
+    publicChatPlaceholder: string;
     ready: string;
     readyAction: string;
     readyToStart: string;
@@ -172,6 +174,8 @@ const en = {
       playerName: "Name",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Players {count}/2",
+      publicChat: "Public chat",
+      publicChatPlaceholder: "Message everyone",
       ready: "Ready",
       readyAction: "Ready",
       readyToStart: "Both players ready",
@@ -284,6 +288,8 @@ const zh = {
       playerName: "昵称",
       playerNamePlaceholder: "Player 1234",
       playersCount: "玩家 {count}/2",
+      publicChat: "公共聊天",
+      publicChatPlaceholder: "发送公共消息",
       ready: "已准备",
       readyAction: "准备",
       readyToStart: "双方已准备",
@@ -396,6 +402,8 @@ const fr = {
       playerName: "Nom",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Joueurs {count}/2",
+      publicChat: "Chat public",
+      publicChatPlaceholder: "Message public",
       ready: "Prêt",
       readyAction: "Prêt",
       readyToStart: "Deux joueurs prêts",
@@ -508,6 +516,8 @@ const es = {
       playerName: "Nombre",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Jugadores {count}/2",
+      publicChat: "Chat público",
+      publicChatPlaceholder: "Mensaje público",
       ready: "Listo",
       readyAction: "Listo",
       readyToStart: "Ambos listos",
@@ -620,6 +630,8 @@ const ru = {
       playerName: "Имя",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Игроки {count}/2",
+      publicChat: "Общий чат",
+      publicChatPlaceholder: "Сообщение всем",
       ready: "Готов",
       readyAction: "Готов",
       readyToStart: "Оба готовы",
@@ -732,6 +744,8 @@ const ar = {
       playerName: "الاسم",
       playerNamePlaceholder: "Player 1234",
       playersCount: "اللاعبون {count}/2",
+      publicChat: "الدردشة العامة",
+      publicChatPlaceholder: "رسالة للجميع",
       ready: "جاهز",
       readyAction: "جاهز",
       readyToStart: "اللاعبان جاهزان",

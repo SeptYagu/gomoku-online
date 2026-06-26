@@ -40,6 +40,18 @@ export type RoomChatMessage = {
   text: string;
 };
 
+export type PublicChatMessage = {
+  id: string;
+  name: string;
+  sentAt: number;
+  text: string;
+};
+
+export type PublicChatSnapshot = {
+  generatedAt: number;
+  messages: PublicChatMessage[];
+};
+
 export type RoomSnapshot = {
   board: Board;
   chatMessages: RoomChatMessage[];
@@ -230,7 +242,10 @@ export class RoomStore {
   private readonly codeGenerator: () => string;
   private readonly lifecycleLimits: RoomLifecycleLimits;
   private lobbyVersion = 0;
+  private nextPublicChatMessageId = 1;
   private readonly now: () => number;
+  private readonly publicChatLastSentAt = new Map<string, number>();
+  private readonly publicChatMessages: PublicChatMessage[] = [];
   private readonly rooms = new Map<string, RoomState>();
 
   constructor(options: RoomStoreOptions = {}) {
@@ -816,6 +831,50 @@ export class RoomStore {
     };
   }
 
+  listPublicChatMessages(): PublicChatSnapshot {
+    return getPublicChatSnapshot(this.publicChatMessages, this.now());
+  }
+
+  sendPublicChat(input: CreateRoomInput & { text: string }): RoomResult<PublicChatSnapshot> {
+    const player = normalizePlayerInput(input);
+
+    if (!player) {
+      return failure("invalid-player", "Player id and name are required.");
+    }
+
+    const normalizedText = normalizeChatText(input.text);
+
+    if (!normalizedText) {
+      return failure("chat-message-empty", "Enter a message.");
+    }
+
+    if ([...normalizedText].length > MAX_ROOM_CHAT_TEXT_LENGTH) {
+      return failure("chat-message-too-long", `Messages must be ${MAX_ROOM_CHAT_TEXT_LENGTH} characters or fewer.`);
+    }
+
+    const now = this.now();
+    const lastSentAt = this.publicChatLastSentAt.get(player.id);
+
+    if (lastSentAt !== undefined && now - lastSentAt < ROOM_CHAT_COOLDOWN_MS) {
+      return failure("chat-rate-limited", "Please wait before sending another message.");
+    }
+
+    this.publicChatLastSentAt.set(player.id, now);
+    this.publicChatMessages.push({
+      id: `public-${this.nextPublicChatMessageId}`,
+      name: player.name,
+      sentAt: now,
+      text: normalizedText
+    });
+    this.nextPublicChatMessageId += 1;
+
+    if (this.publicChatMessages.length > MAX_ROOM_CHAT_MESSAGES) {
+      this.publicChatMessages.splice(0, this.publicChatMessages.length - MAX_ROOM_CHAT_MESSAGES);
+    }
+
+    return success(getPublicChatSnapshot(this.publicChatMessages, now));
+  }
+
   getPlayerSeat(roomCode: string, playerId: string): RoomPlayerSeat | null {
     const room = this.getRoom(roomCode);
 
@@ -1263,6 +1322,13 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
     updatedAt: room.updatedAt,
     winner: room.winner,
     winLine: room.winLine.map((point) => ({ ...point }))
+  };
+}
+
+function getPublicChatSnapshot(messages: PublicChatMessage[], generatedAt: number): PublicChatSnapshot {
+  return {
+    generatedAt,
+    messages: messages.map((message) => ({ ...message }))
   };
 }
 

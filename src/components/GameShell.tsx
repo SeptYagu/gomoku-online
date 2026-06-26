@@ -749,6 +749,8 @@ function FriendRoomControls({
         ) : null}
       </div>
 
+      <PublicChatPanel dictionary={dictionary} room={room} />
+
       <RoomLobbyList dictionary={dictionary} room={room} />
 
       {snapshot ? (
@@ -866,6 +868,67 @@ function FriendRoomControls({
       ) : null}
       {room.error ? <p className="room-error">{room.error}</p> : null}
     </div>
+  );
+}
+
+function PublicChatPanel({
+  dictionary,
+  room
+}: {
+  dictionary: GameDictionary;
+  room: FriendRoomController;
+}) {
+  const labels = dictionary.room;
+  const { refreshPublicChat } = room;
+
+  useEffect(() => {
+    refreshPublicChat();
+  }, [refreshPublicChat]);
+
+  return (
+    <section aria-label={labels.publicChat} className="room-chat public-chat">
+      <div className="room-chat-header">
+        <p className="metric-label">{labels.publicChat}</p>
+      </div>
+      <div aria-live="polite" className="room-chat-list" role="log">
+        {room.publicChatMessages.length > 0 ? (
+          room.publicChatMessages.map((message) => (
+            <div className="room-chat-message" key={message.id}>
+              <div className="room-chat-meta">
+                <strong>{message.name}</strong>
+                <span>{formatChatMessageTime(message.sentAt)}</span>
+              </div>
+              <p>{message.text}</p>
+            </div>
+          ))
+        ) : (
+          <p className="room-message">{labels.noMessages}</p>
+        )}
+      </div>
+      <form
+        className="room-chat-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          room.sendPublicChatMessage();
+        }}
+      >
+        <input
+          maxLength={160}
+          onChange={(event) => room.setPublicChatText(event.target.value)}
+          placeholder={labels.publicChatPlaceholder}
+          type="text"
+          value={room.publicChatText}
+        />
+        <button
+          className="icon-button"
+          disabled={!room.publicChatText.trim()}
+          title={labels.sendMessage}
+          type="submit"
+        >
+          <Send aria-hidden="true" focusable={false} />
+        </button>
+      </form>
+    </section>
   );
 }
 

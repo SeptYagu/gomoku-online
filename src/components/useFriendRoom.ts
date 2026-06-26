@@ -3,8 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
-import type { RoomAck, RoomClientState, RoomListAck } from "@/server/room-contract";
-import type { LobbyRoomDeletedEvent, LobbyRoomUpdatedEvent, RoomListItem, RoomSnapshot } from "@/server/rooms";
+import type { PublicChatAck, RoomAck, RoomClientState, RoomListAck } from "@/server/room-contract";
+import type {
+  LobbyRoomDeletedEvent,
+  LobbyRoomUpdatedEvent,
+  PublicChatMessage,
+  PublicChatSnapshot,
+  RoomListItem,
+  RoomSnapshot
+} from "@/server/rooms";
 import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
 
 type RoomSocket = {
@@ -40,16 +47,22 @@ export type FriendRoomController = {
   lobbyStatus: "idle" | "loading" | "ready" | "error";
   playerName: string;
   playMove: (point: Point) => void;
+  publicChatMessages: PublicChatMessage[];
+  publicChatStatus: "idle" | "loading" | "ready" | "error";
+  publicChatText: string;
   ready: boolean;
+  refreshPublicChat: () => void;
   refreshLobby: () => void;
   resignGame: () => void;
   respondUndoRequest: (accepted: boolean) => void;
   restartGame: () => void;
   room: RoomClientState | null;
+  sendPublicChatMessage: () => void;
   sendChatMessage: () => void;
   setChatText: (value: string) => void;
   setJoinCode: (value: string) => void;
   setPlayerName: (value: string) => void;
+  setPublicChatText: (value: string) => void;
   toggleReady: () => void;
   undoMove: () => void;
 };
@@ -67,6 +80,9 @@ export function useFriendRoom(): FriendRoomController {
   const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
   const [lobbyStatus, setLobbyStatus] = useState<FriendRoomController["lobbyStatus"]>("idle");
   const [chatText, setChatText] = useState("");
+  const [publicChatMessages, setPublicChatMessages] = useState<PublicChatMessage[]>([]);
+  const [publicChatStatus, setPublicChatStatus] = useState<FriendRoomController["publicChatStatus"]>("idle");
+  const [publicChatText, setPublicChatText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
 
@@ -128,6 +144,12 @@ export function useFriendRoom(): FriendRoomController {
       if (isLobbyRoomDeletedEvent(event)) {
         setLobbyRooms((currentRooms) => currentRooms.filter((candidate) => candidate.code !== event.code));
         setLobbyStatus("ready");
+      }
+    });
+    socket.on("public-chat:messages", (snapshot: unknown) => {
+      if (isPublicChatSnapshot(snapshot)) {
+        setPublicChatMessages(snapshot.messages);
+        setPublicChatStatus("ready");
       }
     });
 
@@ -205,6 +227,20 @@ export function useFriendRoom(): FriendRoomController {
 
       setLobbyRooms(response.value.rooms);
       setLobbyStatus("ready");
+    });
+  }, [ensureSocket]);
+
+  const refreshPublicChat = useCallback(() => {
+    setPublicChatStatus("loading");
+    ensureSocket().emit("public-chat:join", undefined, (response: PublicChatAck) => {
+      if (!response.ok) {
+        setPublicChatStatus("error");
+        setError(response.error.message);
+        return;
+      }
+
+      setPublicChatMessages(response.value.messages);
+      setPublicChatStatus("ready");
     });
   }, [ensureSocket]);
 
@@ -289,6 +325,35 @@ export function useFriendRoom(): FriendRoomController {
       }
     });
   }, [applyRoomAck, chatText, ensureSocket, room]);
+
+  const sendPublicChatMessage = useCallback(() => {
+    const text = publicChatText.trim();
+
+    if (!text) {
+      return;
+    }
+
+    const nextPlayerId = getOrCreatePlayerId();
+    const nextPlayerName = normalizePlayerName(playerName);
+
+    setPlayerNameState(nextPlayerName);
+    persistPlayerName(nextPlayerName);
+    ensureSocket().emit(
+      "public-chat:send",
+      { playerId: nextPlayerId, playerName: nextPlayerName, text },
+      (response: PublicChatAck) => {
+        if (!response.ok) {
+          setError(response.error.message);
+          return;
+        }
+
+        setPublicChatMessages(response.value.messages);
+        setPublicChatStatus("ready");
+        setPublicChatText("");
+        setError(null);
+      }
+    );
+  }, [ensureSocket, playerName, publicChatText]);
 
   const leaveRoom = useCallback(() => {
     if (!room) {
@@ -393,16 +458,22 @@ export function useFriendRoom(): FriendRoomController {
     lobbyStatus,
     playerName,
     playMove,
+    publicChatMessages,
+    publicChatStatus,
+    publicChatText,
     ready,
+    refreshPublicChat,
     refreshLobby,
     resignGame,
     respondUndoRequest,
     restartGame,
     room,
+    sendPublicChatMessage,
     sendChatMessage,
     setChatText,
     setJoinCode,
     setPlayerName,
+    setPublicChatText,
     toggleReady,
     undoMove
   };
@@ -437,6 +508,15 @@ function isLobbyRoomUpdatedEvent(value: unknown): value is LobbyRoomUpdatedEvent
 
 function isLobbyRoomDeletedEvent(value: unknown): value is LobbyRoomDeletedEvent {
   return typeof value === "object" && value !== null && "code" in value && typeof value.code === "string";
+}
+
+function isPublicChatSnapshot(value: unknown): value is PublicChatSnapshot {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "messages" in value &&
+    Array.isArray(value.messages)
+  );
 }
 
 function upsertLobbyRoom(rooms: RoomListItem[], room: RoomListItem): RoomListItem[] {

@@ -1,5 +1,5 @@
 import type { Stone } from "../game/types";
-import type { RoomError, RoomListSnapshot, RoomParticipantRole, RoomSnapshot } from "./rooms";
+import type { PublicChatSnapshot, RoomError, RoomListSnapshot, RoomParticipantRole, RoomSnapshot } from "./rooms";
 
 export type RoomClientState = {
   name: string;
@@ -23,6 +23,16 @@ export type RoomListAck =
   | {
       ok: true;
       value: RoomListSnapshot;
+    }
+  | {
+      error: RoomError;
+      ok: false;
+    };
+
+export type PublicChatAck =
+  | {
+      ok: true;
+      value: PublicChatSnapshot;
     }
   | {
       error: RoomError;

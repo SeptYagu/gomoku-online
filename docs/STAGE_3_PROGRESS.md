@@ -293,3 +293,54 @@
   - `PASS create room URL - U34VLW`
   - `PASS copy invite - copied current URL`
   - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+
+## 小步 6：公共聊天频道
+
+状态：实现完成，本地验证通过；等待提交推送后做真实服务器验证。
+
+目标：
+
+- 好友房/大厅范围提供公共聊天频道。
+- 游客和玩家可以使用当前昵称发送公共消息。
+- 服务端限制空消息、超长消息和发送频率。
+- 消息以纯文本进入公共聊天短期内存历史。
+- 好友房面板显示公共聊天最近消息和发送输入框。
+
+实现：
+
+- `src/server/rooms.ts`
+  - 新增 `PublicChatMessage`、`PublicChatSnapshot`。
+  - `RoomStore.listPublicChatMessages()` 返回公共聊天短期历史。
+  - `RoomStore.sendPublicChat()` 写入公共聊天并复用 160 字符上限、800ms 发送间隔和最近 50 条保留策略。
+- `src/server/room-contract.ts`
+  - 新增 `PublicChatAck`。
+- `src/server/room-socket.ts`
+  - 新增 `public-chat:join`、`public-chat:leave`、`public-chat:send`。
+  - 新增 `public-chat:messages` 广播。
+- `src/components/useFriendRoom.ts`
+  - 新增 `publicChatMessages`、`publicChatText`、`refreshPublicChat()`、`sendPublicChatMessage()`。
+- `src/components/GameShell.tsx`
+  - 好友房面板新增公共聊天区域、最近消息列表、发送输入框和发送按钮。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增公共聊天 UI 文案。
+- `tools/smoke-public-chat.ts`
+  - 覆盖公共频道 join、广播、频率限制、空/超长消息。
+- `package.json`
+  - 新增 `npm run smoke:public-chat`。
+
+验证：
+
+- `npm test`：通过，5 个测试文件、62 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3033 npm start` 后运行 `npm run smoke:public-chat -- http://127.0.0.1:3033`，通过。
+  - `PASS public chat join - 0 messages`
+  - `PASS public chat broadcast`
+  - `PASS public chat rate limit - chat-rate-limited`
+  - `PASS public empty chat rejected - chat-message-empty`
+  - `PASS public long chat rejected - chat-message-too-long`
+- 本地生产服务：`npm run smoke:room-chat -- http://127.0.0.1:3033`，通过。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3033`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3033`，通过。
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3033`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3033`，通过。

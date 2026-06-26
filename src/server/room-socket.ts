@@ -1,9 +1,10 @@
 import type { Point } from "../game/types";
-import type { RoomAck, RoomListAck } from "./room-contract";
+import type { PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import {
   RoomStore,
   type LobbyRoomDeletedEvent,
   type LobbyRoomUpdatedEvent,
+  type PublicChatSnapshot,
   type RoomError,
   type RoomListQuery,
   type RoomListSnapshot,
@@ -12,6 +13,7 @@ import {
 } from "./rooms";
 
 const LOBBY_ROOM = "lobby";
+const PUBLIC_CHAT_ROOM = "public-chat";
 
 export type ClientToServerEvents = {
   "game:move": (
@@ -29,6 +31,12 @@ export type ClientToServerEvents = {
   "lobby:join": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:leave": (payload: undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:list": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
+  "public-chat:join": (payload: undefined, ack: (response: PublicChatAck) => void) => void;
+  "public-chat:leave": (payload: undefined, ack: (response: PublicChatAck) => void) => void;
+  "public-chat:send": (
+    payload: { playerId: string; playerName: string; text: string },
+    ack: (response: PublicChatAck) => void
+  ) => void;
   "room:chat-send": (
     payload: { roomCode: string; text: string },
     ack: (response: RoomAck) => void
@@ -50,6 +58,7 @@ export type ServerToClientEvents = {
   "lobby:room-deleted": (event: LobbyRoomDeletedEvent) => void;
   "lobby:room-updated": (event: LobbyRoomUpdatedEvent) => void;
   "lobby:rooms": (snapshot: RoomListSnapshot) => void;
+  "public-chat:messages": (snapshot: PublicChatSnapshot) => void;
   "room:error": (error: RoomError) => void;
   "room:state": (snapshot: RoomSnapshot) => void;
 };
@@ -144,6 +153,20 @@ export function registerRoomSocketHandlers(
     socket.on("lobby:leave", (_payload, ack) => {
       socket.leave(LOBBY_ROOM);
       acknowledgeLobbyList(roomStore, undefined, ack);
+    });
+
+    socket.on("public-chat:join", (_payload, ack) => {
+      socket.join(PUBLIC_CHAT_ROOM);
+      acknowledgePublicChatList(roomStore, ack);
+    });
+
+    socket.on("public-chat:leave", (_payload, ack) => {
+      socket.leave(PUBLIC_CHAT_ROOM);
+      acknowledgePublicChatList(roomStore, ack);
+    });
+
+    socket.on("public-chat:send", (payload, ack) => {
+      acknowledgeAndBroadcastPublicChat(io, socket, roomStore.sendPublicChat(payload), ack);
     });
 
     socket.on("room:ready", (payload, ack) => {
@@ -448,6 +471,29 @@ function acknowledgeLobbyList(
     ok: true,
     value: roomStore.listRooms(parseRoomListQuery(payload))
   });
+}
+
+function acknowledgePublicChatList(roomStore: RoomStore, ack: (response: PublicChatAck) => void) {
+  ack({
+    ok: true,
+    value: roomStore.listPublicChatMessages()
+  });
+}
+
+function acknowledgeAndBroadcastPublicChat(
+  io: RoomSocketServer,
+  socket: RoomSocket,
+  response: PublicChatAck,
+  ack: (response: PublicChatAck) => void
+) {
+  ack(response);
+
+  if (!response.ok) {
+    socket.emit("room:error", response.error);
+    return;
+  }
+
+  io.to(PUBLIC_CHAT_ROOM).emit("public-chat:messages", response.value);
 }
 
 function broadcastLobbyRoomChange(io: RoomSocketServer, roomStore: RoomStore, roomCode: string) {

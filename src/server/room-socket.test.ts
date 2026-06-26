@@ -2,9 +2,15 @@ import { createServer, type Server as HttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Server } from "socket.io";
 import { describe, expect, it } from "vitest";
-import type { RoomAck, RoomListAck } from "./room-contract";
+import type { PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
-import { RoomStore, type LobbyRoomDeletedEvent, type LobbyRoomUpdatedEvent, type RoomSnapshot } from "./rooms";
+import {
+  RoomStore,
+  type LobbyRoomDeletedEvent,
+  type LobbyRoomUpdatedEvent,
+  type PublicChatSnapshot,
+  type RoomSnapshot
+} from "./rooms";
 
 type TestSocket = {
   disconnect: () => void;
@@ -315,6 +321,73 @@ describe("room socket handlers", () => {
 
       const finalList = await emitAck<RoomListAck>(lobby, "lobby:list", {});
       expect(finalList.ok ? finalList.value.rooms : ["unexpected"]).toEqual([]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("serves public chat and broadcasts messages", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const first = await harness.connectClient();
+      const second = await harness.connectClient();
+
+      const firstList = await emitAck<PublicChatAck>(first, "public-chat:join", undefined);
+      const secondList = await emitAck<PublicChatAck>(second, "public-chat:join", undefined);
+
+      expect(firstList.ok ? firstList.value.messages : ["unexpected"]).toEqual([]);
+      expect(secondList.ok ? secondList.value.messages : ["unexpected"]).toEqual([]);
+
+      const secondSawMessage = waitForEventMatching<PublicChatSnapshot>(
+        second,
+        "public-chat:messages",
+        (snapshot) => snapshot.messages.some((message) => message.text === "hello public")
+      );
+      const sendAck = await emitAck<PublicChatAck>(first, "public-chat:send", {
+        playerId: "public-first",
+        playerName: "Public First",
+        text: " hello\npublic "
+      });
+
+      expect(sendAck.ok ? sendAck.value.messages.at(-1) : null).toMatchObject({
+        name: "Public First",
+        text: "hello public"
+      });
+      expect((await secondSawMessage).messages.at(-1)).toMatchObject({
+        name: "Public First",
+        text: "hello public"
+      });
+      expect(
+        await emitAck<PublicChatAck>(first, "public-chat:send", {
+          playerId: "public-first",
+          playerName: "Public First",
+          text: "too soon"
+        })
+      ).toMatchObject({
+        ok: false,
+        error: { code: "chat-rate-limited" }
+      });
+      expect(
+        await emitAck<PublicChatAck>(second, "public-chat:send", {
+          playerId: "public-second",
+          playerName: "Public Second",
+          text: "   "
+        })
+      ).toMatchObject({
+        ok: false,
+        error: { code: "chat-message-empty" }
+      });
+      expect(
+        await emitAck<PublicChatAck>(second, "public-chat:send", {
+          playerId: "public-second",
+          playerName: "Public Second",
+          text: "x".repeat(161)
+        })
+      ).toMatchObject({
+        ok: false,
+        error: { code: "chat-message-too-long" }
+      });
     } finally {
       await harness.close();
     }

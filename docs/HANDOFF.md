@@ -2009,3 +2009,55 @@ b6faf9e
 - 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
 - 小步 5：房间聊天频道，完成并通过真实服务器验证。
 - 下一步：小步 6，公共聊天频道。
+
+## 43. 2026-06-25 阶段 3 小步 6：公共聊天频道本地完成
+
+本轮目标：
+
+- 按阶段 3 build plan 推进小步 6。
+- 实现大厅/好友房范围公共聊天频道。
+- 服务端拒绝空消息、超长消息和发送过快消息。
+- 好友房面板显示公共聊天最近消息和发送输入框。
+
+实际完成：
+
+- `src/server/rooms.ts`：
+  - 新增 `PublicChatMessage`、`PublicChatSnapshot`。
+  - 新增 `RoomStore.listPublicChatMessages()` 和 `RoomStore.sendPublicChat()`。
+  - 公共聊天复用最近 50 条内存消息、160 字符上限和 800ms 发送间隔。
+- `src/server/room-contract.ts`：
+  - 新增 `PublicChatAck`。
+- `src/server/room-socket.ts`：
+  - 新增 `public-chat:join`、`public-chat:leave`、`public-chat:send`。
+  - 新增 `public-chat:messages` 广播。
+- `src/server/room-socket.test.ts`：
+  - 覆盖公共聊天 join、广播、频率限制、空/超长消息。
+- `src/components/useFriendRoom.ts`、`src/components/GameShell.tsx`：
+  - 好友房面板新增公共聊天区域、最近消息列表、发送输入框和发送按钮。
+- `src/i18n/dictionaries.ts`：
+  - 六语言新增公共聊天文案。
+- `tools/smoke-public-chat.ts`、`package.json`、`README.md`：
+  - 新增 `npm run smoke:public-chat` 及说明。
+
+本地验证：
+
+- `npm test`：通过，5 个测试文件、62 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3033 npm start` 后运行 `npm run smoke:public-chat -- http://127.0.0.1:3033`，通过。
+  - `PASS public chat join - 0 messages`
+  - `PASS public chat broadcast`
+  - `PASS public chat rate limit - chat-rate-limited`
+  - `PASS public empty chat rejected - chat-message-empty`
+  - `PASS public long chat rejected - chat-message-too-long`
+- 本地生产服务：`npm run smoke:room-chat -- http://127.0.0.1:3033`，通过。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3033`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3033`，通过。
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3033`，通过。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3033`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送小步 6，等待真实服务器更新后跑 `verify:online`、`smoke:public-chat`、`smoke:room-chat`、`smoke:lobby-ui`、`smoke:online-room`、`smoke:lobby` 和 `smoke:share-url`。
