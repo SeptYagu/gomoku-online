@@ -2488,3 +2488,58 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:profile-records`、`smoke:room-lifecycle`、`smoke:game-records`、`smoke:online-room`、`smoke:share-url` 和 `smoke:lobby-ui`。
+
+## 52. 2026-06-25 阶段 3 小步 9 线上验证补记
+
+本轮目标：
+
+- 按 handoff 追加规则，补记阶段 3 小步 9 Profile/Game records 读回和空房生命周期补强的推送、真实服务器验证结果。
+- 更新阶段 3 进度文件，把小步 9 标记为完成并通过真实服务器验证。
+
+实际结果：
+
+- 阶段 3 小步 9 提交：`2731b61 Implement stage 3 profile records`。
+- `2731b61` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 2731b61`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 2731b61`：通过。
+- `npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS submitted verified record - VDNU89-1`
+  - `PASS profile readback - VDNU89-1`
+- `npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS repeated create closes previous room - TXFUAP -> A62UQ8`
+  - `PASS same player create closes previous room - CCL3A2 -> M9LDH4`
+  - `PASS spectator sits in open seat - E8M2WA`
+  - `PASS disconnect timeout forfeit - NTLZPF`
+- `npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS first submit partial - YB2EXJ-1`
+  - `PASS second submit verified - YB2EXJ-1`
+  - `PASS duplicate submit deduped - YB2EXJ-1`
+- `npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`：通过，继续覆盖三客户端三局、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS create room URL - PB82PQ`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+- `npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS lobby waiting row join - D62KHR`
+  - `PASS lobby playing row watch - R8ZHLS`
+- `npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS REST room list - version 90`
+  - `PASS lobby room created - QNTLP7`
+  - `PASS lobby room playing - status updated`
+  - `PASS lobby room deleted - finished room hidden`
+- `docs/STAGE_3_PROGRESS.md` 已更新小步 9 为完成并通过真实服务器验证。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 小步 8：在线棋谱提交、去重和 guest 棋谱保存，完成并通过真实服务器验证。
+- 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
+- 联机回归修复：房间生命周期、补位和邀请链接，完成并通过真实服务器验证。
+- 下一步：继续阶段 3 剩余主线，账号/注册玩家身份、Ranking、用户状态和更完整的 Game records 回看仍未完成。

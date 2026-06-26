@@ -610,7 +610,7 @@
 
 ## 小步 9：Profile / Game records 读回第一版 + 空房生命周期补强
 
-状态：本地完成，待提交、推送并通过真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 目标：
 
@@ -669,8 +669,35 @@
 - 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3037`，通过。
 - 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3037`，通过。
 
-当前截止：
+线上验证：
 
-- 最新提交：待本轮提交生成。
-- 是否已推送：待提交后推送到 `origin/main`。
-- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:profile-records`、`smoke:room-lifecycle`、`smoke:game-records`、`smoke:online-room`、`smoke:share-url` 和 `smoke:lobby-ui`。
+- 本轮提交：`2731b61 Implement stage 3 profile records`。
+- `2731b61` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 2731b61`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 2731b61`：通过。
+- 真实服务器：`npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS submitted verified record - VDNU89-1`
+  - `PASS profile readback - VDNU89-1`
+- 真实服务器：`npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS repeated create closes previous room - TXFUAP -> A62UQ8`
+  - `PASS same player create closes previous room - CCL3A2 -> M9LDH4`
+  - `PASS spectator sits in open seat - E8M2WA`
+  - `PASS disconnect timeout forfeit - NTLZPF`
+- 真实服务器：`npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS first submit partial - YB2EXJ-1`
+  - `PASS second submit verified - YB2EXJ-1`
+  - `PASS duplicate submit deduped - YB2EXJ-1`
+- 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过，继续覆盖三客户端三局、换先、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- 真实服务器：`npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS create room URL - PB82PQ`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+- 真实服务器：`npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS lobby waiting row join - D62KHR`
+  - `PASS lobby playing row watch - R8ZHLS`
+- 真实服务器：`npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS REST room list - version 90`
+  - `PASS lobby room created - QNTLP7`
+  - `PASS lobby room playing - status updated`
+  - `PASS lobby room deleted - finished room hidden`
