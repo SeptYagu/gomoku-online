@@ -26,6 +26,7 @@
     "smoke:presence": "tsx tools/smoke-presence.ts",
     "smoke:game-records": "tsx tools/smoke-game-records.ts",
     "smoke:profile-records": "tsx tools/smoke-profile-records.ts",
+    "smoke:profile-page": "tsx tools/smoke-profile-page.ts",
     "smoke:leaderboard": "tsx tools/smoke-leaderboard.ts",
     "smoke:account": "tsx tools/smoke-account.ts",
     "verify:online": "tsx tools/verify-online-server.ts"

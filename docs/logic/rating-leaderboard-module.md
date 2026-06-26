@@ -483,6 +483,28 @@ Game 增加：
 仍保留到后续小步：
 
 - 正式邮箱/密码/OAuth 登录。
-- 注册玩家 Profile 页面独立入口。
 - 游客榜和注册用户榜隔离策略。
+- 账号改名、合并、注销和 token 轮换。
+
+## 当前落地：Profile / Game records 页面入口第一版（2026-06-25）
+
+已开始把 Profile 从好友房侧栏小面板提升为正式页面入口：
+
+- 新增 `/{locale}/profile/{playerId}?name=...` 页面。
+- 页面客户端读取 `/api/profile`，浏览器有账号 token 时带 bearer token。
+- 账号条在 registered 状态下显示 Profile 链接。
+- 排行榜条目链接到对应玩家 Profile。
+- Profile 页面展示：
+  - 玩家名、identity、playerId。
+  - games / wins / losses / draws。
+  - verified / partial 计数。
+  - 最近 Game records。
+  - 每局 gameId、roomCode、对手、结果、手数、记录状态和最终盘面缩略图。
+
+仍保留到后续小步：
+
+- 注册用户和游客排行榜隔离策略。
+- 棋谱逐手回放。
+- 棋谱导出和开局库生成入口。
+- 正式邮箱/密码/OAuth 登录。
 - 账号改名、合并、注销和 token 轮换。

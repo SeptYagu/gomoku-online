@@ -160,6 +160,12 @@ Profile / Game records 读回可跑 Socket.IO + REST 冒烟，确认在线对局
 npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net
 ```
 
+Profile 页面入口可跑浏览器冒烟，确认注册玩家正式 Profile 页面和 Game records 可从 URL 读回：
+
+```bash
+npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net
+```
+
 排行榜可跑 Socket.IO + REST 冒烟，确认一局 verified 在线棋谱会进入总榜、今日榜和连胜榜：
 
 ```bash

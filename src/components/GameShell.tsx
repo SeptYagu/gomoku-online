@@ -44,6 +44,7 @@ import type { PresenceStatus, RoomSnapshot, UndoRequestSnapshot, UserPresenceSna
 import { GomokuBoard } from "./GomokuBoard";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
+import { getProfileUrl } from "./profile/profile-url";
 import { useFriendRoom, type FriendRoomController } from "./useFriendRoom";
 
 type GameShellProps = {
@@ -521,7 +522,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
           </div>
         ) : null}
 
-        {mode === "room" ? <FriendRoomControls dictionary={dictionary} room={friendRoom} /> : null}
+        {mode === "room" ? <FriendRoomControls dictionary={dictionary} locale={locale} room={friendRoom} /> : null}
 
         <div className="play-area">
           <GomokuBoard
@@ -715,9 +716,11 @@ function getInitialGameMode(): GameMode {
 
 function FriendRoomControls({
   dictionary,
+  locale,
   room
 }: {
   dictionary: GameDictionary;
+  locale: Locale;
   room: FriendRoomController;
 }) {
   const labels = dictionary.room;
@@ -757,10 +760,16 @@ function FriendRoomControls({
           <strong>{room.account ? room.account.displayName : labels.guestAccount}</strong>
         </div>
         {room.account ? (
-          <button className="mode-pill" onClick={room.signOutAccount} type="button">
-            <LogOut aria-hidden="true" focusable={false} />
-            {labels.signOutAccount}
-          </button>
+          <div className="room-account-actions">
+            <a className="mode-pill" href={getProfileUrl(locale, room.account.playerId, room.account.displayName)}>
+              <UserRound aria-hidden="true" focusable={false} />
+              {labels.profile}
+            </a>
+            <button className="mode-pill" onClick={room.signOutAccount} type="button">
+              <LogOut aria-hidden="true" focusable={false} />
+              {labels.signOutAccount}
+            </button>
+          </div>
         ) : (
           <button
             className="mode-pill"
@@ -808,7 +817,7 @@ function FriendRoomControls({
 
       <RoomProfilePanel dictionary={dictionary} room={room} />
 
-      <LeaderboardPanel dictionary={dictionary} room={room} />
+      <LeaderboardPanel dictionary={dictionary} locale={locale} room={room} />
 
       <RoomLobbyList dictionary={dictionary} room={room} />
 
@@ -1077,9 +1086,11 @@ function RoomRecordItem({
 
 function LeaderboardPanel({
   dictionary,
+  locale,
   room
 }: {
   dictionary: GameDictionary;
+  locale: Locale;
   room: FriendRoomController;
 }) {
   const labels = dictionary.room;
@@ -1118,7 +1129,13 @@ function LeaderboardPanel({
       {entries.length > 0 ? (
         <div className="room-leaderboard-list">
           {entries.map((entry) => (
-            <LeaderboardEntryItem entry={entry} key={entry.playerId} labels={labels} scope={room.leaderboardScope} />
+            <LeaderboardEntryItem
+              entry={entry}
+              key={entry.playerId}
+              labels={labels}
+              locale={locale}
+              scope={room.leaderboardScope}
+            />
           ))}
         </div>
       ) : (
@@ -1133,10 +1150,12 @@ function LeaderboardPanel({
 function LeaderboardEntryItem({
   entry,
   labels,
+  locale,
   scope
 }: {
   entry: LeaderboardEntry;
   labels: GameDictionary["room"];
+  locale: Locale;
   scope: LeaderboardScope;
 }) {
   const primaryMetric =
@@ -1147,7 +1166,7 @@ function LeaderboardEntryItem({
         : labels.leaderboardRating.replace("{rating}", String(entry.rating));
 
   return (
-    <article className="room-leaderboard-item">
+    <a className="room-leaderboard-item" href={getProfileUrl(locale, entry.playerId, entry.displayName)}>
       <span className="room-leaderboard-rank">#{entry.rank}</span>
       <Trophy aria-hidden="true" className="room-leaderboard-icon" focusable={false} />
       <div>
@@ -1163,7 +1182,7 @@ function LeaderboardEntryItem({
         <span>{primaryMetric}</span>
         {scope === "overall" ? null : <span>{labels.leaderboardRating.replace("{rating}", String(entry.rating))}</span>}
       </div>
-    </article>
+    </a>
   );
 }
 

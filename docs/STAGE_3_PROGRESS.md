@@ -973,3 +973,58 @@
 下一步：
 
 - 阶段 3 继续推进注册玩家正式 Profile / Game records 页面入口、注册用户和游客排行榜隔离、棋谱回看与开局库导出准备。
+
+## 小步 13：注册玩家正式 Profile / Game records 页面入口
+
+状态：本地完成，待提交、推送和真实服务器验证。
+
+目标：
+
+- 给注册玩家 Profile 和 Game records 提供正式页面入口，而不是只在好友房面板里显示小卡片。
+- 排行榜行可以进入对应玩家 Profile。
+- 当前账号条可以进入自己的 Profile。
+- 第一版页面展示玩家身份、胜负统计、verified/partial 统计、最近棋谱和每局最终盘面缩略图。
+
+实现：
+
+- `src/app/[locale]/profile/[playerId]/page.tsx`
+  - 新增正式 Profile 路由。
+  - 路由保留 locale，并支持 `?name=...` 作为公开 fallback displayName。
+- `src/components/profile/PlayerProfilePage.tsx`
+  - 新增客户端 Profile 页面。
+  - 页面通过 `/api/profile` 读取当前玩家资料。
+  - 浏览器存在账号 token 时会带 bearer token，用于自己的 registered 空资料或受保护读回。
+  - 展示 stats、Game records、gameId、roomCode、对手、结果、手数、状态和最终盘面缩略图。
+- `src/components/profile/profile-url.ts`
+  - 新增 Profile URL 拼接 helper。
+- `src/components/GameShell.tsx`
+  - 账号条在登录后显示 Profile 链接。
+  - 排行榜每一行变成对应玩家 Profile 链接。
+- `src/app/globals.css`
+  - 新增 Profile 页面布局、统计块、棋谱卡片、最终盘面缩略图样式。
+- `tools/smoke-profile-page.ts`、`package.json`、`README.md`
+  - 新增 `npm run smoke:profile-page`。
+  - 冒烟流程：注册两个账号、打一局、双方提交棋谱、打开 `/en/profile/<playerId>`，确认页面读回 displayName 和 gameId。
+
+本地验证：
+
+- `npm test`：通过，7 个测试文件、86 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过，Next 已识别动态路由 `ƒ /[locale]/profile/[playerId]`。
+- 本地生产服务：`PORT=3042 npm run start:online`。
+- `npm run smoke:profile-page -- http://127.0.0.1:3042`：通过。
+  - `PASS register host - acct_2qy9sTSbVts`
+  - `PASS register guest - acct_7GV-slaHjn0`
+  - `PASS profile page readback - 89YV5Z-1`
+- `npm run smoke:account -- http://127.0.0.1:3042`：通过。
+  - `PASS registered record verified - 723GPF-1`
+  - `PASS registered profile readback`
+  - `PASS registered leaderboard readback`
+- `npm run smoke:leaderboard -- http://127.0.0.1:3042`：通过。
+  - `PASS submitted verified ranked record - 8UMT6H-1`
+  - `PASS leaderboard readback - 8UMT6H-1`
+
+下一步：
+
+- 提交并推送。
+- 等待真实服务器更新到新短提交号后，运行 `verify:online`、`smoke:profile-page`、`smoke:account` 和 `smoke:leaderboard`。

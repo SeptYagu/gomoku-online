@@ -2938,3 +2938,59 @@ b6faf9e
 下一步：
 
 - 阶段 3 继续推进注册玩家正式 Profile / Game records 页面入口、注册用户和游客排行榜隔离、棋谱回看与开局库导出准备。
+
+## 60. 2026-06-25 阶段 3 小步 13：Profile / Game records 页面入口本地完成
+
+本轮目标：
+
+- 按阶段 3 build plan 继续推进注册玩家正式 Profile / Game records 页面入口。
+- 保持 handoff 追加规则，不修改过去窗口记录。
+- 小步 13 先完成正式 URL、账号入口、排行榜入口和最近棋谱展示；棋谱逐手回放和导出留给后续小步。
+
+实际完成：
+
+- `src/app/[locale]/profile/[playerId]/page.tsx`
+  - 新增正式 Profile 页面路由。
+  - URL 形式为 `/{locale}/profile/{playerId}?name=...`。
+- `src/components/profile/PlayerProfilePage.tsx`
+  - 新增客户端 Profile 页面。
+  - 通过 `/api/profile` 拉取资料。
+  - 浏览器存在账号 token 时携带 bearer token。
+  - 展示玩家名、identity、playerId、胜负统计、verified/partial 统计、最近 Game records。
+  - 每条 Game record 展示 gameId、roomCode、对手、结果、手数、记录状态和最终盘面缩略图。
+- `src/components/profile/profile-url.ts`
+  - 新增 Profile URL 拼接 helper。
+- `src/components/GameShell.tsx`
+  - 账号条 registered 状态下新增 Profile 链接。
+  - 排行榜条目改为链接到对应玩家 Profile。
+- `src/app/globals.css`
+  - 新增 Profile 页面、统计块、棋谱卡片和最终盘面缩略图样式。
+- `tools/smoke-profile-page.ts`、`package.json`、`README.md`
+  - 新增 `npm run smoke:profile-page`。
+  - 冒烟覆盖注册账号、打一局、双方提交棋谱、打开 `/en/profile/<playerId>` 并确认页面读回 displayName 和 gameId。
+- `docs/STAGE_3_PROGRESS.md`、`docs/logic/rating-leaderboard-module.md`
+  - 补记小步 13 目标、实现和后续边界。
+
+本地验证：
+
+- `npm test`：通过，7 个测试文件、86 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过，Next 输出包含 `ƒ /[locale]/profile/[playerId]`。
+- 本地生产服务：`PORT=3042 npm run start:online`。
+- `npm run smoke:profile-page -- http://127.0.0.1:3042`：通过。
+  - `PASS register host - acct_2qy9sTSbVts`
+  - `PASS register guest - acct_7GV-slaHjn0`
+  - `PASS profile page readback - 89YV5Z-1`
+- `npm run smoke:account -- http://127.0.0.1:3042`：通过。
+  - `PASS registered record verified - 723GPF-1`
+  - `PASS registered profile readback`
+  - `PASS registered leaderboard readback`
+- `npm run smoke:leaderboard -- http://127.0.0.1:3042`：通过。
+  - `PASS submitted verified ranked record - 8UMT6H-1`
+  - `PASS leaderboard readback - 8UMT6H-1`
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:profile-page`、`smoke:account` 和 `smoke:leaderboard`。
