@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
-import type { PlayerProfileSnapshot } from "@/server/game-records";
+import type { LeaderboardScope, LeaderboardSnapshot, PlayerProfileSnapshot } from "@/server/game-records";
 import type {
   GameRecordAck,
   PresenceAck,
@@ -60,6 +60,9 @@ export type FriendRoomController = {
   leaveRoom: () => void;
   lobbyRooms: RoomListItem[];
   lobbyStatus: "idle" | "loading" | "ready" | "error";
+  leaderboard: LeaderboardSnapshot | null;
+  leaderboardScope: LeaderboardScope;
+  leaderboardStatus: "idle" | "loading" | "ready" | "error";
   matchmakingStatus: "idle" | "searching";
   playerName: string;
   playMove: (point: Point) => void;
@@ -72,6 +75,7 @@ export type FriendRoomController = {
   publicChatText: string;
   ready: boolean;
   refreshPresence: () => void;
+  refreshLeaderboard: () => void;
   refreshProfile: () => void;
   refreshPublicChat: () => void;
   refreshLobby: () => void;
@@ -83,6 +87,7 @@ export type FriendRoomController = {
   sendChatMessage: () => void;
   setChatText: (value: string) => void;
   setJoinCode: (value: string) => void;
+  setLeaderboardScope: (scope: LeaderboardScope) => void;
   setPlayerName: (value: string) => void;
   setPublicChatText: (value: string) => void;
   findMatch: () => void;
@@ -112,6 +117,9 @@ export function useFriendRoom(): FriendRoomController {
   const [publicChatText, setPublicChatText] = useState("");
   const [presenceUsers, setPresenceUsers] = useState<UserPresenceSnapshot[]>([]);
   const [presenceStatus, setPresenceStatus] = useState<FriendRoomController["presenceStatus"]>("idle");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardSnapshot | null>(null);
+  const [leaderboardScope, setLeaderboardScopeState] = useState<LeaderboardScope>("overall");
+  const [leaderboardStatus, setLeaderboardStatus] = useState<FriendRoomController["leaderboardStatus"]>("idle");
   const [matchmakingStatus, setMatchmakingStatus] = useState<FriendRoomController["matchmakingStatus"]>("idle");
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,8 +136,8 @@ export function useFriendRoom(): FriendRoomController {
   const canResign = isPlayer && room?.snapshot.status === "playing";
   const canRestart = isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
   const canSit = room?.role === "spectator" && hasOpenPlayerSeat(room.snapshot);
-  const canCreateRoom = !isCreatingRoom && matchmakingStatus !== "searching";
-  const canFindMatch = matchmakingStatus !== "searching" && room?.snapshot.status !== "playing";
+  const canCreateRoom = !room && !isCreatingRoom && matchmakingStatus !== "searching";
+  const canFindMatch = !room && matchmakingStatus !== "searching";
   const canCancelMatch =
     matchmakingStatus !== "searching" &&
     isPlayer &&
@@ -407,6 +415,35 @@ export function useFriendRoom(): FriendRoomController {
     );
   }, [ensureSocket, playerName]);
 
+  const refreshLeaderboard = useCallback(() => {
+    const params = new URLSearchParams({
+      limit: "10",
+      scope: leaderboardScope
+    });
+
+    setLeaderboardStatus("loading");
+    void fetch(`/api/leaderboard?${params.toString()}`, {
+      headers: {
+        "accept": "application/json"
+      }
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Leaderboard request failed: ${response.status}`);
+        }
+
+        return (await response.json()) as LeaderboardSnapshot;
+      })
+      .then((snapshot) => {
+        setLeaderboard(snapshot);
+        setLeaderboardStatus("ready");
+      })
+      .catch((leaderboardError: unknown) => {
+        setLeaderboardStatus("error");
+        setError(leaderboardError instanceof Error ? leaderboardError.message : "Leaderboard request failed.");
+      });
+  }, [leaderboardScope]);
+
   const refreshProfile = useCallback(() => {
     const nextPlayerId = getOrCreatePlayerId();
     const nextPlayerName = normalizePlayerName(playerName);
@@ -614,6 +651,10 @@ export function useFriendRoom(): FriendRoomController {
     setJoinCodeState(value.toUpperCase());
   }, []);
 
+  const setLeaderboardScope = useCallback((scope: LeaderboardScope) => {
+    setLeaderboardScopeState(scope);
+  }, []);
+
   useEffect(() => {
     const storedSession = readRoomSession();
     const roomCodeFromUrl = getRoomCodeFromCurrentUrl();
@@ -730,6 +771,9 @@ export function useFriendRoom(): FriendRoomController {
     joinListedRoom,
     joinRoom,
     leaveRoom,
+    leaderboard,
+    leaderboardScope,
+    leaderboardStatus,
     lobbyRooms,
     lobbyStatus,
     matchmakingStatus,
@@ -744,6 +788,7 @@ export function useFriendRoom(): FriendRoomController {
     publicChatText,
     ready,
     refreshPresence,
+    refreshLeaderboard,
     refreshProfile,
     refreshPublicChat,
     refreshLobby,
@@ -755,6 +800,7 @@ export function useFriendRoom(): FriendRoomController {
     sendChatMessage,
     setChatText,
     setJoinCode,
+    setLeaderboardScope,
     setPlayerName,
     setPublicChatText,
     findMatch,

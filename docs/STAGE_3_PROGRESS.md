@@ -772,3 +772,55 @@
 - 真实服务器：`npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net`，通过。
   - `PASS submitted verified record - BYHKF4-1`
   - `PASS profile readback - BYHKF4-1`
+
+## 小步 11：排行榜第一版
+
+状态：本地完成，待提交、推送和真实服务器验证。
+
+目标：
+
+- 完成阶段 3 剩余主线中的 Ranking 第一版。
+- 暂不引入注册账号和密码系统；第一版继续基于 guest/current-session playerId。
+- 排行榜只使用双方提交后一致验证的在线棋谱，即 `recordStatus=verified` 的服务端权威记录。
+- 同时收紧房间创建入口：已在房间时前端不允许继续创建新房/随机匹配；服务端仍保留同一 player 进新房会关闭旧房的保护。
+
+实现：
+
+- `src/server/game-records.ts`
+  - 新增 `LeaderboardScope`、`LeaderboardEntry`、`LeaderboardSnapshot`。
+  - `GameRecordStore.getLeaderboard()` 从 verified 在线棋谱重放胜负，计算 guest 排名。
+  - 第一版评分使用 ELO：初始 1200，新手前 10 局 K=32，之后 K=24。
+  - 支持 `overall`、`daily`、`streak` 三个 scope。
+- `src/server/rooms.ts`、`src/server/online-server.ts`
+  - 新增 `RoomStore.getLeaderboard()`。
+  - 新增 `GET /api/leaderboard?scope=overall|daily|streak&limit=...`。
+- `src/components/useFriendRoom.ts`
+  - 新增 leaderboard 状态、刷新函数和 scope 切换。
+  - `canCreateRoom`、`canFindMatch` 改为必须当前未在房间内，避免同一页面连续创建新房。
+- `src/components/GameShell.tsx`、`src/app/globals.css`
+  - 好友房面板新增 Rankings 小面板。
+  - 支持 Overall / Today / Streak 切换、刷新和紧凑排行榜行。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增排行榜面板文案。
+- `tools/smoke-leaderboard.ts`、`package.json`、`README.md`
+  - 新增 `npm run smoke:leaderboard`。
+  - 冒烟覆盖打一局、双方提交棋谱、总榜/今日榜/连胜榜读回。
+
+本地验证：
+
+- `npm test`：通过，6 个测试文件、80 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3039 npm run start:online` 后运行 `npm run smoke:leaderboard -- http://127.0.0.1:3039`，通过。
+  - `PASS submitted verified ranked record - 3AFPUQ-1`
+  - `PASS leaderboard readback - 3AFPUQ-1`
+- 本地生产服务：`npm run smoke:room-lifecycle -- http://127.0.0.1:3039`，通过。
+  - `PASS repeated create closes previous room - C5LD46 -> B2TFUR`
+  - `PASS same player create closes previous room - CV5ZQE -> RTBQSF`
+  - `PASS spectator sits in open seat - WAL895`
+  - `PASS disconnect timeout forfeit - 56CKLX`
+
+下一步：
+
+- 提交并推送。
+- 等待真实服务器更新到新短提交号后，运行 `verify:online`、`smoke:leaderboard`、`smoke:room-lifecycle` 和必要的在线回归冒烟。

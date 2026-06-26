@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Search,
   Send,
+  Trophy,
   Undo2,
   UserRound,
   Users,
@@ -34,6 +35,8 @@ import type { GameDictionary } from "@/i18n/dictionaries";
 import type {
   GameRecordFinishReason,
   GameRecordStatus,
+  LeaderboardEntry,
+  LeaderboardScope,
   PlayerGameRecordResult,
   PlayerGameRecordSummary
 } from "@/server/game-records";
@@ -79,6 +82,7 @@ const AI_DIFFICULTIES: AiDifficulty[] = ["normal", "hard", "expert", "insane"];
 const AI_WORKER_TIMEOUT_GRACE_MS = 750;
 const AI_EMERGENCY_TIME_LIMIT_MS = 50;
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
+const LEADERBOARD_SCOPES: LeaderboardScope[] = ["overall", "daily", "streak"];
 
 export function GameShell({ dictionary, locale }: GameShellProps) {
   const [board, setBoard] = useState<Board>(() => createBoard());
@@ -781,6 +785,8 @@ function FriendRoomControls({
 
       <RoomProfilePanel dictionary={dictionary} room={room} />
 
+      <LeaderboardPanel dictionary={dictionary} room={room} />
+
       <RoomLobbyList dictionary={dictionary} room={room} />
 
       {snapshot ? (
@@ -1041,6 +1047,98 @@ function RoomRecordItem({
       <div className="room-record-metrics">
         <span>{labels.recordMoves.replace("{count}", String(record.moveSeq))}</span>
         <span>{getRecordStatusLabel(record.recordStatus, labels)}</span>
+      </div>
+    </article>
+  );
+}
+
+function LeaderboardPanel({
+  dictionary,
+  room
+}: {
+  dictionary: GameDictionary;
+  room: FriendRoomController;
+}) {
+  const labels = dictionary.room;
+  const { refreshLeaderboard } = room;
+  const entries = room.leaderboard?.entries ?? [];
+
+  useEffect(() => {
+    refreshLeaderboard();
+  }, [refreshLeaderboard]);
+
+  return (
+    <section aria-label={labels.leaderboard} className="room-leaderboard">
+      <div className="room-leaderboard-header">
+        <div>
+          <p className="metric-label">{labels.leaderboard}</p>
+          <strong>{getLeaderboardScopeLabel(room.leaderboardScope, labels)}</strong>
+        </div>
+        <button className="icon-button" onClick={room.refreshLeaderboard} title={labels.refreshLeaderboard} type="button">
+          <RefreshCw aria-hidden="true" focusable={false} />
+        </button>
+      </div>
+
+      <div className="room-leaderboard-tabs" aria-label={labels.leaderboard}>
+        {LEADERBOARD_SCOPES.map((scope) => (
+          <button
+            className={`mode-pill ${room.leaderboardScope === scope ? "active" : ""}`}
+            key={scope}
+            onClick={() => room.setLeaderboardScope(scope)}
+            type="button"
+          >
+            {getLeaderboardScopeLabel(scope, labels)}
+          </button>
+        ))}
+      </div>
+
+      {entries.length > 0 ? (
+        <div className="room-leaderboard-list">
+          {entries.map((entry) => (
+            <LeaderboardEntryItem entry={entry} key={entry.playerId} labels={labels} scope={room.leaderboardScope} />
+          ))}
+        </div>
+      ) : (
+        <p className="room-message">
+          {room.leaderboardStatus === "loading" ? labels.refreshLeaderboard : labels.leaderboardNoEntries}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function LeaderboardEntryItem({
+  entry,
+  labels,
+  scope
+}: {
+  entry: LeaderboardEntry;
+  labels: GameDictionary["room"];
+  scope: LeaderboardScope;
+}) {
+  const primaryMetric =
+    scope === "daily"
+      ? labels.leaderboardTodayWins.replace("{count}", String(entry.dailyWins))
+      : scope === "streak"
+        ? labels.leaderboardStreakValue.replace("{count}", String(entry.currentStreak))
+        : labels.leaderboardRating.replace("{rating}", String(entry.rating));
+
+  return (
+    <article className="room-leaderboard-item">
+      <span className="room-leaderboard-rank">#{entry.rank}</span>
+      <Trophy aria-hidden="true" className="room-leaderboard-icon" focusable={false} />
+      <div>
+        <strong>{entry.displayName}</strong>
+        <p>
+          {labels.leaderboardRecord
+            .replace("{wins}", String(entry.wins))
+            .replace("{losses}", String(entry.losses))
+            .replace("{draws}", String(entry.draws))}
+        </p>
+      </div>
+      <div className="room-leaderboard-metrics">
+        <span>{primaryMetric}</span>
+        {scope === "overall" ? null : <span>{labels.leaderboardRating.replace("{rating}", String(entry.rating))}</span>}
       </div>
     </article>
   );
@@ -1397,6 +1495,18 @@ function getRecordStatusLabel(status: GameRecordStatus, labels: GameDictionary["
   }
 
   return labels.recordPartial;
+}
+
+function getLeaderboardScopeLabel(scope: LeaderboardScope, labels: GameDictionary["room"]): string {
+  if (scope === "daily") {
+    return labels.leaderboardDaily;
+  }
+
+  if (scope === "streak") {
+    return labels.leaderboardStreak;
+  }
+
+  return labels.leaderboardOverall;
 }
 
 function formatRecordTime(finishedAt: number): string {

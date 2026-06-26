@@ -418,3 +418,40 @@ Game 增加：
 - 不复制 schema。
 - 不复制文案、样式或结算代码。
 - 只借鉴评分、排行榜、离开惩罚、实时刷新这类业务思路和风险结论。
+
+## 当前落地：Ranking 第一版（2026-06-25）
+
+已完成第一版 guest/current-session 排行榜：
+
+- 数据源只使用服务器端 `GameRecordStore` 内 `recordStatus=verified` 且 `status=finished` 的在线棋谱。
+- 不接受客户端提交 rating、rank 或胜负统计。
+- 通过重放 verified 棋谱计算：
+  - `rating`
+  - `games`
+  - `wins`
+  - `losses`
+  - `draws`
+  - `dailyWins`
+  - `currentStreak`
+  - `maxStreak`
+  - `lastPlayedAt`
+- 第一版 ELO：
+  - 初始分 1200。
+  - 前 10 局 K=32。
+  - 之后 K=24。
+- API：
+  - `GET /api/leaderboard?scope=overall|daily|streak&limit=...`
+  - `overall` 按 rating、wins、games、lastPlayedAt 排序。
+  - `daily` 按当日胜局、rating、games、lastPlayedAt 排序。
+  - `streak` 按当前连胜、最大连胜、rating、lastPlayedAt 排序。
+- UI：
+  - 好友房面板新增 Rankings 小面板。
+  - 支持 Overall / Today / Streak 切换和刷新。
+
+仍保留到后续小步：
+
+- 注册账号。
+- 注册玩家正式 Profile / Ranking。
+- 排行榜分页、搜索和增量事件。
+- 持久化 rating event 审计。
+- 注册用户和游客榜单隔离策略。

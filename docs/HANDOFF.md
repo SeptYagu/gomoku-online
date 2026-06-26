@@ -2643,3 +2643,56 @@ b6faf9e
 - 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
 - 小步 10：用户状态 / Presence 第一版，完成并通过真实服务器验证。
 - 下一步：阶段 3 小步 11，排行榜第一版。账号/注册玩家身份和更完整 Game records 回看仍在后续小步。
+
+## 55. 2026-06-25 阶段 3 小步 11：排行榜第一版本地完成
+
+本轮目标：
+
+- 按阶段 3 build plan 继续推进 Ranking 第一版。
+- 排行榜先做 guest/current-session 第一版，不提前引入账号密码系统。
+- 只用双方提交后一致 verified 的在线棋谱作为排行榜数据源。
+- 顺手修正用户反馈的创建房间入口：已在房间时前端禁用继续创建新房/随机匹配，服务端继续保证同一 player 进入新房前会清理旧房。
+
+实际完成：
+
+- `src/server/game-records.ts`：
+  - 新增 `LeaderboardScope`、`LeaderboardEntry`、`LeaderboardSnapshot`。
+  - `GameRecordStore.getLeaderboard()` 从 verified 在线棋谱重放胜负并计算排行榜。
+  - 支持 `overall`、`daily`、`streak` 三个 scope。
+  - 第一版 ELO：初始 1200，新手前 10 局 K=32，之后 K=24。
+- `src/server/rooms.ts`、`src/server/online-server.ts`：
+  - 新增 `RoomStore.getLeaderboard()`。
+  - 新增 `GET /api/leaderboard?scope=overall|daily|streak&limit=...`。
+- `src/components/useFriendRoom.ts`：
+  - 新增 leaderboard 状态、刷新函数和 scope 切换。
+  - `canCreateRoom`、`canFindMatch` 改为当前未在房间时才允许。
+- `src/components/GameShell.tsx`、`src/app/globals.css`：
+  - 好友房面板新增 Rankings 小面板。
+  - 支持 Overall / Today / Streak 三个切换视图。
+- `src/i18n/dictionaries.ts`：
+  - 六语言新增排行榜面板文案。
+- `tools/smoke-leaderboard.ts`、`package.json`、`README.md`：
+  - 新增 `npm run smoke:leaderboard`。
+  - 覆盖打一局、双方提交 verified 棋谱、总榜/今日榜/连胜榜读回。
+- `src/server/game-records.test.ts`：
+  - 新增排行榜只使用 verified 棋谱的单元测试。
+
+本地验证：
+
+- `npm test`：通过，6 个测试文件、80 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3039 npm run start:online` 后运行 `npm run smoke:leaderboard -- http://127.0.0.1:3039`，通过。
+  - `PASS submitted verified ranked record - 3AFPUQ-1`
+  - `PASS leaderboard readback - 3AFPUQ-1`
+- 本地生产服务：`npm run smoke:room-lifecycle -- http://127.0.0.1:3039`，通过。
+  - `PASS repeated create closes previous room - C5LD46 -> B2TFUR`
+  - `PASS same player create closes previous room - CV5ZQE -> RTBQSF`
+  - `PASS spectator sits in open seat - WAL895`
+  - `PASS disconnect timeout forfeit - 56CKLX`
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:leaderboard`、`smoke:room-lifecycle`，并按需要跑 `smoke:online-room` / `smoke:profile-records` 回归。

@@ -160,6 +160,12 @@ Profile / Game records 读回可跑 Socket.IO + REST 冒烟，确认在线对局
 npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net
 ```
 
+排行榜可跑 Socket.IO + REST 冒烟，确认一局 verified 在线棋谱会进入总榜、今日榜和连胜榜：
+
+```bash
+npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net
+```
+
 房间生命周期可跑 Socket.IO 冒烟，确认重复创建会关闭旧房、观战者可补空位、对局中断线 60 秒后判负：
 
 ```bash

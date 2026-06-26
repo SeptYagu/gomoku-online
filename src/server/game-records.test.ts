@@ -69,9 +69,62 @@ describe("GameRecordStore", () => {
     expect(bobProfile.stats.wins).toBe(1);
     expect(bobProfile.recentRecords[0]?.result).toBe("win");
   });
+
+  it("builds leaderboard rankings from verified online records only", () => {
+    const store = new GameRecordStore({ now: createClock() });
+    const verifiedRecord = createAuthoritativeGameRecord();
+    const partialRecord = createAuthoritativeGameRecord({
+      gameId: "ROOM02-1",
+      players: [
+        { identity: "guest", name: "Alice", playerId: "player-1", seat: "black" },
+        { identity: "guest", name: "Cara", playerId: "player-3", seat: "white" }
+      ],
+      roomCode: "ROOM02",
+      winner: "black"
+    });
+
+    store.submit(verifiedRecord, createSubmission(verifiedRecord, "player-1"));
+    store.submit(verifiedRecord, createSubmission(verifiedRecord, "player-2"));
+    store.submit(partialRecord, createSubmission(partialRecord, "player-1"));
+
+    const overall = store.getLeaderboard({ scope: "overall" });
+
+    expect(overall.scope).toBe("overall");
+    expect(overall.entries).toEqual([
+      expect.objectContaining({
+        displayName: "Bob",
+        games: 1,
+        losses: 0,
+        rank: 1,
+        rating: 1216,
+        wins: 1
+      }),
+      expect.objectContaining({
+        displayName: "Alice",
+        games: 1,
+        losses: 1,
+        rank: 2,
+        rating: 1184,
+        wins: 0
+      })
+    ]);
+    expect(overall.entries.some((entry) => entry.displayName === "Cara")).toBe(false);
+
+    expect(store.getLeaderboard({ scope: "daily" }).entries[0]).toMatchObject({
+      dailyWins: 1,
+      displayName: "Bob"
+    });
+    expect(store.getLeaderboard({ scope: "streak" }).entries[0]).toMatchObject({
+      currentStreak: 1,
+      displayName: "Bob",
+      maxStreak: 1
+    });
+  });
 });
 
-function createAuthoritativeGameRecord(): AuthoritativeGameRecord {
+function createAuthoritativeGameRecord(
+  overrides: Partial<AuthoritativeGameRecord> = {}
+): AuthoritativeGameRecord {
   const board = placeStone(createBoard(), { row: 7, col: 7 }, "black");
   const moves = [{ col: 7, moveNumber: 1, row: 7, stone: "black" as const }];
 
@@ -90,7 +143,8 @@ function createAuthoritativeGameRecord(): AuthoritativeGameRecord {
     roomCode: "ROOM01",
     status: "finished",
     winLine: [],
-    winner: "white"
+    winner: "white",
+    ...overrides
   };
 }
 

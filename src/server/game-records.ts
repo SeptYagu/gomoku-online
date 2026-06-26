@@ -100,6 +100,36 @@ export type PlayerProfileSnapshot = {
   };
 };
 
+export type LeaderboardScope = "overall" | "daily" | "streak";
+
+export type LeaderboardQuery = {
+  limit?: number;
+  scope?: LeaderboardScope;
+};
+
+export type LeaderboardEntry = {
+  currentStreak: number;
+  dailyWins: number;
+  displayName: string;
+  draws: number;
+  games: number;
+  identity: "guest" | "registered";
+  lastPlayedAt: number;
+  losses: number;
+  maxStreak: number;
+  playerId: string;
+  rank: number;
+  rating: number;
+  wins: number;
+};
+
+export type LeaderboardSnapshot = {
+  entries: LeaderboardEntry[];
+  generatedAt: number;
+  scope: LeaderboardScope;
+  version: number;
+};
+
 type GameRecordStoreOptions = {
   filePath?: false | string;
   now?: () => number;
@@ -127,6 +157,24 @@ export class GameRecordStore {
     return [...this.records.values()]
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, Math.max(1, Math.min(200, Math.floor(limit))));
+  }
+
+  getLeaderboard(query: LeaderboardQuery = {}): LeaderboardSnapshot {
+    const scope = normalizeLeaderboardScope(query.scope);
+    const entries = calculateLeaderboardEntries([...this.records.values()], this.now());
+    const sortedEntries = sortLeaderboardEntries(entries, scope)
+      .slice(0, clampLeaderboardLimit(query.limit))
+      .map((entry, index) => ({
+        ...entry,
+        rank: index + 1
+      }));
+
+    return {
+      entries: sortedEntries,
+      generatedAt: this.now(),
+      scope,
+      version: getLeaderboardVersion([...this.records.values()])
+    };
   }
 
   getPlayerProfile(playerId: string, displayName = "Player", limit = 20): PlayerProfileSnapshot {
@@ -365,6 +413,178 @@ function getPlayerResult(record: SavedGameRecord, playerId: string): PlayerGameR
   }
 
   return record.winner === player.seat ? "win" : "loss";
+}
+
+type MutableLeaderboardEntry = Omit<LeaderboardEntry, "rank">;
+
+function calculateLeaderboardEntries(records: SavedGameRecord[], now: number): LeaderboardEntry[] {
+  const entries = new Map<string, MutableLeaderboardEntry>();
+  const dayStart = getLocalDayStart(now);
+  const verifiedRecords = records
+    .filter((record) => record.recordStatus === "verified" && record.status === "finished" && record.players.length >= 2)
+    .sort((left, right) => left.finishedAt - right.finishedAt || left.gameId.localeCompare(right.gameId));
+
+  for (const record of verifiedRecords) {
+    const players = record.players.slice(0, 2);
+    const first = getOrCreateLeaderboardEntry(entries, players[0]);
+    const second = getOrCreateLeaderboardEntry(entries, players[1]);
+    const firstResult = getPlayerResult(record, players[0].playerId);
+    const secondResult = getPlayerResult(record, players[1].playerId);
+    const firstScore = getLeaderboardScore(firstResult);
+    const secondScore = getLeaderboardScore(secondResult);
+    const firstRating = first.rating;
+    const secondRating = second.rating;
+    const firstDelta = getEloDelta(firstRating, secondRating, firstScore, getKFactor(first.games));
+    const secondDelta = getEloDelta(secondRating, firstRating, secondScore, getKFactor(second.games));
+
+    applyLeaderboardResult(first, firstResult, record.finishedAt, record.finishedAt >= dayStart);
+    applyLeaderboardResult(second, secondResult, record.finishedAt, record.finishedAt >= dayStart);
+    first.rating = Math.round(firstRating + firstDelta);
+    second.rating = Math.round(secondRating + secondDelta);
+  }
+
+  return [...entries.values()].map((entry) => ({
+    ...entry,
+    rank: 0
+  }));
+}
+
+function getOrCreateLeaderboardEntry(
+  entries: Map<string, MutableLeaderboardEntry>,
+  player: GameRecordPlayer
+): MutableLeaderboardEntry {
+  const existing = entries.get(player.playerId);
+
+  if (existing) {
+    existing.displayName = player.name;
+    existing.identity = player.identity;
+    return existing;
+  }
+
+  const entry: MutableLeaderboardEntry = {
+    currentStreak: 0,
+    dailyWins: 0,
+    displayName: player.name,
+    draws: 0,
+    games: 0,
+    identity: player.identity,
+    lastPlayedAt: 0,
+    losses: 0,
+    maxStreak: 0,
+    playerId: player.playerId,
+    rating: 1200,
+    wins: 0
+  };
+
+  entries.set(player.playerId, entry);
+
+  return entry;
+}
+
+function applyLeaderboardResult(
+  entry: MutableLeaderboardEntry,
+  result: PlayerGameRecordResult,
+  finishedAt: number,
+  countsForDaily: boolean
+) {
+  entry.games += 1;
+  entry.lastPlayedAt = Math.max(entry.lastPlayedAt, finishedAt);
+
+  if (result === "win") {
+    entry.wins += 1;
+    entry.currentStreak += 1;
+    entry.maxStreak = Math.max(entry.maxStreak, entry.currentStreak);
+    if (countsForDaily) {
+      entry.dailyWins += 1;
+    }
+    return;
+  }
+
+  if (result === "loss") {
+    entry.losses += 1;
+  } else {
+    entry.draws += 1;
+  }
+
+  entry.currentStreak = 0;
+}
+
+function getLeaderboardScore(result: PlayerGameRecordResult): number {
+  if (result === "win") {
+    return 1;
+  }
+
+  if (result === "loss") {
+    return 0;
+  }
+
+  return 0.5;
+}
+
+function getEloDelta(playerRating: number, opponentRating: number, score: number, kFactor: number): number {
+  const expected = 1 / (1 + 10 ** ((opponentRating - playerRating) / 400));
+
+  return kFactor * (score - expected);
+}
+
+function getKFactor(gamesBefore: number): number {
+  return gamesBefore < 10 ? 32 : 24;
+}
+
+function sortLeaderboardEntries(entries: LeaderboardEntry[], scope: LeaderboardScope): LeaderboardEntry[] {
+  return [...entries].sort((left, right) => {
+    if (scope === "daily") {
+      return (
+        right.dailyWins - left.dailyWins ||
+        right.rating - left.rating ||
+        right.games - left.games ||
+        right.lastPlayedAt - left.lastPlayedAt ||
+        left.displayName.localeCompare(right.displayName)
+      );
+    }
+
+    if (scope === "streak") {
+      return (
+        right.currentStreak - left.currentStreak ||
+        right.maxStreak - left.maxStreak ||
+        right.rating - left.rating ||
+        right.lastPlayedAt - left.lastPlayedAt ||
+        left.displayName.localeCompare(right.displayName)
+      );
+    }
+
+    return (
+      right.rating - left.rating ||
+      right.wins - left.wins ||
+      right.games - left.games ||
+      right.lastPlayedAt - left.lastPlayedAt ||
+      left.displayName.localeCompare(right.displayName)
+    );
+  });
+}
+
+function normalizeLeaderboardScope(scope: LeaderboardScope | undefined): LeaderboardScope {
+  return scope === "daily" || scope === "streak" || scope === "overall" ? scope : "overall";
+}
+
+function clampLeaderboardLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) {
+    return 20;
+  }
+
+  return Math.min(100, Math.max(1, Math.floor(limit)));
+}
+
+function getLocalDayStart(now: number): number {
+  const date = new Date(now);
+
+  date.setHours(0, 0, 0, 0);
+
+  return date.getTime();
+}
+
+function getLeaderboardVersion(records: SavedGameRecord[]): number {
+  return records.reduce((version, record) => Math.max(version, record.updatedAt), records.length);
 }
 
 function stableStringify(value: unknown): string {

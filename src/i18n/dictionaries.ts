@@ -52,6 +52,15 @@ export type GameDictionary = {
     gameRecords: string;
     gamesCount: string;
     joinRoom: string;
+    leaderboard: string;
+    leaderboardDaily: string;
+    leaderboardNoEntries: string;
+    leaderboardOverall: string;
+    leaderboardRating: string;
+    leaderboardRecord: string;
+    leaderboardStreak: string;
+    leaderboardStreakValue: string;
+    leaderboardTodayWins: string;
     leaveRoom: string;
     loadingRooms: string;
     lobbyPlaying: string;
@@ -85,6 +94,7 @@ export type GameDictionary = {
     recordVerified: string;
     refreshRooms: string;
     refreshPresence: string;
+    refreshLeaderboard: string;
     refreshProfile: string;
     resign: string;
     resultAbandoned: string;
@@ -204,6 +214,15 @@ const en = {
       gameRecords: "Game records",
       gamesCount: "Games {count}",
       joinRoom: "Join room",
+      leaderboard: "Rankings",
+      leaderboardDaily: "Today",
+      leaderboardNoEntries: "No ranked games yet",
+      leaderboardOverall: "Overall",
+      leaderboardRating: "Rating {rating}",
+      leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardStreak: "Streak",
+      leaderboardStreakValue: "Streak {count}",
+      leaderboardTodayWins: "Today {count}",
       leaveRoom: "Leave",
       loadingRooms: "Loading rooms",
       lobbyPlaying: "Playing",
@@ -237,6 +256,7 @@ const en = {
       recordVerified: "Verified",
       refreshRooms: "Refresh rooms",
       refreshPresence: "Refresh users",
+      refreshLeaderboard: "Refresh rankings",
       refreshProfile: "Refresh profile",
       resign: "Resign",
       resultAbandoned: "Abandoned",
@@ -352,6 +372,15 @@ const zh = {
       gameRecords: "棋谱记录",
       gamesCount: "对局 {count}",
       joinRoom: "加入房间",
+      leaderboard: "排行榜",
+      leaderboardDaily: "今日",
+      leaderboardNoEntries: "暂无排行",
+      leaderboardOverall: "总榜",
+      leaderboardRating: "积分 {rating}",
+      leaderboardRecord: "{wins}胜 {losses}负 {draws}和",
+      leaderboardStreak: "连胜",
+      leaderboardStreakValue: "连胜 {count}",
+      leaderboardTodayWins: "今日胜 {count}",
       leaveRoom: "离开",
       loadingRooms: "正在加载房间",
       lobbyPlaying: "对局中",
@@ -385,6 +414,7 @@ const zh = {
       recordVerified: "已验证",
       refreshRooms: "刷新房间",
       refreshPresence: "刷新用户",
+      refreshLeaderboard: "刷新排行",
       refreshProfile: "刷新资料",
       resign: "认输",
       resultAbandoned: "中止",
@@ -500,6 +530,15 @@ const fr = {
       gameRecords: "Parties",
       gamesCount: "Parties {count}",
       joinRoom: "Rejoindre",
+      leaderboard: "Classement",
+      leaderboardDaily: "Aujourd'hui",
+      leaderboardNoEntries: "Aucun classement",
+      leaderboardOverall: "Global",
+      leaderboardRating: "Score {rating}",
+      leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardStreak: "Série",
+      leaderboardStreakValue: "Série {count}",
+      leaderboardTodayWins: "Jour {count}",
       leaveRoom: "Quitter",
       loadingRooms: "Chargement des salons",
       lobbyPlaying: "En jeu",
@@ -533,6 +572,7 @@ const fr = {
       recordVerified: "Vérifié",
       refreshRooms: "Actualiser les salons",
       refreshPresence: "Actualiser les utilisateurs",
+      refreshLeaderboard: "Actualiser le classement",
       refreshProfile: "Actualiser le profil",
       resign: "Abandonner",
       resultAbandoned: "Abandon",
@@ -648,6 +688,15 @@ const es = {
       gameRecords: "Partidas",
       gamesCount: "Partidas {count}",
       joinRoom: "Unirse",
+      leaderboard: "Ranking",
+      leaderboardDaily: "Hoy",
+      leaderboardNoEntries: "Sin ranking",
+      leaderboardOverall: "General",
+      leaderboardRating: "Puntos {rating}",
+      leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardStreak: "Racha",
+      leaderboardStreakValue: "Racha {count}",
+      leaderboardTodayWins: "Hoy {count}",
       leaveRoom: "Salir",
       loadingRooms: "Cargando salas",
       lobbyPlaying: "En juego",
@@ -681,6 +730,7 @@ const es = {
       recordVerified: "Verificada",
       refreshRooms: "Actualizar salas",
       refreshPresence: "Actualizar usuarios",
+      refreshLeaderboard: "Actualizar ranking",
       refreshProfile: "Actualizar perfil",
       resign: "Rendirse",
       resultAbandoned: "Abandonada",
@@ -796,6 +846,15 @@ const ru = {
       gameRecords: "Партии",
       gamesCount: "Партии {count}",
       joinRoom: "Войти",
+      leaderboard: "Рейтинг",
+      leaderboardDaily: "Сегодня",
+      leaderboardNoEntries: "Рейтинга пока нет",
+      leaderboardOverall: "Общий",
+      leaderboardRating: "Рейтинг {rating}",
+      leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardStreak: "Серия",
+      leaderboardStreakValue: "Серия {count}",
+      leaderboardTodayWins: "Сегодня {count}",
       leaveRoom: "Выйти",
       loadingRooms: "Загрузка комнат",
       lobbyPlaying: "Идет игра",
@@ -829,6 +888,7 @@ const ru = {
       recordVerified: "Проверено",
       refreshRooms: "Обновить комнаты",
       refreshPresence: "Обновить пользователей",
+      refreshLeaderboard: "Обновить рейтинг",
       refreshProfile: "Обновить профиль",
       resign: "Сдаться",
       resultAbandoned: "Прервана",
@@ -944,6 +1004,15 @@ const ar = {
       gameRecords: "السجلات",
       gamesCount: "الألعاب {count}",
       joinRoom: "انضمام",
+      leaderboard: "الترتيب",
+      leaderboardDaily: "اليوم",
+      leaderboardNoEntries: "لا يوجد ترتيب",
+      leaderboardOverall: "عام",
+      leaderboardRating: "التقييم {rating}",
+      leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardStreak: "سلسلة",
+      leaderboardStreakValue: "سلسلة {count}",
+      leaderboardTodayWins: "اليوم {count}",
       leaveRoom: "مغادرة",
       loadingRooms: "جار تحميل الغرف",
       lobbyPlaying: "قيد اللعب",
@@ -977,6 +1046,7 @@ const ar = {
       recordVerified: "مؤكد",
       refreshRooms: "تحديث الغرف",
       refreshPresence: "تحديث المستخدمين",
+      refreshLeaderboard: "تحديث الترتيب",
       refreshProfile: "تحديث الملف",
       resign: "استسلام",
       resultAbandoned: "متروكة",

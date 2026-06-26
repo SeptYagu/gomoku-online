@@ -7,6 +7,8 @@ import {
   type GameRecordClientSubmission,
   type GameRecordFinishReason,
   type GameRecordSubmitResult,
+  type LeaderboardQuery,
+  type LeaderboardSnapshot,
   type PlayerProfileSnapshot,
   type SavedGameRecord
 } from "./game-records";
@@ -1196,6 +1198,10 @@ export class RoomStore {
 
   listGameRecords(limit?: number): SavedGameRecord[] {
     return this.gameRecordStore.listRecords(limit);
+  }
+
+  getLeaderboard(query?: LeaderboardQuery): LeaderboardSnapshot {
+    return this.gameRecordStore.getLeaderboard(query);
   }
 
   getPlayerProfile(playerId: string, displayName?: string, limit?: number): PlayerProfileSnapshot {

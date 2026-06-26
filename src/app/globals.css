@@ -547,6 +547,100 @@ h1 {
   justify-items: end;
 }
 
+.room-leaderboard {
+  border-top: 1px solid var(--line-strong);
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.room-leaderboard-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.room-leaderboard-header strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.room-leaderboard-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.room-leaderboard-tabs .mode-pill {
+  font-size: 0.78rem;
+  min-height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.room-leaderboard-list {
+  display: grid;
+  gap: 8px;
+  max-height: 206px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.room-leaderboard-item {
+  align-items: center;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--accent-deep);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 10px;
+}
+
+.room-leaderboard-rank {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.room-leaderboard-icon {
+  color: var(--accent-deep);
+  height: 18px;
+  width: 18px;
+}
+
+.room-leaderboard-item strong,
+.room-leaderboard-item p {
+  overflow-wrap: anywhere;
+}
+
+.room-leaderboard-item p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 2px 0 0;
+}
+
+.room-leaderboard-metrics {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
+.room-leaderboard-metrics span {
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+}
+
 .room-chat {
   border-top: 1px solid var(--line-strong);
   display: grid;
@@ -1197,6 +1291,7 @@ h1 {
 
   .room-fields,
   .room-lobby-item,
+  .room-leaderboard-item,
   .room-profile-stats,
   .room-record-item,
   .room-summary,

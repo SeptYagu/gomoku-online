@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
+import type { LeaderboardQuery } from "./game-records";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
 import { roomStore } from "./room-store";
 import type { PresenceListQuery, RoomListQuery } from "./rooms";
@@ -23,6 +24,10 @@ const httpServer = createServer((request, response) => {
   }
 
   if (handlePresenceApi(request, response)) {
+    return;
+  }
+
+  if (handleLeaderboardApi(request, response)) {
     return;
   }
 
@@ -88,6 +93,31 @@ function handlePresenceApi(request: IncomingMessage, response: ServerResponse): 
   return true;
 }
 
+function handleLeaderboardApi(request: IncomingMessage, response: ServerResponse): boolean {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+  if (url.pathname !== "/api/leaderboard") {
+    return false;
+  }
+
+  if (request.method !== "GET") {
+    response.writeHead(405, {
+      "allow": "GET",
+      "content-type": "application/json; charset=utf-8"
+    });
+    response.end(JSON.stringify({ error: "Method not allowed" }));
+    return true;
+  }
+
+  response.writeHead(200, {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8"
+  });
+  response.end(JSON.stringify(roomStore.getLeaderboard(parseLeaderboardQuery(url))));
+
+  return true;
+}
+
 function handleProfileApi(request: IncomingMessage, response: ServerResponse): boolean {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
@@ -129,6 +159,16 @@ function handleProfileApi(request: IncomingMessage, response: ServerResponse): b
   );
 
   return true;
+}
+
+function parseLeaderboardQuery(url: URL): LeaderboardQuery {
+  const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+  const scope = url.searchParams.get("scope");
+
+  return {
+    limit: Number.isFinite(rawLimit) ? rawLimit : undefined,
+    scope: scope === "overall" || scope === "daily" || scope === "streak" ? scope : undefined
+  };
 }
 
 function parsePresenceListQuery(url: URL): PresenceListQuery {
