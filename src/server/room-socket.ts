@@ -6,6 +6,7 @@ import {
   type LobbyRoomDeletedEvent,
   type LobbyRoomUpdatedEvent,
   type PublicChatSnapshot,
+  type RoomCleanupResult,
   type RoomError,
   type RoomListQuery,
   type RoomListSnapshot,
@@ -67,6 +68,7 @@ export type ServerToClientEvents = {
   "lobby:room-updated": (event: LobbyRoomUpdatedEvent) => void;
   "lobby:rooms": (snapshot: RoomListSnapshot) => void;
   "public-chat:messages": (snapshot: PublicChatSnapshot) => void;
+  "room:closed": (event: LobbyRoomDeletedEvent) => void;
   "room:error": (error: RoomError) => void;
   "room:state": (snapshot: RoomSnapshot) => void;
 };
@@ -125,13 +127,13 @@ export function registerRoomSocketHandlers(
 
   io.on("connection", (socket) => {
     socket.on("room:create", (payload, ack) => {
-      leaveCurrentRoomIfNeeded(io, socket, roomStore);
+      leaveRoomsBeforeEntry(io, socket, roomStore, payload.playerId);
       const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(payload), payload.playerId);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("room:join", (payload, ack) => {
-      leaveCurrentRoomIfNeeded(io, socket, roomStore, payload.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, payload.playerId, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -142,7 +144,7 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("room:rejoin", (payload, ack) => {
-      leaveCurrentRoomIfNeeded(io, socket, roomStore, payload.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, payload.playerId, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -153,7 +155,7 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("matchmaking:find", (payload, ack) => {
-      leaveCurrentRoomIfNeeded(io, socket, roomStore);
+      leaveRoomsBeforeEntry(io, socket, roomStore, payload.playerId);
       const response = handleJoinedRoom(socket, roomStore, roomStore.findMatch(payload), payload.playerId);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
@@ -355,38 +357,42 @@ export function registerRoomSocketHandlers(
       const result = roomStore.markDisconnected(roomCode, playerId);
 
       if (result.ok) {
-        socket.to(roomCode).emit("room:state", result.value);
-        broadcastLobbyRoomChange(io, roomStore, result.value.code);
+        broadcastRoomSnapshotOrClosure(io, roomStore, roomCode, result.value);
       }
     });
   });
 }
 
-function leaveCurrentRoomIfNeeded(
+function leaveRoomsBeforeEntry(
   io: RoomSocketServer,
   socket: RoomSocket,
   roomStore: RoomStore,
+  nextPlayerId: string,
   nextRoomCode?: string
 ) {
   const previousRoomCode = socket.data.roomCode;
-  const previousPlayerId = socket.data.playerId;
+  const playerIds = new Set([socket.data.playerId, nextPlayerId].filter((playerId): playerId is string => Boolean(playerId)));
   const normalizedNextRoomCode = nextRoomCode?.trim().toUpperCase();
 
-  if (!previousRoomCode || !previousPlayerId || previousRoomCode === normalizedNextRoomCode) {
-    return;
+  for (const playerId of playerIds) {
+    broadcastRoomCleanup(io, roomStore, roomStore.leaveParticipantRooms(playerId, normalizedNextRoomCode));
   }
 
-  const result = roomStore.leaveRoom(previousRoomCode, previousPlayerId);
+  if (previousRoomCode && previousRoomCode !== normalizedNextRoomCode) {
+    socket.leave(previousRoomCode);
+    socket.data.roomCode = undefined;
+  }
+}
 
-  socket.leave(previousRoomCode);
-  socket.data.roomCode = undefined;
-
-  if (!result.ok) {
-    return;
+function broadcastRoomCleanup(io: RoomSocketServer, roomStore: RoomStore, cleanup: RoomCleanupResult) {
+  for (const snapshot of cleanup.updatedSnapshots) {
+    io.to(snapshot.code).emit("room:state", snapshot);
+    broadcastLobbyRoomChange(io, roomStore, snapshot.code);
   }
 
-  socket.to(previousRoomCode).emit("room:state", result.value);
-  broadcastLobbyRoomChange(io, roomStore, previousRoomCode);
+  for (const code of cleanup.deletedRoomCodes) {
+    broadcastRoomClosed(io, roomStore, code);
+  }
 }
 
 function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
@@ -398,10 +404,7 @@ function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
   }
 
   for (const code of sweep.deletedRoomCodes) {
-    io.to(LOBBY_ROOM).emit("lobby:room-deleted", {
-      code,
-      version: roomStore.getLobbyVersion()
-    });
+    broadcastRoomClosed(io, roomStore, code);
   }
 }
 
@@ -611,6 +614,31 @@ function broadcastLobbyRoomChange(io: RoomSocketServer, roomStore: RoomStore, ro
     code: roomCode,
     version
   });
+}
+
+function broadcastRoomSnapshotOrClosure(
+  io: RoomSocketServer,
+  roomStore: RoomStore,
+  roomCode: string,
+  snapshot: RoomSnapshot
+) {
+  if (!roomStore.getRoomListItem(roomCode)) {
+    broadcastRoomClosed(io, roomStore, roomCode);
+    return;
+  }
+
+  io.to(roomCode).emit("room:state", snapshot);
+  broadcastLobbyRoomChange(io, roomStore, roomCode);
+}
+
+function broadcastRoomClosed(io: RoomSocketServer, roomStore: RoomStore, roomCode: string) {
+  const event = {
+    code: roomCode,
+    version: roomStore.getLobbyVersion()
+  };
+
+  io.to(roomCode).emit("room:closed", event);
+  io.to(LOBBY_ROOM).emit("lobby:room-deleted", event);
 }
 
 function parseRoomListQuery(payload: RoomListQuery | undefined): RoomListQuery {

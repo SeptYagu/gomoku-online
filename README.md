@@ -148,6 +148,12 @@ npm run smoke:public-chat -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net
 ```
 
+Profile / Game records 读回可跑 Socket.IO + REST 冒烟，确认在线对局提交后当前玩家资料能读到胜负统计和最近棋谱：
+
+```bash
+npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net
+```
+
 房间生命周期可跑 Socket.IO 冒烟，确认重复创建会关闭旧房、观战者可补空位、对局中断线 60 秒后判负：
 
 ```bash

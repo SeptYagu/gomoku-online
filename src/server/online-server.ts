@@ -18,6 +18,10 @@ const httpServer = createServer((request, response) => {
     return;
   }
 
+  if (handleProfileApi(request, response)) {
+    return;
+  }
+
   handler(request, response);
 });
 const io = new Server(httpServer, {
@@ -51,6 +55,49 @@ function handleRoomsApi(request: IncomingMessage, response: ServerResponse): boo
     "content-type": "application/json; charset=utf-8"
   });
   response.end(JSON.stringify(roomStore.listRooms(parseRoomListQuery(url))));
+
+  return true;
+}
+
+function handleProfileApi(request: IncomingMessage, response: ServerResponse): boolean {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+  if (url.pathname !== "/api/profile" && url.pathname !== "/api/game-records") {
+    return false;
+  }
+
+  if (request.method !== "GET") {
+    response.writeHead(405, {
+      "allow": "GET",
+      "content-type": "application/json; charset=utf-8"
+    });
+    response.end(JSON.stringify({ error: "Method not allowed" }));
+    return true;
+  }
+
+  const playerId = url.searchParams.get("playerId")?.trim() ?? "";
+
+  if (!playerId) {
+    response.writeHead(400, {
+      "cache-control": "no-store",
+      "content-type": "application/json; charset=utf-8"
+    });
+    response.end(JSON.stringify({ error: "playerId is required" }));
+    return true;
+  }
+
+  const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+  const playerName = url.searchParams.get("name") ?? undefined;
+
+  response.writeHead(200, {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8"
+  });
+  response.end(
+    JSON.stringify(
+      roomStore.getPlayerProfile(playerId, playerName, Number.isFinite(rawLimit) ? rawLimit : undefined)
+    )
+  );
 
   return true;
 }

@@ -7,6 +7,7 @@ import {
   type GameRecordClientSubmission,
   type GameRecordFinishReason,
   type GameRecordSubmitResult,
+  type PlayerProfileSnapshot,
   type SavedGameRecord
 } from "./game-records";
 
@@ -114,6 +115,11 @@ export type LobbyRoomUpdatedEvent = {
 export type LobbyRoomDeletedEvent = {
   code: string;
   version: number;
+};
+
+export type RoomCleanupResult = {
+  deletedRoomCodes: string[];
+  updatedSnapshots: RoomSnapshot[];
 };
 
 export type CreateRoomInput = {
@@ -828,6 +834,15 @@ export class RoomStore {
     }
 
     room.updatedAt = now;
+
+    if (!hasConnectedParticipant(room)) {
+      abandonRoom(room, now);
+      this.captureFinishedGame(room);
+      this.rooms.delete(room.code);
+      this.nextLobbyVersion();
+      return success(getRoomSnapshot(room));
+    }
+
     this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
@@ -1064,6 +1079,10 @@ export class RoomStore {
     return this.gameRecordStore.listRecords(limit);
   }
 
+  getPlayerProfile(playerId: string, displayName?: string, limit?: number): PlayerProfileSnapshot {
+    return this.gameRecordStore.getPlayerProfile(playerId, displayName, limit);
+  }
+
   getPlayerSeat(roomCode: string, playerId: string): RoomPlayerSeat | null {
     const room = this.getRoom(roomCode);
 
@@ -1093,6 +1112,37 @@ export class RoomStore {
     }
 
     return null;
+  }
+
+  leaveParticipantRooms(playerId: string, keepRoomCode?: string): RoomCleanupResult {
+    const normalizedPlayerId = playerId.trim();
+
+    if (!normalizedPlayerId) {
+      return { deletedRoomCodes: [], updatedSnapshots: [] };
+    }
+
+    const normalizedKeepRoomCode = keepRoomCode ? normalizeRoomCode(keepRoomCode) : null;
+    const roomCodes = [...this.rooms.values()]
+      .filter((room) => room.code !== normalizedKeepRoomCode && hasParticipantId(room, normalizedPlayerId))
+      .map((room) => room.code);
+    const deletedRoomCodes: string[] = [];
+    const updatedSnapshots: RoomSnapshot[] = [];
+
+    for (const roomCode of roomCodes) {
+      const result = this.leaveRoom(roomCode, normalizedPlayerId);
+
+      if (!result.ok) {
+        continue;
+      }
+
+      if (this.rooms.has(roomCode)) {
+        updatedSnapshots.push(result.value);
+      } else {
+        deletedRoomCodes.push(roomCode);
+      }
+    }
+
+    return { deletedRoomCodes, updatedSnapshots };
   }
 
   sweepExpiredRooms(): RoomLifecycleSweep {
@@ -1409,6 +1459,10 @@ function isRoomVisibleInLobby(room: RoomState, status: RoomListQuery["status"] =
   return true;
 }
 
+function hasConnectedParticipant(room: RoomState): boolean {
+  return [...room.players, ...room.spectators].some((participant) => participant.connected);
+}
+
 function clampRoomListLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) {
     return 50;
@@ -1458,7 +1512,7 @@ function shouldDeleteRoom(room: RoomState, now: number, limits: RoomLifecycleLim
     return true;
   }
 
-  if (room.status !== "playing" && participants.every((participant) => !participant.connected)) {
+  if (participants.every((participant) => !participant.connected)) {
     return true;
   }
 

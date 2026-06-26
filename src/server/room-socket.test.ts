@@ -363,6 +363,50 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("closes another socket's old room when the same player creates a new room", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const firstSocket = await harness.connectClient();
+      const secondSocket = await harness.connectClient();
+      const lobby = await harness.connectClient();
+
+      expect(await emitAck<RoomListAck>(lobby, "lobby:join", { limit: 20 })).toMatchObject({ ok: true });
+
+      const firstAck = await emitAck(firstSocket, "room:create", {
+        playerId: "shared-player",
+        playerName: "Shared"
+      });
+
+      if (!firstAck.ok) {
+        throw new Error(firstAck.error.message);
+      }
+
+      const firstRoomCode = firstAck.value.snapshot.code;
+      const firstSocketSawClosed = waitForEventMatching<LobbyRoomDeletedEvent>(
+        firstSocket,
+        "room:closed",
+        (event) => event.code === firstRoomCode
+      );
+      const lobbySawFirstDelete = waitForEventMatching<LobbyRoomDeletedEvent>(
+        lobby,
+        "lobby:room-deleted",
+        (event) => event.code === firstRoomCode
+      );
+      const secondAck = await emitAck(secondSocket, "room:create", {
+        playerId: "shared-player",
+        playerName: "Shared"
+      });
+
+      expect(secondAck.ok).toBe(true);
+      expect(secondAck.ok ? secondAck.value.snapshot.code : firstRoomCode).not.toBe(firstRoomCode);
+      expect(await firstSocketSawClosed).toMatchObject({ code: firstRoomCode });
+      expect(await lobbySawFirstDelete).toMatchObject({ code: firstRoomCode });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("finds and cancels random matches through Socket.IO", async () => {
     const harness = await createSocketHarness();
 

@@ -1,7 +1,7 @@
 import { io } from "socket.io-client";
 
 import type { RoomAck } from "../src/server/room-contract";
-import type { RoomListSnapshot, RoomSnapshot } from "../src/server/rooms";
+import type { LobbyRoomDeletedEvent, RoomListSnapshot, RoomSnapshot } from "../src/server/rooms";
 
 type SmokeSocket = {
   disconnect: () => void;
@@ -28,20 +28,24 @@ async function main(): Promise<void> {
   const host = await connectClient(baseUrl);
   const guest = await connectClient(baseUrl);
   const spectator = await connectClient(baseUrl);
+  const mirror = await connectClient(baseUrl);
 
   try {
     console.log(`Room lifecycle smoke: ${baseUrl}`);
     console.log(`PASS connect host - ${host.io.engine.transport.name}`);
     console.log(`PASS connect guest - ${guest.io.engine.transport.name}`);
     console.log(`PASS connect spectator - ${spectator.io.engine.transport.name}`);
+    console.log(`PASS connect mirror - ${mirror.io.engine.transport.name}`);
 
     await verifyRepeatedCreateClosesPreviousRoom(baseUrl, host, suffix);
+    await verifySamePlayerCreateClosesPreviousRoom(baseUrl, host, mirror, suffix);
     await verifySpectatorCanSitInOpenSeat(host, guest, spectator, suffix);
     await verifyDisconnectTimeoutForfeit(host, guest, suffix);
   } finally {
     host.disconnect();
     guest.disconnect();
     spectator.disconnect();
+    mirror.disconnect();
   }
 }
 
@@ -72,6 +76,38 @@ async function verifyRepeatedCreateClosesPreviousRoom(
   assert(!rooms.rooms.some((room) => room.code === first.code), "first room should be closed after second create");
   assert(rooms.rooms.some((room) => room.code === second.code), "second room should remain listed");
   console.log(`PASS repeated create closes previous room - ${first.code} -> ${second.code}`);
+}
+
+async function verifySamePlayerCreateClosesPreviousRoom(
+  baseUrl: string,
+  firstSocket: SmokeSocket,
+  secondSocket: SmokeSocket,
+  suffix: string
+): Promise<void> {
+  const first = requireOk(
+    await emitAck(firstSocket, "room:create", {
+      playerId: `mirror-host-${suffix}`,
+      playerName: `Mirror Host ${suffix}`
+    }),
+    "mirror first room:create"
+  ).snapshot;
+  const firstClosed = waitForRoomClosed(firstSocket, first.code);
+  const second = requireOk(
+    await emitAck(secondSocket, "room:create", {
+      playerId: `mirror-host-${suffix}`,
+      playerName: `Mirror Host ${suffix}`
+    }),
+    "mirror second room:create"
+  ).snapshot;
+
+  await firstClosed;
+  assert(first.code !== second.code, "same player on another socket should allocate a new room");
+
+  const rooms = await fetchRoomList(baseUrl);
+
+  assert(!rooms.rooms.some((room) => room.code === first.code), "first mirror room should be closed");
+  assert(rooms.rooms.some((room) => room.code === second.code), "second mirror room should remain listed");
+  console.log(`PASS same player create closes previous room - ${first.code} -> ${second.code}`);
 }
 
 async function verifySpectatorCanSitInOpenSeat(
@@ -243,6 +279,28 @@ function waitForState(
     }, timeoutMs);
 
     socket.on("room:state", listener);
+  });
+}
+
+function waitForRoomClosed(socket: SmokeSocket, roomCode: string, timeoutMs = TIMEOUT_MS): Promise<LobbyRoomDeletedEvent> {
+  return new Promise((resolve, reject) => {
+    const listener = (payload: unknown) => {
+      const event = payload as LobbyRoomDeletedEvent;
+
+      if (event.code !== roomCode) {
+        return;
+      }
+
+      clearTimeout(timeout);
+      socket.off("room:closed", listener);
+      resolve(event);
+    };
+    const timeout = setTimeout(() => {
+      socket.off("room:closed", listener);
+      reject(new Error("Timed out waiting for room:closed"));
+    }, timeoutMs);
+
+    socket.on("room:closed", listener);
   });
 }
 

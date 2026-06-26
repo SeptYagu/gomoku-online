@@ -279,7 +279,15 @@ K 值：
 - 客户端玩家看到 finished/abandoned 快照后自动提交 `game-record:submit`。
 - 服务端用 finalized server snapshot 作为权威棋谱，客户端提交只参与一致性校验和双方到齐去重。
 - `GameRecordStore` 以 append-only JSONL 保存记录状态更新，默认路径为 `data/game-records/records.jsonl`，可用 `GOMOKU_GAME_RECORDS_PATH` 覆盖。
-- 当前没有注册系统，保存的玩家身份为 `guest`；注册用户 Profile/Game records 回看留到小步 9。
+- 当前没有注册系统，保存的玩家身份为 `guest`。
+
+当前小步 9 已实现第一版 Profile / Game records 读回：
+
+- `GET /api/profile?playerId=...&name=...&limit=...` 返回当前玩家资料快照。
+- `GET /api/game-records?playerId=...&name=...&limit=...` 当前作为同一读回接口别名，后续可拆成独立棋谱列表。
+- `PlayerProfileSnapshot` 包含 `identity`、`displayName`、胜负/和棋/verified/partial/conflicted 统计和最近棋谱摘要。
+- 好友房面板显示当前游客 Profile、胜负统计和最近在线棋谱摘要。
+- 当前身份仍为 `guest`；注册系统接入后，保留接口形状，把 identity 与 playerId 映射升级为注册账号。
 
 ### 排行榜 API
 
@@ -368,7 +376,7 @@ Game 增加：
 - 实现当前用户 rating 专属更新。
 - 实现游客 rating 池。
 - 实现在线对局棋谱提交、去重、partial/verified/conflicted 状态流。已完成第一版：`game-record:submit` + `GameRecordStore` JSONL。
-- 实现注册玩家 Profile 和 Game records 查询 API。
+- 实现注册玩家 Profile 和 Game records 查询 API。已完成第一版 guest/current-session 读回接口和 UI，注册账号绑定留到账号系统小步。
 - 实现匿名/guest game record 保存策略。已完成第一版：在线玩家以 guest identity 写入服务器棋谱池。
 
 ## 测试清单

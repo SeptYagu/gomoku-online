@@ -607,3 +607,70 @@
   - `PASS copy invite - copied current URL`
   - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
 - 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过，继续覆盖三客户端三局流程、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+
+## 小步 9：Profile / Game records 读回第一版 + 空房生命周期补强
+
+状态：本地完成，待提交、推送并通过真实服务器验证。
+
+目标：
+
+- 当前没有注册系统，先实现 guest/current-session 的 Profile 和 Game records 读回。
+- 在线对局结束并提交棋谱后，当前玩家能看到胜负统计和最近棋谱摘要。
+- 保持接口形状兼容后续注册玩家 Profile、Ranking、Game records。
+- 修复同一游客/同一玩家可以在不同连接里反复创建多个活房间的问题。
+- 房间没有连接中的参与者时关闭房间，避免空房和断线席位长期占用大厅。
+
+实现：
+
+- `src/server/game-records.ts`
+  - 新增 `PlayerProfileSnapshot`、`PlayerGameRecordSummary` 和玩家视角胜负结果。
+  - 新增 `getPlayerProfile()` 和 `listRecordsForPlayer()`。
+  - 玩家记录按 playerId 过滤全量内存记录后再按更新时间取最近 N 条，避免长期运行后只扫最近总记录造成漏读。
+- `src/server/online-server.ts`
+  - 新增 `GET /api/profile`。
+  - 新增 `GET /api/game-records` 作为当前读回接口别名。
+- `src/components/useFriendRoom.ts`
+  - 新增 `profile`、`profileStatus`、`refreshProfile()`。
+  - 玩家提交棋谱成功后刷新 Profile。
+  - 监听 `room:closed`，旧房被服务端关闭时清理本地房间状态和 URL。
+  - 创建房间请求未返回时禁用创建按钮，避免高延迟下连点。
+- `src/components/GameShell.tsx`
+  - 好友房面板新增 Profile / Game records 小面板。
+  - 显示当前游客名、对局数、胜/负/和统计和最近棋谱摘要。
+- `src/server/rooms.ts`
+  - 新增 `leaveParticipantRooms()`，按 playerId 清理进入新房前的旧房间身份。
+  - 对局中如果所有参与者都断线，房间立即 abandoned 并从房间表删除。
+  - 空房和全员离线房间不再继续显示或保留。
+- `src/server/room-socket.ts`
+  - `room:create`、`room:join`、`room:rejoin`、`matchmaking:find` 在进入新房前清理同一玩家旧房。
+  - 新增 `room:closed` 事件，让旧标签页/旧连接明确知道房间已关闭。
+- `tools/smoke-profile-records.ts`
+  - 新增 `npm run smoke:profile-records`。
+  - 覆盖在线对局结束、双方提交 verified 棋谱、host/guest Profile 胜负读回和 `/api/game-records` 别名。
+- `tools/smoke-room-lifecycle.ts`
+  - 增加同一 playerId 在第二个 socket 创建新房会关闭旧房的真实服务器冒烟路径。
+
+本地验证：
+
+- `npx vitest run src/server/game-records.test.ts src/server/rooms.test.ts src/server/room-socket.test.ts`：通过，3 个测试文件、40 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- `npm test`：通过，6 个测试文件、77 个测试用例。
+- 本地生产服务：`PORT=3037 npm start` 后运行 `npm run smoke:profile-records -- http://127.0.0.1:3037`，通过。
+  - `PASS submitted verified record - UFHDLR-1`
+  - `PASS profile readback - UFHDLR-1`
+- 本地生产服务：`npm run smoke:room-lifecycle -- http://127.0.0.1:3037`，通过。
+  - `PASS repeated create closes previous room - JHKU84 -> MNNMQA`
+  - `PASS same player create closes previous room - 4WL2Y4 -> HXJPUD`
+  - `PASS spectator sits in open seat - 4WYFZB`
+  - `PASS disconnect timeout forfeit - LVTYDU`
+- 本地生产服务：`npm run smoke:game-records -- http://127.0.0.1:3037`，通过。
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3037`，通过，继续覆盖三客户端三局、换先、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3037`，通过。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3037`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:profile-records`、`smoke:room-lifecycle`、`smoke:game-records`、`smoke:online-room`、`smoke:share-url` 和 `smoke:lobby-ui`。

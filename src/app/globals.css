@@ -390,6 +390,94 @@ h1 {
   gap: 2px;
 }
 
+.room-profile {
+  border-top: 1px solid var(--line-strong);
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.room-profile-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.room-profile-header strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.room-profile-stats {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.room-profile-stats span,
+.room-record-metrics span {
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 6px 8px;
+}
+
+.room-record-list {
+  display: grid;
+  gap: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.room-record-item {
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-left: 4px solid var(--muted);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 10px;
+}
+
+.room-record-item.win {
+  border-left-color: #2f7d32;
+}
+
+.room-record-item.loss,
+.room-record-item.abandoned {
+  border-left-color: #b42318;
+}
+
+.room-record-item.draw {
+  border-left-color: var(--accent-deep);
+}
+
+.room-record-item strong,
+.room-record-item p {
+  overflow-wrap: anywhere;
+}
+
+.room-record-item p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 2px 0 0;
+}
+
+.room-record-metrics {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
 .room-chat {
   border-top: 1px solid var(--line-strong);
   display: grid;
@@ -1040,9 +1128,15 @@ h1 {
 
   .room-fields,
   .room-lobby-item,
+  .room-profile-stats,
+  .room-record-item,
   .room-summary,
   .room-players {
     grid-template-columns: 1fr;
+  }
+
+  .room-record-metrics {
+    justify-items: stretch;
   }
 
   .locale-switcher {

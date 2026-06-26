@@ -35,6 +35,40 @@ describe("GameRecordStore", () => {
       rmSync(tempDir, { force: true, recursive: true });
     }
   });
+
+  it("builds player profile stats and recent game summaries", () => {
+    const store = new GameRecordStore({ now: createClock() });
+    const authoritative = createAuthoritativeGameRecord();
+
+    store.submit(authoritative, createSubmission(authoritative, "player-1"));
+    store.submit(authoritative, createSubmission(authoritative, "player-2"));
+
+    const aliceProfile = store.getPlayerProfile("player-1", "Alice");
+    const bobProfile = store.getPlayerProfile("player-2", "Bob");
+
+    expect(aliceProfile).toMatchObject({
+      displayName: "Alice",
+      identity: "guest",
+      stats: {
+        games: 1,
+        losses: 1,
+        verified: 1,
+        wins: 0
+      }
+    });
+    expect(aliceProfile.recentRecords[0]).toMatchObject({
+      finishReason: "resign",
+      moveSeq: 1,
+      opponentName: "Bob",
+      playerSeat: "black",
+      recordStatus: "verified",
+      result: "loss",
+      roomCode: "ROOM01",
+      winner: "white"
+    });
+    expect(bobProfile.stats.wins).toBe(1);
+    expect(bobProfile.recentRecords[0]?.result).toBe("win");
+  });
 });
 
 function createAuthoritativeGameRecord(): AuthoritativeGameRecord {

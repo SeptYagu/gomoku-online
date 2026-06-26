@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
+import type { PlayerProfileSnapshot } from "@/server/game-records";
 import type { GameRecordAck, PublicChatAck, RoomAck, RoomClientState, RoomListAck } from "@/server/room-contract";
 import type {
   LobbyRoomDeletedEvent,
@@ -28,6 +29,7 @@ type StoredRoomSession = {
 
 export type FriendRoomController = {
   canCancelMatch: boolean;
+  canCreateRoom: boolean;
   canFindMatch: boolean;
   canPlay: boolean;
   canReady: boolean;
@@ -52,10 +54,13 @@ export type FriendRoomController = {
   matchmakingStatus: "idle" | "searching";
   playerName: string;
   playMove: (point: Point) => void;
+  profile: PlayerProfileSnapshot | null;
+  profileStatus: "idle" | "loading" | "ready" | "error";
   publicChatMessages: PublicChatMessage[];
   publicChatStatus: "idle" | "loading" | "ready" | "error";
   publicChatText: string;
   ready: boolean;
+  refreshProfile: () => void;
   refreshPublicChat: () => void;
   refreshLobby: () => void;
   resignGame: () => void;
@@ -88,10 +93,13 @@ export function useFriendRoom(): FriendRoomController {
   const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
   const [lobbyStatus, setLobbyStatus] = useState<FriendRoomController["lobbyStatus"]>("idle");
   const [chatText, setChatText] = useState("");
+  const [profile, setProfile] = useState<PlayerProfileSnapshot | null>(null);
+  const [profileStatus, setProfileStatus] = useState<FriendRoomController["profileStatus"]>("idle");
   const [publicChatMessages, setPublicChatMessages] = useState<PublicChatMessage[]>([]);
   const [publicChatStatus, setPublicChatStatus] = useState<FriendRoomController["publicChatStatus"]>("idle");
   const [publicChatText, setPublicChatText] = useState("");
   const [matchmakingStatus, setMatchmakingStatus] = useState<FriendRoomController["matchmakingStatus"]>("idle");
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const autoJoinRoomCodeRef = useRef<string | null>(null);
@@ -106,6 +114,7 @@ export function useFriendRoom(): FriendRoomController {
   const canResign = isPlayer && room?.snapshot.status === "playing";
   const canRestart = isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
   const canSit = room?.role === "spectator" && hasOpenPlayerSeat(room.snapshot);
+  const canCreateRoom = !isCreatingRoom && matchmakingStatus !== "searching";
   const canFindMatch = matchmakingStatus !== "searching" && room?.snapshot.status !== "playing";
   const canCancelMatch =
     matchmakingStatus !== "searching" &&
@@ -125,6 +134,24 @@ export function useFriendRoom(): FriendRoomController {
 
     return getRoomUrl(room.snapshot.code);
   }, [room]);
+
+  const clearClosedRoom = useCallback((roomCode: string) => {
+    setLobbyRooms((currentRooms) => currentRooms.filter((candidate) => candidate.code !== roomCode));
+    setLobbyStatus("ready");
+    setRoom((currentRoom) => {
+      if (currentRoom?.snapshot.code !== roomCode) {
+        return currentRoom;
+      }
+
+      clearRoomSession();
+      clearRoomUrl();
+      setChatText("");
+      setMatchmakingStatus("idle");
+      setError(null);
+
+      return null;
+    });
+  }, []);
 
   const ensureSocket = useCallback((): RoomSocket => {
     if (socketRef.current) {
@@ -163,6 +190,11 @@ export function useFriendRoom(): FriendRoomController {
         setLobbyStatus("ready");
       }
     });
+    socket.on("room:closed", (event: unknown) => {
+      if (isLobbyRoomDeletedEvent(event)) {
+        clearClosedRoom(event.code);
+      }
+    });
     socket.on("public-chat:messages", (snapshot: unknown) => {
       if (isPublicChatSnapshot(snapshot)) {
         setPublicChatMessages(snapshot.messages);
@@ -173,7 +205,7 @@ export function useFriendRoom(): FriendRoomController {
     socketRef.current = socket;
 
     return socket;
-  }, []);
+  }, [clearClosedRoom]);
 
   const applyRoomAck = useCallback((response: RoomAck) => {
     if (!response.ok) {
@@ -195,14 +227,22 @@ export function useFriendRoom(): FriendRoomController {
   }, []);
 
   const createRoom = useCallback(() => {
+    if (!canCreateRoom) {
+      return;
+    }
+
     const socket = ensureSocket();
     const nextPlayerId = getOrCreatePlayerId();
     const nextPlayerName = normalizePlayerName(playerName);
 
+    setIsCreatingRoom(true);
     setPlayerNameState(nextPlayerName);
     persistPlayerName(nextPlayerName);
-    socket.emit("room:create", { playerId: nextPlayerId, playerName: nextPlayerName }, applyRoomAck);
-  }, [applyRoomAck, ensureSocket, playerName]);
+    socket.emit("room:create", { playerId: nextPlayerId, playerName: nextPlayerName }, (response: RoomAck) => {
+      setIsCreatingRoom(false);
+      applyRoomAck(response);
+    });
+  }, [applyRoomAck, canCreateRoom, ensureSocket, playerName]);
 
   const joinRoomByCode = useCallback((roomCode: string, retryWithFreshIdentity = true) => {
     const socket = ensureSocket();
@@ -319,6 +359,38 @@ export function useFriendRoom(): FriendRoomController {
       setPublicChatStatus("ready");
     });
   }, [ensureSocket]);
+
+  const refreshProfile = useCallback(() => {
+    const nextPlayerId = getOrCreatePlayerId();
+    const nextPlayerName = normalizePlayerName(playerName);
+    const params = new URLSearchParams({
+      limit: "10",
+      name: nextPlayerName,
+      playerId: nextPlayerId
+    });
+
+    setProfileStatus("loading");
+    void fetch(`/api/profile?${params.toString()}`, {
+      headers: {
+        "accept": "application/json"
+      }
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Profile request failed: ${response.status}`);
+        }
+
+        return (await response.json()) as PlayerProfileSnapshot;
+      })
+      .then((nextProfile) => {
+        setProfile(nextProfile);
+        setProfileStatus("ready");
+      })
+      .catch((profileError: unknown) => {
+        setProfileStatus("error");
+        setError(profileError instanceof Error ? profileError.message : "Profile request failed.");
+      });
+  }, [playerName]);
 
   const toggleReady = useCallback(() => {
     if (!room) {
@@ -564,10 +636,13 @@ export function useFriendRoom(): FriendRoomController {
       (response: GameRecordAck) => {
         if (!response.ok) {
           setError(response.error.message);
+          return;
         }
+
+        refreshProfile();
       }
     );
-  }, [ensureSocket, room]);
+  }, [ensureSocket, refreshProfile, room]);
 
   useEffect(() => {
     return () => {
@@ -588,6 +663,7 @@ export function useFriendRoom(): FriendRoomController {
 
   return {
     canCancelMatch,
+    canCreateRoom,
     canFindMatch,
     canPlay,
     canReady,
@@ -612,10 +688,13 @@ export function useFriendRoom(): FriendRoomController {
     matchmakingStatus,
     playerName,
     playMove,
+    profile,
+    profileStatus,
     publicChatMessages,
     publicChatStatus,
     publicChatText,
     ready,
+    refreshProfile,
     refreshPublicChat,
     refreshLobby,
     resignGame,

@@ -24,6 +24,7 @@
     "smoke:room-chat": "tsx tools/smoke-room-chat.ts",
     "smoke:room-lifecycle": "tsx tools/smoke-room-lifecycle.ts",
     "smoke:game-records": "tsx tools/smoke-game-records.ts",
+    "smoke:profile-records": "tsx tools/smoke-profile-records.ts",
     "verify:online": "tsx tools/verify-online-server.ts"
   },
   "dependencies": {

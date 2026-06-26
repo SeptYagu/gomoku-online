@@ -66,6 +66,40 @@ export type GameRecordSubmitResult = {
   record: SavedGameRecord;
 };
 
+export type PlayerGameRecordResult = "win" | "loss" | "draw" | "abandoned";
+
+export type PlayerGameRecordSummary = {
+  board: Board;
+  finishReason: GameRecordFinishReason;
+  finishedAt: number;
+  gameId: string;
+  moveSeq: number;
+  moves: Move[];
+  opponentName: string;
+  playerSeat: Stone;
+  recordStatus: GameRecordStatus;
+  result: PlayerGameRecordResult;
+  roomCode: string;
+  winner: Stone | null;
+};
+
+export type PlayerProfileSnapshot = {
+  displayName: string;
+  generatedAt: number;
+  identity: "guest" | "registered";
+  playerId: string;
+  recentRecords: PlayerGameRecordSummary[];
+  stats: {
+    conflicted: number;
+    draws: number;
+    games: number;
+    losses: number;
+    partial: number;
+    verified: number;
+    wins: number;
+  };
+};
+
 type GameRecordStoreOptions = {
   filePath?: false | string;
   now?: () => number;
@@ -93,6 +127,61 @@ export class GameRecordStore {
     return [...this.records.values()]
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, Math.max(1, Math.min(200, Math.floor(limit))));
+  }
+
+  getPlayerProfile(playerId: string, displayName = "Player", limit = 20): PlayerProfileSnapshot {
+    const normalizedPlayerId = playerId.trim();
+    const records = this.listRecordsForPlayer(normalizedPlayerId, limit);
+    const stats = {
+      conflicted: 0,
+      draws: 0,
+      games: records.length,
+      losses: 0,
+      partial: 0,
+      verified: 0,
+      wins: 0
+    };
+    const latestRecordName = records[0]?.players.find((player) => player.playerId === normalizedPlayerId)?.name;
+    const latestPlayerName = (latestRecordName ?? displayName.trim()) || "Player";
+
+    for (const record of records) {
+      if (record.recordStatus === "verified") {
+        stats.verified += 1;
+      } else if (record.recordStatus === "partial") {
+        stats.partial += 1;
+      } else {
+        stats.conflicted += 1;
+      }
+
+      const result = getPlayerResult(record, normalizedPlayerId);
+
+      if (result === "win") {
+        stats.wins += 1;
+      } else if (result === "loss") {
+        stats.losses += 1;
+      } else if (result === "draw") {
+        stats.draws += 1;
+      }
+    }
+
+    return {
+      displayName: latestPlayerName,
+      generatedAt: this.now(),
+      identity: "guest",
+      playerId: normalizedPlayerId,
+      recentRecords: records.map((record) => getPlayerRecordSummary(record, normalizedPlayerId)),
+      stats
+    };
+  }
+
+  listRecordsForPlayer(playerId: string, limit = 50): SavedGameRecord[] {
+    const normalizedPlayerId = playerId.trim();
+    const clampedLimit = Math.max(1, Math.min(200, Math.floor(limit)));
+
+    return [...this.records.values()]
+      .filter((record) => record.players.some((player) => player.playerId === normalizedPlayerId))
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, clampedLimit);
   }
 
   submit(authoritative: AuthoritativeGameRecord, submission: GameRecordClientSubmission): GameRecordSubmitResult {
@@ -238,6 +327,44 @@ function cloneAuthoritative(authoritative: AuthoritativeGameRecord): Authoritati
 
 function cloneRecord(record: SavedGameRecord): SavedGameRecord {
   return JSON.parse(JSON.stringify(record)) as SavedGameRecord;
+}
+
+function getPlayerRecordSummary(record: SavedGameRecord, playerId: string): PlayerGameRecordSummary {
+  const player = record.players.find((candidate) => candidate.playerId === playerId);
+  const opponent = record.players.find((candidate) => candidate.playerId !== playerId);
+
+  if (!player) {
+    throw new Error("Player is not in this game record.");
+  }
+
+  return {
+    board: record.board,
+    finishReason: record.finishReason,
+    finishedAt: record.finishedAt,
+    gameId: record.gameId,
+    moveSeq: record.moveSeq,
+    moves: record.moves,
+    opponentName: opponent?.name ?? "Opponent",
+    playerSeat: player.seat,
+    recordStatus: record.recordStatus,
+    result: getPlayerResult(record, playerId),
+    roomCode: record.roomCode,
+    winner: record.winner
+  };
+}
+
+function getPlayerResult(record: SavedGameRecord, playerId: string): PlayerGameRecordResult {
+  const player = record.players.find((candidate) => candidate.playerId === playerId);
+
+  if (!player || record.status === "abandoned") {
+    return "abandoned";
+  }
+
+  if (!record.winner) {
+    return "draw";
+  }
+
+  return record.winner === player.seat ? "win" : "loss";
 }
 
 function stableStringify(value: unknown): string {

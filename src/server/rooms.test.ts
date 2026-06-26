@@ -129,6 +129,21 @@ describe("RoomStore", () => {
     expect(store.listRooms().rooms).toEqual([]);
   });
 
+  it("closes a player's previous waiting room when they enter another room", () => {
+    const store = createTestRoomStore(["ROOM01", "ROOM02"]);
+    const first = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+    const second = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+    const cleanup = store.leaveParticipantRooms("player-1", second.code);
+
+    expect(cleanup.deletedRoomCodes).toEqual([first.code]);
+    expect(cleanup.updatedSnapshots).toEqual([]);
+    expect(store.getSnapshot(first.code)).toMatchObject({
+      ok: false,
+      error: { code: "room-not-found" }
+    });
+    expect(expectOk(store.getSnapshot(second.code)).players[0]).toMatchObject({ name: "Alice", seat: "black" });
+  });
+
   it("lets a spectator take an open waiting room player seat", () => {
     const store = createTestRoomStore(["ROOM01"]);
     const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
@@ -583,6 +598,21 @@ describe("RoomStore", () => {
       ok: false,
       error: { code: "game-not-playing" }
     });
+  });
+
+  it("closes an active room immediately after every participant disconnects", () => {
+    const { room, store } = createStartedRoom();
+
+    expectOk(store.markDisconnected(room.code, "player-1"));
+    const closed = expectOk(store.markDisconnected(room.code, "player-2"));
+
+    expect(closed.status).toBe("abandoned");
+    expect(closed.players.every((player) => !player.connected)).toBe(true);
+    expect(store.getSnapshot(room.code)).toMatchObject({
+      ok: false,
+      error: { code: "room-not-found" }
+    });
+    expect(store.listRooms().rooms).toEqual([]);
   });
 
   it("keeps a disconnected player seat if they reconnect before the deadline", () => {
