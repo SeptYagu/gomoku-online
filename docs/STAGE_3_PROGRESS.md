@@ -704,7 +704,7 @@
 
 ## 小步 10：用户状态 / Presence 第一版
 
-状态：本地完成，待提交、推送并通过真实服务器验证。
+状态：完成，已推送并通过真实服务器验证。
 
 目标：
 
@@ -754,8 +754,21 @@
 - 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3038`，通过。
 - 本地生产服务：`npm run smoke:profile-records -- http://127.0.0.1:3038`，通过。
 
-当前截止：
+线上验证：
 
-- 最新提交：待本轮提交生成。
-- 是否已推送：待提交后推送到 `origin/main`。
-- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:presence`、`smoke:online-room`、`smoke:lobby-ui` 和 `smoke:profile-records`。
+- 本轮提交：`2e7aa39 Implement stage 3 presence`。
+- `2e7aa39` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 2e7aa39`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 2e7aa39`：通过。
+- 真实服务器：`npm run smoke:presence -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS presence lobby online`
+  - `PASS presence host in room - UBSJEB`
+  - `PASS presence playing and spectating`
+  - `PASS presence REST readback`
+- 真实服务器：`npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`，通过，继续覆盖三客户端三局、换先、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- 真实服务器：`npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS lobby waiting row join - 85QVJX`
+  - `PASS lobby playing row watch - 6TE53W`
+- 真实服务器：`npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net`，通过。
+  - `PASS submitted verified record - BYHKF4-1`
+  - `PASS profile readback - BYHKF4-1`

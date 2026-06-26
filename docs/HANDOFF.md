@@ -2602,3 +2602,44 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:presence`、`smoke:online-room`、`smoke:lobby-ui` 和 `smoke:profile-records`。
+
+## 54. 2026-06-25 阶段 3 小步 10 线上验证补记
+
+本轮目标：
+
+- 按 handoff 追加规则，补记阶段 3 小步 10 用户状态 / Presence 的推送和真实服务器验证结果。
+- 更新阶段 3 进度文件，把小步 10 标记为完成并通过真实服务器验证。
+
+实际结果：
+
+- 阶段 3 小步 10 提交：`2e7aa39 Implement stage 3 presence`。
+- `2e7aa39` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 2e7aa39`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 2e7aa39`：通过。
+- `npm run smoke:presence -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS presence lobby online`
+  - `PASS presence host in room - UBSJEB`
+  - `PASS presence playing and spectating`
+  - `PASS presence REST readback`
+- `npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`：通过，继续覆盖三客户端三局、换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- `npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS lobby waiting row join - 85QVJX`
+  - `PASS lobby playing row watch - 6TE53W`
+- `npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS submitted verified record - BYHKF4-1`
+  - `PASS profile readback - BYHKF4-1`
+- `docs/STAGE_3_PROGRESS.md` 已更新小步 10 为完成并通过真实服务器验证。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 小步 8：在线棋谱提交、去重和 guest 棋谱保存，完成并通过真实服务器验证。
+- 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
+- 小步 10：用户状态 / Presence 第一版，完成并通过真实服务器验证。
+- 下一步：阶段 3 小步 11，排行榜第一版。账号/注册玩家身份和更完整 Game records 回看仍在后续小步。
