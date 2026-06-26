@@ -52,9 +52,9 @@ const STEP_TIMEOUT_MS = 20_000;
 
 async function main(): Promise<void> {
   const baseUrl = normalizeBaseUrl(process.argv[2] ?? DEFAULT_BASE_URL);
-  const suffix = Date.now().toString(36);
-  const hostAccount = await registerAccount(baseUrl, `Profile Page Host ${suffix}`);
-  const guestAccount = await registerAccount(baseUrl, `Profile Page Guest ${suffix}`);
+  const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const hostAccount = await registerAccount(baseUrl, `PPH-${suffix}`);
+  const guestAccount = await registerAccount(baseUrl, `PPG-${suffix}`);
   const host = await connectClient(baseUrl);
   const guest = await connectClient(baseUrl);
 
@@ -239,7 +239,7 @@ class CdpClient {
 
 async function waitForProfileText(cdp: CdpClient, displayName: string, gameId: string): Promise<void> {
   await waitForValue(async () => {
-    const bodyText = await evaluate<string>(cdp, "document.body.innerText");
+    const bodyText = await evaluate<string>(cdp, "document.body ? document.body.innerText : ''");
 
     return bodyText.includes(displayName) && bodyText.includes(gameId) && bodyText.includes("Game records")
       ? true
@@ -249,7 +249,7 @@ async function waitForProfileText(cdp: CdpClient, displayName: string, gameId: s
 
 async function waitForProfileReplay(cdp: CdpClient): Promise<void> {
   await waitForValue(async () => {
-    const bodyText = await evaluate<string>(cdp, "document.body.innerText");
+    const bodyText = await evaluate<string>(cdp, "document.body ? document.body.innerText : ''");
 
     return bodyText.includes("Move 3 / 3") ? true : null;
   }, STEP_TIMEOUT_MS);
@@ -270,7 +270,7 @@ async function waitForProfileReplay(cdp: CdpClient): Promise<void> {
   assert(clicked, "profile replay previous button should exist");
 
   await waitForValue(async () => {
-    const bodyText = await evaluate<string>(cdp, "document.body.innerText");
+    const bodyText = await evaluate<string>(cdp, "document.body ? document.body.innerText : ''");
 
     return bodyText.includes("Move 2 / 3") ? true : null;
   }, STEP_TIMEOUT_MS);
@@ -291,18 +291,27 @@ async function evaluate<T>(cdp: CdpClient, expression: string): Promise<T> {
 }
 
 async function registerAccount(baseUrl: string, displayName: string): Promise<AccountSession> {
-  const response = await fetch(`${baseUrl}/api/account/register`, {
-    body: JSON.stringify({ displayName }),
-    headers: {
-      "accept": "application/json",
-      "content-type": "application/json"
-    },
-    method: "POST"
-  });
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = attempt === 0 ? displayName : `${displayName}-${attempt}`;
+    const response = await fetch(`${baseUrl}/api/account/register`, {
+      body: JSON.stringify({ displayName: candidate }),
+      headers: {
+        "accept": "application/json",
+        "content-type": "application/json"
+      },
+      method: "POST"
+    });
 
-  assert(response.ok, `POST /api/account/register should succeed, got ${response.status}`);
+    if (response.status === 409) {
+      continue;
+    }
 
-  return (await response.json()) as AccountSession;
+    assert(response.ok, `POST /api/account/register should succeed, got ${response.status}`);
+
+    return (await response.json()) as AccountSession;
+  }
+
+  throw new Error("Could not allocate a unique account display name for profile smoke.");
 }
 
 function connectClient(baseUrl: string): Promise<SmokeSocket> {

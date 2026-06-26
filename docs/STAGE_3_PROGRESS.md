@@ -1221,3 +1221,34 @@
 
 - 提交并推送小步 15。
 - 等待真实服务器更新后运行 `verify:online`、`smoke:profile-page`、`smoke:profile-records` 和必要回归。
+
+线上验证：
+
+- 小步 15 提交：`801a0b5 Add game record replay and export`。
+- `801a0b5` 已推送到 `origin/main`。
+- 推送后第一次等待 90 秒，真实服务器仍显示 `version b2521c0`。
+- 第二次等待 90 秒后，真实服务器更新到 `version 801a0b5`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 801a0b5`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version 801a0b5`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS register host - acct_cOL-w34ky1g`
+  - `PASS register guest - acct_oy4N5jVmVr0`
+  - `PASS profile page readback - RXBKZ4-1`
+  - 该脚本已验证 Profile 页面回放从 `Move 3 / 3` 点击上一手变成 `Move 2 / 3`。
+- `npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS submitted verified record - BXQSJR-1`
+  - `PASS profile readback - BXQSJR-1`
+- 线上 smoke 过程中发现 `tools/smoke-profile-page.ts` 两个脚本鲁棒性问题并已修复：
+  - 等待 Profile 页面时 `document.body` 可能尚未存在。
+  - 注册账号显示名超过 24 字符会被服务器截断，重跑时可能撞 409；已改为短唯一名并对 409 重试。
+
+当前阶段 3 状态：
+
+- 小步 15：棋谱回看和开局库导出准备，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进账号完整化、棋谱下载入口、开局库分析流程接入，以及后续 PlayOK 式用户功能。
