@@ -3444,3 +3444,57 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：等待真实服务器部署新版后，运行 `verify:online`、`smoke:profile-page` 和 `smoke:profile-records`。
+
+## 69. 2026-06-26 阶段 3 小步 17 线上验证补记
+
+本轮目标：
+
+- 记录单局 SGF 下载入口的提交、推送和真实服务器验证结果。
+- 确认 Profile 页面下载入口已在真实服务器实装。
+
+提交与部署：
+
+- 小步 17 提交：`25bab3d Add profile SGF downloads`。
+- 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 25bab3d`。
+
+真实服务器验证：
+
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 25bab3d`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version 25bab3d`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS register host - acct_pVdUlKPbra8`
+  - `PASS register guest - acct_sCVn5M6DKs4`
+  - `PASS profile page readback - RPG7LT-1`
+  - 脚本验证了 Profile 页面回放从 `Move 3 / 3` 到 `Move 2 / 3`。
+  - 脚本验证了 `Download SGF` 链接、`.sgf` 文件名和 `data:application/x-go-sgf` URL。
+- `npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS submitted verified record - XNV592-1`
+  - `PASS profile readback - XNV592-1`
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 小步 7：随机匹配，完成并通过真实服务器验证。
+- 小步 8：在线棋谱提交、去重和 guest 棋谱保存，完成并通过真实服务器验证。
+- 小步 9：Profile / Game records 读回第一版和空房生命周期补强，完成并通过真实服务器验证。
+- 小步 10：用户状态 / Presence 第一版，完成并通过真实服务器验证。
+- 小步 11：排行榜第一版，完成并通过真实服务器验证。
+- 小步 12：账号 / 注册玩家身份第一版，完成并通过真实服务器验证。
+- 小步 13：Profile / Game records 页面入口第一版，完成并通过真实服务器验证。
+- 小步 14：注册用户 / 游客排行榜隔离与创建房 UI 收口，完成并通过真实服务器验证。
+- 小步 15：棋谱回看和开局库导出准备，完成并通过真实服务器验证。
+- 小步 16：房间生命周期二次补强，完成并通过真实服务器验证。
+- 小步 17：单局 SGF 下载入口，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进开局库分析流程接入、账号完整化、排行榜分页/搜索/增量事件，以及后续 PlayOK 式用户功能。

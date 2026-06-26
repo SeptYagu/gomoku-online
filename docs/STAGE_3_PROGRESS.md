@@ -1386,3 +1386,28 @@
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：提交并推送，等待真实服务器更新后运行 `verify:online`、`smoke:profile-page` 和 `smoke:profile-records`。
+
+线上验证：
+
+- 小步 17 提交：`25bab3d Add profile SGF downloads`。
+- `25bab3d` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 25bab3d`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 25bab3d`：通过。
+  - `PASS page - loaded`
+  - `PASS version - version 25bab3d`
+  - `PASS socket.io polling - handshake returned sid`
+  - `PASS socket.io websocket - connected with websocket`
+- `npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS profile page readback - RPG7LT-1`
+  - 脚本验证了 Profile 页面回放从 `Move 3 / 3` 到 `Move 2 / 3`。
+  - 脚本验证了 `Download SGF` 链接、`.sgf` 文件名和 `data:application/x-go-sgf` URL。
+- `npm run smoke:profile-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS profile readback - XNV592-1`
+
+当前阶段 3 状态：
+
+- 小步 17：单局 SGF 下载入口，完成并通过真实服务器验证。
+
+下一步：
+
+- 阶段 3 继续推进开局库分析流程接入、账号完整化、排行榜分页/搜索/增量事件，以及后续 PlayOK 式用户功能。
