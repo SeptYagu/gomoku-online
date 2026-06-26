@@ -554,7 +554,6 @@ Game 增加：
 
 仍保留到后续小步：
 
-- 将导出的棋谱池接入自动开局库分析 / 统计 / 筛线流程。
 - 排行榜分页、搜索和增量事件。
 - 正式邮箱/密码/OAuth 登录。
 
@@ -573,6 +572,28 @@ Game 增加：
 
 仍保留到后续小步：
 
-- 将导出的棋谱池接入自动开局库分析 / 统计 / 筛线流程。
+- 排行榜分页、搜索和增量事件。
+- 正式邮箱/密码/OAuth 登录。
+
+## 当前落地：服务器棋谱开局分析流程第一版（2026-06-26）
+
+本轮把保存下来的 online game records 接入本地/离线开局分析流程：
+
+- 新增 `src/server/game-record-opening-analysis.ts`：
+  - 输入 `SavedGameRecord[]`。
+  - 按前 N 手生成 SGF 坐标格式的 opening key。
+  - 聚合同一 opening prefix 的局数、黑胜、白胜、和棋、胜率、first/last played 时间和 gameId 列表。
+  - 跳过非 finished 或手数不足的记录。
+  - 支持 `prefixLength` 和 `minGames`。
+- 新增 `tools/analyze-game-record-openings.ts`：
+  - 默认读取 `data/game-records/records.jsonl`。
+  - 默认输出 `.arena-results/game-record-opening-analysis.json`。
+  - 支持 `--status verified|partial|conflicted|all`、`--limit`、`--prefix-length`、`--min-games`。
+- 新增 `npm run analyze:openings` 和 `npm run smoke:opening-analysis`。
+- `tools/smoke-opening-analysis.ts` 使用临时 `records.jsonl` 写入 verified 棋谱，再重新读取并分析，覆盖“从保存的 game records 中读取候选棋谱”的阶段 3 验收点。
+
+仍保留到后续小步：
+
+- 将 opening analysis 候选 JSON 接入自动筛线 / arena 复核 / 运行时开局库转换。
 - 排行榜分页、搜索和增量事件。
 - 正式邮箱/密码/OAuth 登录。

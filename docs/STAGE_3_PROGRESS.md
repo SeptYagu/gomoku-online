@@ -1411,3 +1411,57 @@
 下一步：
 
 - 阶段 3 继续推进开局库分析流程接入、账号完整化、排行榜分页/搜索/增量事件，以及后续 PlayOK 式用户功能。
+
+## 小步 18：服务器棋谱开局分析流程第一版
+
+状态：本地完成，待提交、推送和真实服务器验证。
+
+目标：
+
+- 让开局库工具能从保存的 game records 中读取候选棋谱。
+- 把服务器棋谱池接入本地/离线开局分析流程。
+- 先输出可复查的 opening candidate JSON，后续再接 arena 筛线和运行时开局库转换。
+
+实现：
+
+- `src/server/game-record-opening-analysis.ts`
+  - 新增 `analyzeGameRecordOpenings()`。
+  - 按前 N 手生成 SGF 坐标格式 opening key。
+  - 聚合同一开局前缀的局数、黑胜、白胜、和棋、黑白胜率、first/last played 时间和 gameId 列表。
+  - 跳过非 finished 或手数不足的棋谱。
+  - 支持 `prefixLength` 和 `minGames`。
+- `src/server/game-record-opening-analysis.test.ts`
+  - 覆盖开局前缀聚合、胜率、排序、短棋谱跳过和最小局数门槛。
+- `tools/analyze-game-record-openings.ts`
+  - 新增 CLI。
+  - 默认读取 `data/game-records/records.jsonl`。
+  - 默认输出 `.arena-results/game-record-opening-analysis.json`。
+  - 支持 `--status verified|partial|conflicted|all`、`--limit`、`--prefix-length`、`--min-games`。
+- `tools/smoke-opening-analysis.ts`
+  - 使用临时 `records.jsonl` 写入 3 份 verified 棋谱。
+  - 重新加载保存的 JSONL 并分析成 opening candidates。
+  - 验证候选数量、最高频 key、样本数和胜率。
+- `package.json`
+  - 新增 `npm run analyze:openings`。
+  - 新增 `npm run smoke:opening-analysis`。
+- `README.md`、`docs/logic/rating-leaderboard-module.md`
+  - 记录开局分析命令和当前落地范围。
+
+本地验证：
+
+- `npx vitest run src/server/game-record-opening-analysis.test.ts src/server/game-record-export.test.ts`：通过，2 个测试文件、4 个测试用例。
+- `npm run smoke:opening-analysis`：通过。
+  - `PASS analyzed saved game records - 3`
+  - `PASS opening candidates - 2`
+- `npm run analyze:openings -- --input data/game-records/records.jsonl --output .arena-results/game-record-opening-analysis-check.json --limit 5 --prefix-length 3 --min-games 1`：通过。
+  - `Analyzed 2/5 verified game records into 1 opening candidates at .arena-results\game-record-opening-analysis-check.json.`
+- `npm run smoke:game-record-export`：通过。
+- `npm test`：通过，11 个测试文件、98 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后运行 `verify:online`，并在线上运行 `analyze:openings` 命令确认生产棋谱池可被读取。

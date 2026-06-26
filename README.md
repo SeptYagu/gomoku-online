@@ -175,6 +175,13 @@ npm run export:game-records -- --input data/game-records/records.jsonl --output 
 npm run smoke:game-record-export
 ```
 
+也可以直接从服务器棋谱 JSONL 聚合开局候选线，生成本地分析 JSON：
+
+```bash
+npm run analyze:openings -- --input data/game-records/records.jsonl --output .arena-results/game-record-opening-analysis.json --prefix-length 8 --min-games 1
+npm run smoke:opening-analysis
+```
+
 排行榜可跑 Socket.IO + REST 冒烟，确认一局 verified 在线棋谱会进入总榜、今日榜和连胜榜：
 
 ```bash
