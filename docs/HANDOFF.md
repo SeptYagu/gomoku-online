@@ -2097,3 +2097,70 @@ b6faf9e
 - 小步 5：房间聊天频道，完成并通过真实服务器验证。
 - 小步 6：公共聊天频道，完成并通过真实服务器验证。
 - 下一步：小步 7，随机匹配。
+
+## 45. 2026-06-25 阶段 3 联机回归修复：房间生命周期、补位和邀请链接
+
+本轮触发：
+
+- 真实服务器一台电脑三用户测试发现：
+  - 对局中离开后再加入提示房间不存在。
+  - 对局中断线后没有按 60 秒超时判胜负。
+  - 掉线玩家占着座位。
+  - 观战席不能补入空位。
+  - 邀请链接没有从根路径自动进房，而是先到首页。
+  - 房间无人后没有关闭，同一用户可以连续创建多个新房。
+
+实际完成：
+
+- `src/server/rooms.ts`：
+  - 新增 `RoomStore.sitPlayer()`，允许观战者在非 `playing` 状态下补入空玩家座位。
+  - 观战者断线立即移除；非对局玩家离开或断线立即释放座位。
+  - 对局中玩家断线保留 60 秒宽限期，超时后在线对手胜；双方都离线则 abandoned。
+  - 房间无玩家、无观战者时立即删除并从 lobby 移除。
+- `src/server/room-socket.ts`：
+  - 新增 `room:sit`。
+  - 同一 socket 创建新房、加入其他房间或重连其他房间前，会先释放当前旧房间身份，防止重复创建空房残留。
+- `src/app/(root)/page.tsx`：
+  - 根路径 `/` 重定向保留 query，`/?room=ABC123` 会进入 `/en?room=ABC123`。
+- `src/components/useFriendRoom.ts`：
+  - URL 带 `room` 时自动加入房间。
+  - 玩家身份改为 session 级，兼容读取旧 localStorage 房间记录。
+  - 加入遇到重复身份/重名时自动刷新游客身份后重试一次。
+  - 新增 `canSit` 和 `sitRoom()`。
+- `src/components/GameShell.tsx`：
+  - URL 带 `room` 时首屏进入好友房模式。
+  - 房间工具栏新增入座按钮。
+- `tools/smoke-room-lifecycle.ts`：
+  - 覆盖重复创建关闭旧房、观战者补位、对局中断线 60 秒后判负。
+- `tools/smoke-share-url.ts`：
+  - 增加根路径邀请链接自动进房验证。
+- 文档：
+  - `README.md` 增加 `npm run smoke:room-lifecycle`。
+  - `docs/logic/realtime-room-module.md` 和 `docs/logic/lobby-matchmaking-module.md` 更新生命周期、补位和邀请链接规则。
+  - `docs/STAGE_3_PROGRESS.md` 记录本次回归修复。
+
+本地验证：
+
+- `npm test`：通过，5 个测试文件、66 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3034 npm start` 后运行 `npm run smoke:room-lifecycle -- http://127.0.0.1:3034`，通过。
+  - `PASS repeated create closes previous room - 63UE44 -> WYT2WW`
+  - `PASS spectator sits in open seat - 2ZGJPM`
+  - `PASS disconnect timeout forfeit - NNGYDS`
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3034`，通过。
+  - `PASS create room URL - DBPRJ7`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://127.0.0.1:3034/en`
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3034`，通过。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3034`，通过。
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3034`，通过。
+- 本地生产服务：`npm run smoke:room-chat -- http://127.0.0.1:3034`，通过。
+- 本地生产服务：`npm run smoke:public-chat -- http://127.0.0.1:3034`，通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送本轮联机回归修复，等待真实服务器更新后跑 `verify:online`、`smoke:room-lifecycle`、`smoke:share-url`、`smoke:online-room`、`smoke:lobby-ui`、`smoke:lobby`、`smoke:room-chat` 和 `smoke:public-chat`。

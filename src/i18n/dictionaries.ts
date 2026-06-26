@@ -70,6 +70,7 @@ export type GameDictionary = {
     roomCodePlaceholder: string;
     selfStatus: string;
     sendMessage: string;
+    sitDown: string;
     spectatorSeat: string;
     spectatorStatus: string;
     spectators: string;
@@ -188,6 +189,7 @@ const en = {
       roomCodePlaceholder: "Random code",
       selfStatus: "{name} is in the room.",
       sendMessage: "Send",
+      sitDown: "Sit",
       spectatorSeat: "Spectator",
       spectatorStatus: "{name} is watching.",
       spectators: "Spectators",
@@ -302,6 +304,7 @@ const zh = {
       roomCodePlaceholder: "随机房间码",
       selfStatus: "{name} 已在房间中。",
       sendMessage: "发送",
+      sitDown: "入座",
       spectatorSeat: "观战席",
       spectatorStatus: "{name} 正在观战。",
       spectators: "观战者",
@@ -416,6 +419,7 @@ const fr = {
       roomCodePlaceholder: "Code aléatoire",
       selfStatus: "{name} est dans le salon.",
       sendMessage: "Envoyer",
+      sitDown: "S'asseoir",
       spectatorSeat: "Spectateur",
       spectatorStatus: "{name} regarde la partie.",
       spectators: "Spectateurs",
@@ -530,6 +534,7 @@ const es = {
       roomCodePlaceholder: "Código aleatorio",
       selfStatus: "{name} está en la sala.",
       sendMessage: "Enviar",
+      sitDown: "Sentarse",
       spectatorSeat: "Espectador",
       spectatorStatus: "{name} está mirando.",
       spectators: "Espectadores",
@@ -644,6 +649,7 @@ const ru = {
       roomCodePlaceholder: "Случайный код",
       selfStatus: "{name} в комнате.",
       sendMessage: "Отправить",
+      sitDown: "Сесть",
       spectatorSeat: "Зритель",
       spectatorStatus: "{name} наблюдает за игрой.",
       spectators: "Зрители",
@@ -758,6 +764,7 @@ const ar = {
       roomCodePlaceholder: "رمز عشوائي",
       selfStatus: "{name} داخل الغرفة.",
       sendMessage: "إرسال",
+      sitDown: "جلوس",
       spectatorSeat: "مشاهد",
       spectatorStatus: "{name} يشاهد المباراة.",
       spectators: "المشاهدون",

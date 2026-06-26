@@ -31,6 +31,7 @@ export type FriendRoomController = {
   canReady: boolean;
   canResign: boolean;
   canRestart: boolean;
+  canSit: boolean;
   canUndo: boolean;
   chatText: string;
   connectionStatus: "idle" | "connecting" | "connected" | "disconnected";
@@ -63,6 +64,7 @@ export type FriendRoomController = {
   setJoinCode: (value: string) => void;
   setPlayerName: (value: string) => void;
   setPublicChatText: (value: string) => void;
+  sitRoom: () => void;
   toggleReady: () => void;
   undoMove: () => void;
 };
@@ -85,6 +87,7 @@ export function useFriendRoom(): FriendRoomController {
   const [publicChatText, setPublicChatText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const autoJoinRoomCodeRef = useRef<string | null>(null);
 
   const isPlayer = room?.role === "player" && room.seat !== null;
   const currentPlayer = isPlayer ? getPlayerBySeat(room.snapshot, room.seat) : null;
@@ -95,6 +98,7 @@ export function useFriendRoom(): FriendRoomController {
   const canPlay = isPlayer && room?.snapshot.status === "playing" && room.snapshot.currentTurn === room.seat && !hasPendingUndoRequest;
   const canResign = isPlayer && room?.snapshot.status === "playing";
   const canRestart = isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
+  const canSit = room?.role === "spectator" && hasOpenPlayerSeat(room.snapshot);
   const canUndo =
     isPlayer &&
     room?.snapshot.status === "playing" &&
@@ -187,10 +191,10 @@ export function useFriendRoom(): FriendRoomController {
     socket.emit("room:create", { playerId: nextPlayerId, playerName: nextPlayerName }, applyRoomAck);
   }, [applyRoomAck, ensureSocket, playerName]);
 
-  const joinRoomByCode = useCallback((roomCode: string) => {
+  const joinRoomByCode = useCallback((roomCode: string, retryWithFreshIdentity = true) => {
     const socket = ensureSocket();
-    const nextPlayerId = getOrCreatePlayerId();
-    const nextPlayerName = normalizePlayerName(playerName);
+    let nextPlayerId = getOrCreatePlayerId();
+    let nextPlayerName = normalizePlayerName(playerName);
     const nextRoomCode = normalizeRoomCode(roomCode);
 
     if (!nextRoomCode) {
@@ -204,7 +208,26 @@ export function useFriendRoom(): FriendRoomController {
     socket.emit(
       "room:join",
       { playerId: nextPlayerId, playerName: nextPlayerName, roomCode: nextRoomCode },
-      applyRoomAck
+      (response: RoomAck) => {
+        if (
+          !response.ok &&
+          retryWithFreshIdentity &&
+          (response.error.code === "duplicate-player" || response.error.code === "duplicate-name")
+        ) {
+          nextPlayerId = createAndPersistPlayerId();
+          nextPlayerName = createGuestPlayerName();
+          setPlayerNameState(nextPlayerName);
+          persistPlayerName(nextPlayerName);
+          socket.emit(
+            "room:join",
+            { playerId: nextPlayerId, playerName: nextPlayerName, roomCode: nextRoomCode },
+            applyRoomAck
+          );
+          return;
+        }
+
+        applyRoomAck(response);
+      }
     );
   }, [applyRoomAck, ensureSocket, playerName]);
 
@@ -304,6 +327,14 @@ export function useFriendRoom(): FriendRoomController {
     }
 
     ensureSocket().emit("game:restart", { roomCode: room.snapshot.code }, applyRoomAck);
+  }, [applyRoomAck, ensureSocket, room]);
+
+  const sitRoom = useCallback(() => {
+    if (!room) {
+      return;
+    }
+
+    ensureSocket().emit("room:sit", { roomCode: room.snapshot.code }, applyRoomAck);
   }, [applyRoomAck, ensureSocket, room]);
 
   const sendChatMessage = useCallback(() => {
@@ -412,13 +443,39 @@ export function useFriendRoom(): FriendRoomController {
 
   useEffect(() => {
     const storedSession = readRoomSession();
+    const roomCodeFromUrl = getRoomCodeFromCurrentUrl();
 
-    if (!storedSession) {
+    if (roomCodeFromUrl) {
+      if (room?.snapshot.code === roomCodeFromUrl || autoJoinRoomCodeRef.current === roomCodeFromUrl) {
+        return;
+      }
+
+      autoJoinRoomCodeRef.current = roomCodeFromUrl;
+
+      if (storedSession?.roomCode === roomCodeFromUrl) {
+        ensureSocket().emit("room:rejoin", storedSession, (response: RoomAck) => {
+          if (response.ok) {
+            applyRoomAck(response);
+            return;
+          }
+
+          window.setTimeout(() => joinRoomByCode(roomCodeFromUrl, true), 0);
+        });
+        return;
+      }
+
+      window.setTimeout(() => joinRoomByCode(roomCodeFromUrl, true), 0);
+      return;
+    }
+
+    autoJoinRoomCodeRef.current = null;
+
+    if (!storedSession || room) {
       return;
     }
 
     ensureSocket().emit("room:rejoin", storedSession, applyRoomAck);
-  }, [applyRoomAck, ensureSocket]);
+  }, [applyRoomAck, ensureSocket, joinRoomByCode, room]);
 
   useEffect(() => {
     return () => {
@@ -442,6 +499,7 @@ export function useFriendRoom(): FriendRoomController {
     canReady,
     canResign,
     canRestart,
+    canSit,
     canUndo,
     chatText,
     connectionStatus,
@@ -474,6 +532,7 @@ export function useFriendRoom(): FriendRoomController {
     setJoinCode,
     setPlayerName,
     setPublicChatText,
+    sitRoom,
     toggleReady,
     undoMove
   };
@@ -485,6 +544,14 @@ function getPlayerBySeat(snapshot: RoomSnapshot, seat: Stone | null) {
   }
 
   return snapshot.players.find((player) => player.seat === seat) ?? null;
+}
+
+function hasOpenPlayerSeat(snapshot: RoomSnapshot): boolean {
+  if (snapshot.status === "playing" || snapshot.status === "abandoned") {
+    return false;
+  }
+
+  return snapshot.players.length < 2 || (snapshot.status === "finished" && snapshot.players.some((player) => !player.connected));
 }
 
 function isRoomErrorLike(value: unknown): value is { message: string } {
@@ -559,14 +626,20 @@ function getInitialJoinCode(): string {
 }
 
 function getOrCreatePlayerId(): string {
-  const storedPlayerId = window.localStorage.getItem(PLAYER_ID_STORAGE_KEY);
+  const storedPlayerId = window.sessionStorage.getItem(PLAYER_ID_STORAGE_KEY) ?? readRoomSession()?.playerId;
 
   if (storedPlayerId) {
+    window.sessionStorage.setItem(PLAYER_ID_STORAGE_KEY, storedPlayerId);
     return storedPlayerId;
   }
 
+  return createAndPersistPlayerId();
+}
+
+function createAndPersistPlayerId(): string {
   const playerId = globalThis.crypto?.randomUUID?.() ?? `player-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
+
+  window.sessionStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
 
   return playerId;
 }
@@ -614,6 +687,14 @@ function clearRoomUrl() {
   }
 }
 
+function getRoomCodeFromCurrentUrl(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  return normalizeRoomCode(new URLSearchParams(window.location.search).get("room") ?? "");
+}
+
 function copyTextWithFallback(text: string): boolean {
   if (typeof document === "undefined") {
     return false;
@@ -643,11 +724,13 @@ function persistPlayerName(playerName: string) {
 }
 
 function persistRoomSession(session: StoredRoomSession) {
-  window.localStorage.setItem(ROOM_SESSION_STORAGE_KEY, JSON.stringify(session));
+  window.sessionStorage.setItem(ROOM_SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
 function readRoomSession(): StoredRoomSession | null {
-  const rawSession = window.localStorage.getItem(ROOM_SESSION_STORAGE_KEY);
+  const rawSession =
+    window.sessionStorage.getItem(ROOM_SESSION_STORAGE_KEY) ??
+    window.localStorage.getItem(ROOM_SESSION_STORAGE_KEY);
 
   if (!rawSession) {
     return null;
@@ -667,6 +750,7 @@ function readRoomSession(): StoredRoomSession | null {
 }
 
 function clearRoomSession() {
+  window.sessionStorage.removeItem(ROOM_SESSION_STORAGE_KEY);
   window.localStorage.removeItem(ROOM_SESSION_STORAGE_KEY);
 }
 

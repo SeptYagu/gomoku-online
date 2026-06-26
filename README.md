@@ -136,6 +136,12 @@ npm run smoke:room-chat -- http://gomoku.yagu.ddns-ip.net
 npm run smoke:public-chat -- http://gomoku.yagu.ddns-ip.net
 ```
 
+房间生命周期可跑 Socket.IO 冒烟，确认重复创建会关闭旧房、观战者可补空位、对局中断线 60 秒后判负：
+
+```bash
+npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net
+```
+
 ## 验证命令
 
 ```bash

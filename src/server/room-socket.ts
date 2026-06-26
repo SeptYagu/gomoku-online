@@ -52,6 +52,7 @@ export type ClientToServerEvents = {
     payload: { playerId: string; playerName: string; roomCode: string },
     ack: (response: RoomAck) => void
   ) => void;
+  "room:sit": (payload: { roomCode: string; seat?: "black" | "white" }, ack: (response: RoomAck) => void) => void;
 };
 
 export type ServerToClientEvents = {
@@ -117,11 +118,13 @@ export function registerRoomSocketHandlers(
 
   io.on("connection", (socket) => {
     socket.on("room:create", (payload, ack) => {
+      leaveCurrentRoomIfNeeded(io, socket, roomStore);
       const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(payload), payload.playerId);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("room:join", (payload, ack) => {
+      leaveCurrentRoomIfNeeded(io, socket, roomStore, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -132,6 +135,7 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("room:rejoin", (payload, ack) => {
+      leaveCurrentRoomIfNeeded(io, socket, roomStore, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -267,6 +271,18 @@ export function registerRoomSocketHandlers(
       );
     });
 
+    socket.on("room:sit", (payload, ack) => {
+      acknowledgeAndBroadcast(
+        io,
+        socket,
+        roomStore,
+        runForCurrentMember(socket, roomStore, payload.roomCode, (playerId) =>
+          roomStore.sitPlayer(payload.roomCode, playerId, payload.seat)
+        ),
+        ack
+      );
+    });
+
     socket.on("room:leave", (payload, ack) => {
       acknowledgeAndBroadcast(
         io,
@@ -296,6 +312,33 @@ export function registerRoomSocketHandlers(
       }
     });
   });
+}
+
+function leaveCurrentRoomIfNeeded(
+  io: RoomSocketServer,
+  socket: RoomSocket,
+  roomStore: RoomStore,
+  nextRoomCode?: string
+) {
+  const previousRoomCode = socket.data.roomCode;
+  const previousPlayerId = socket.data.playerId;
+  const normalizedNextRoomCode = nextRoomCode?.trim().toUpperCase();
+
+  if (!previousRoomCode || !previousPlayerId || previousRoomCode === normalizedNextRoomCode) {
+    return;
+  }
+
+  const result = roomStore.leaveRoom(previousRoomCode, previousPlayerId);
+
+  socket.leave(previousRoomCode);
+  socket.data.roomCode = undefined;
+
+  if (!result.ok) {
+    return;
+  }
+
+  socket.to(previousRoomCode).emit("room:state", result.value);
+  broadcastLobbyRoomChange(io, roomStore, previousRoomCode);
 }
 
 function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {

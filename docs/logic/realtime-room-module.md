@@ -276,14 +276,17 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `room:create` 的核心状态操作已实现：创建房间并加入黑棋房主。
 - `room:join` 的核心状态操作已实现：昵称、重复玩家校验；前两名成员进入黑白座位，第三人及之后进入 `spectators` 观战席；密码未做。
 - `room:rejoin` 已实现：同 `playerId` 可恢复原玩家座位或观战身份，并刷新昵称、连接状态。
+- `room:sit` 已实现：观战者可在非 `playing` 状态下补入空玩家座位；对局进行中不能抢座位。
 - 观战权限已实现：观战者可以收到 `RoomSnapshot` 和棋盘变化，但不能 ready、落子、认输、请求悔棋、响应悔棋或重开。
 - `game:start` 保留为兼容事件；当前产品 UI 不再展示 Start，双方 ready 后由 `RoomStore` 自动进入 `playing`。
 - `game:move` 的核心状态操作已实现：服务端按成员、回合、坐标、占位和 moveSeq 校验，复用 `src/game/board.ts` 判定胜负。
 - `game:undo-request` / `game:undo-respond` 已实现：只允许最后一手落子者请求悔棋；对手确认后回退，拒绝或 10 秒超时后保留局面；每人每局 3 次请求机会，同一局面被拒后不能连续重发。
 - `game:resign` 的核心状态操作已实现：对局中认输后直接 finished，胜方为对手。
 - `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready；每次重开都会切换下一局先手，房主权限不随先手变化。
-- 断线/重连的核心连接状态标记已实现；刷新恢复通过 localStorage `playerId` + `roomCode` 完成。
-- 断线宽限期和超时判负已完成基础版：playing 中断线会设置 `disconnectDeadline`，默认宽限期 60 秒，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned。
+- 断线/重连的核心连接状态标记已实现；刷新恢复通过 sessionStorage `playerId` + `roomCode` 完成，并兼容读取旧 localStorage 记录。
+- 显式 `room:leave`、同一 socket 创建新房、同一 socket 加入其他房间都会释放非 `playing` 旧座位；房间没有玩家和观战者时立即关闭。
+- 断线宽限期和超时判负已完成基础版：`playing` 中断线会设置 `disconnectDeadline`，默认宽限期 60 秒，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned，并在无人状态下清理房间。
+- 邀请链接已支持根路径保留房间参数：`/?room=ABC123` 会重定向为 `/en?room=ABC123`，前端加载后自动加入房间。
 - 正式 reconnect token 仍未做。
 - 多实例上线前接 Redis Adapter。
 
@@ -293,6 +296,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 重复 room code 能重试。已覆盖：`src/server/rooms.test.ts`。
 - 房间不存在加入失败。已覆盖：`src/server/rooms.test.ts`。
 - 第三人及之后加入同一房间进入观战席，不挤掉黑白座位。已覆盖：`src/server/rooms.test.ts`。
+- 观战者可在非对局中补入空玩家座位。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`、`tools/smoke-room-lifecycle.ts`。
 - 同名策略符合预期。已覆盖：`src/server/rooms.test.ts`。
 - 第一位玩家黑棋、第二位白棋。已覆盖：`src/server/rooms.test.ts`。
 - 未满员不能开始。已覆盖：`src/server/rooms.test.ts`。
@@ -305,6 +309,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 浏览器双上下文创建、邀请 URL 加入、实时落子、非当前回合禁点、刷新恢复和断线提示。已手动验证。
 - 断线宽限期内可恢复。基础刷新恢复和 deadline 已覆盖；正式 reconnect token 未实现。
 - 宽限期后按规则处理。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`。
+- 重复创建房间会释放旧房；空 waiting 房立即关闭；根路径邀请链接可自动进房。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`、`tools/smoke-room-lifecycle.ts`、`tools/smoke-share-url.ts`。
 
 ## 许可证边界
 

@@ -74,6 +74,27 @@ async function main(): Promise<void> {
       }, STEP_TIMEOUT_MS);
       const roomCode = new URL(roomUrl).searchParams.get("room") ?? "";
 
+      const inviteTargetUrl = await openBrowserTarget(port, `${baseOrigin}/?room=${roomCode}`);
+      const inviteCdp = await CdpClient.connect(inviteTargetUrl);
+
+      try {
+        await inviteCdp.send("Page.enable");
+        await inviteCdp.send("Runtime.enable");
+        await waitForRuntime(inviteCdp);
+        await waitForValue(async () => {
+          const href = await evaluate<string>(inviteCdp, "window.location.href");
+          const bodyText = await evaluate<string>(inviteCdp, "document.body.innerText");
+          const url = new URL(href);
+
+          return url.searchParams.get("room") === roomCode && bodyText.includes(roomCode) && bodyText.includes("Your seat")
+            ? href
+            : null;
+        }, STEP_TIMEOUT_MS);
+      } finally {
+        inviteCdp.close();
+      }
+
+      await cdp.send("Page.bringToFront").catch(() => undefined);
       await clickButton(cdp, "Copy invite");
       const copyState = await waitForValue(async () => {
         const bodyText = await evaluate<string>(cdp, "document.body.innerText");
@@ -103,6 +124,7 @@ async function main(): Promise<void> {
 
       console.log(`Share URL smoke: ${baseUrl}`);
       console.log(`PASS create room URL - ${roomCode}`);
+      console.log("PASS invite link auto join - root URL preserved room");
       console.log("PASS copy invite - copied current URL");
       console.log(`PASS leave room URL clear - ${clearedUrl}`);
     } finally {

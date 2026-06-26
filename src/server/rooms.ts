@@ -137,6 +137,7 @@ export type RoomErrorCode =
   | "no-moves-to-undo"
   | "not-last-move-player"
   | "not-room-player"
+  | "not-room-spectator"
   | "not-undo-request-target"
   | "not-room-member"
   | "not-your-turn"
@@ -368,6 +369,69 @@ export class RoomStore {
       seat
     });
     updateRoomStatus(room, now);
+    this.markRoomListed(room);
+
+    return success(getRoomSnapshot(room));
+  }
+
+  sitPlayer(roomCode: string, playerId: string, requestedSeat?: RoomPlayerSeat): RoomResult<RoomSnapshot> {
+    const found = this.getRoomAndParticipant(roomCode, playerId);
+
+    if (!found.ok) {
+      return found;
+    }
+
+    const { participant, role, room } = found.value;
+
+    if (role !== "spectator") {
+      return failure("not-room-spectator", "Only spectators can take an open player seat.");
+    }
+
+    if (room.status === "playing" || room.status === "abandoned") {
+      return failure("game-already-started", "Open seats can only be taken outside an active game.");
+    }
+
+    const seat = findAvailableSeat(room, requestedSeat);
+
+    if (!seat) {
+      return failure("spot-unavailable", "No player seat is open.");
+    }
+
+    const spectatorIndex = room.spectators.findIndex((candidate) => candidate.id === playerId);
+
+    if (spectatorIndex < 0) {
+      return failure("not-room-spectator", "Only spectators can take an open player seat.");
+    }
+
+    const now = this.now();
+
+    room.spectators.splice(spectatorIndex, 1);
+    room.players = room.players.filter((candidate) => candidate.seat !== seat);
+    room.players.push({
+      connected: true,
+      disconnectedAt: null,
+      disconnectDeadline: null,
+      id: participant.id,
+      joinedAt: now,
+      lastChatSentAt: participant.lastChatSentAt,
+      name: participant.name,
+      ready: false,
+      rejectedUndoMoveSeq: null,
+      seat,
+      undoRequestsRemaining: UNDO_REQUEST_LIMIT
+    });
+
+    if (!room.players.some((candidate) => candidate.seat === room.hostSeat)) {
+      room.hostSeat = seat;
+    }
+
+    room.undoRequest = null;
+    room.updatedAt = now;
+
+    if (room.status === "waiting" || room.status === "ready") {
+      updateRoomStatus(room, now);
+    }
+
     this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
@@ -682,19 +746,38 @@ export class RoomStore {
 
     const now = this.now();
 
-    found.value.participant.connected = false;
-    found.value.participant.disconnectedAt = now;
+    const { participant, role, room } = found.value;
 
-    if (found.value.role === "player" && "disconnectDeadline" in found.value.participant) {
-      found.value.participant.disconnectDeadline =
-        found.value.room.status === "playing" ? now + this.lifecycleLimits.disconnectGraceMs : null;
-      found.value.room.undoRequest = null;
+    if (role === "spectator") {
+      removeSpectator(room, playerId);
+      room.updatedAt = now;
+      this.markRoomListed(room);
+      return success(this.deleteIfEmpty(room) ?? getRoomSnapshot(room));
     }
 
-    found.value.room.updatedAt = now;
-    this.markRoomListed(found.value.room);
+    if (role === "player" && room.status !== "playing") {
+      removePlayer(room, playerId);
+      room.undoRequest = null;
+      room.updatedAt = now;
+      if (room.status === "waiting" || room.status === "ready") {
+        updateRoomStatus(room, now);
+      }
+      this.markRoomListed(room);
+      return success(this.deleteIfEmpty(room) ?? getRoomSnapshot(room));
+    }
 
-    return success(getRoomSnapshot(found.value.room));
+    participant.connected = false;
+    participant.disconnectedAt = now;
+
+    if ("disconnectDeadline" in participant) {
+      participant.disconnectDeadline = now + this.lifecycleLimits.disconnectGraceMs;
+      room.undoRequest = null;
+    }
+
+    room.updatedAt = now;
+    this.markRoomListed(room);
+
+    return success(getRoomSnapshot(room));
   }
 
   leaveRoom(roomCode: string, playerId: string): RoomResult<RoomSnapshot> {
@@ -710,10 +793,30 @@ export class RoomStore {
       room.spectators.splice(spectatorIndex, 1);
       room.updatedAt = this.now();
       this.markRoomListed(room);
-      return success(getRoomSnapshot(room));
+      return success(this.deleteIfEmpty(room) ?? getRoomSnapshot(room));
     }
 
-    return this.markDisconnected(roomCode, playerId);
+    const player = room.players.find((candidate) => candidate.id === playerId);
+
+    if (!player) {
+      return failure("not-room-member", "Player is not in this room.");
+    }
+
+    if (room.status === "playing") {
+      return this.markDisconnected(roomCode, playerId);
+    }
+
+    removePlayer(room, playerId);
+    room.undoRequest = null;
+    room.updatedAt = this.now();
+
+    if (room.status === "waiting" || room.status === "ready") {
+      updateRoomStatus(room, room.updatedAt);
+    }
+
+    this.markRoomListed(room);
+
+    return success(this.deleteIfEmpty(room) ?? getRoomSnapshot(room));
   }
 
   sendRoomChat(roomCode: string, playerId: string, text: string): RoomResult<RoomSnapshot> {
@@ -1043,6 +1146,19 @@ export class RoomStore {
     return true;
   }
 
+  private deleteIfEmpty(room: RoomState): RoomSnapshot | null {
+    if (room.players.length > 0 || room.spectators.length > 0) {
+      return null;
+    }
+
+    const snapshot = getRoomSnapshot(room);
+
+    this.rooms.delete(room.code);
+    this.nextLobbyVersion();
+
+    return snapshot;
+  }
+
   private markRoomListed(room: RoomState): void {
     room.listVersion = this.nextLobbyVersion();
   }
@@ -1109,8 +1225,54 @@ function getRoomListItem(room: RoomState): RoomListItem {
   };
 }
 
+function findAvailableSeat(room: RoomState, requestedSeat?: RoomPlayerSeat): RoomPlayerSeat | null {
+  const seats: RoomPlayerSeat[] = requestedSeat ? [requestedSeat] : ["black", "white"];
+
+  for (const seat of seats) {
+    const player = room.players.find((candidate) => candidate.seat === seat);
+
+    if (!player || (room.status === "finished" && !player.connected)) {
+      return seat;
+    }
+  }
+
+  return null;
+}
+
+function removePlayer(room: RoomState, playerId: string): RoomPlayer | null {
+  const playerIndex = room.players.findIndex((candidate) => candidate.id === playerId);
+
+  if (playerIndex < 0) {
+    return null;
+  }
+
+  const [player] = room.players.splice(playerIndex, 1);
+
+  if (!room.players.some((candidate) => candidate.seat === room.hostSeat)) {
+    room.hostSeat = room.players[0]?.seat ?? "black";
+  }
+
+  return player;
+}
+
+function removeSpectator(room: RoomState, playerId: string): RoomSpectator | null {
+  const spectatorIndex = room.spectators.findIndex((candidate) => candidate.id === playerId);
+
+  if (spectatorIndex < 0) {
+    return null;
+  }
+
+  const [spectator] = room.spectators.splice(spectatorIndex, 1);
+
+  return spectator;
+}
+
 function isRoomVisibleInLobby(room: RoomState, status: RoomListQuery["status"] = "all"): boolean {
   if (room.status === "abandoned") {
+    return false;
+  }
+
+  if (room.players.length === 0 && room.spectators.length === 0) {
     return false;
   }
 
@@ -1168,11 +1330,19 @@ function advanceRoomLifecycle(room: RoomState, now: number, limits: RoomLifecycl
 }
 
 function shouldDeleteRoom(room: RoomState, now: number, limits: RoomLifecycleLimits): boolean {
+  const participants = [...room.players, ...room.spectators];
+
+  if (participants.length === 0) {
+    return true;
+  }
+
+  if (room.status !== "playing" && participants.every((participant) => !participant.connected)) {
+    return true;
+  }
+
   if (room.status === "finished" || room.status === "abandoned") {
     return now - room.updatedAt >= limits.completedRoomTtlMs;
   }
-
-  const participants = [...room.players, ...room.spectators];
 
   if (
     room.status !== "playing" &&

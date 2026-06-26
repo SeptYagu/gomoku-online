@@ -78,7 +78,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const [nextPlayer, setNextPlayer] = useState<Stone>("black");
   const [status, setStatus] = useState<GameStatus>({ state: "playing", nextPlayer: "black" });
   const [moves, setMoves] = useState<Move[]>([]);
-  const [mode, setMode] = useState<GameMode>("local");
+  const [mode, setMode] = useState<GameMode>(() => getInitialGameMode());
   const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("normal");
   const [firstPlayer, setFirstPlayer] = useState<FirstPlayer>("human");
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -694,6 +694,14 @@ function createOpeningSeed(): number {
   return Math.floor(Math.random() * 0x1_0000_0000);
 }
 
+function getInitialGameMode(): GameMode {
+  if (typeof window === "undefined") {
+    return "local";
+  }
+
+  return new URLSearchParams(window.location.search).has("room") ? "room" : "local";
+}
+
 function FriendRoomControls({
   dictionary,
   room
@@ -851,6 +859,12 @@ function FriendRoomControls({
             <RotateCcw aria-hidden="true" focusable={false} />
             {labels.restartRoom}
           </button>
+          {room.canSit ? (
+            <button className="mode-pill" onClick={room.sitRoom} type="button">
+              <UserRound aria-hidden="true" focusable={false} />
+              {labels.sitDown}
+            </button>
+          ) : null}
           <button className="mode-pill" onClick={room.leaveRoom} type="button">
             <LogOut aria-hidden="true" focusable={false} />
             {labels.leaveRoom}

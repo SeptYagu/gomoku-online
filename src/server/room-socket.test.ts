@@ -326,6 +326,99 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("leaves the previous room when the same socket creates another room", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const host = await harness.connectClient();
+      const lobby = await harness.connectClient();
+
+      expect(await emitAck<RoomListAck>(lobby, "lobby:join", { limit: 20 })).toMatchObject({ ok: true });
+
+      const firstAck = await emitAck(host, "room:create", {
+        playerId: "host-player",
+        playerName: "Host"
+      });
+
+      if (!firstAck.ok) {
+        throw new Error(firstAck.error.message);
+      }
+
+      const firstRoomCode = firstAck.value.snapshot.code;
+      const lobbySawFirstDelete = waitForEventMatching<LobbyRoomDeletedEvent>(
+        lobby,
+        "lobby:room-deleted",
+        (event) => event.code === firstRoomCode
+      );
+      const secondAck = await emitAck(host, "room:create", {
+        playerId: "host-player",
+        playerName: "Host"
+      });
+
+      expect(secondAck.ok).toBe(true);
+      expect(secondAck.ok ? secondAck.value.snapshot.code : firstRoomCode).not.toBe(firstRoomCode);
+      expect(await lobbySawFirstDelete).toMatchObject({ code: firstRoomCode });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("lets spectators sit in an open player seat through Socket.IO", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+      const spectator = await harness.connectClient();
+
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "host-player",
+        playerName: "Host"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+
+      expect(
+        await emitAck(guest, "room:join", {
+          playerId: "guest-player",
+          playerName: "Guest",
+          roomCode
+        })
+      ).toMatchObject({ ok: true });
+      expect(
+        await emitAck(spectator, "room:join", {
+          playerId: "spectator-player",
+          playerName: "Watcher",
+          roomCode
+        })
+      ).toMatchObject({ ok: true, value: { role: "spectator" } });
+
+      expect(await emitAck(guest, "room:leave", { roomCode })).toMatchObject({ ok: true });
+
+      const hostSawSit = waitForEventMatching<RoomSnapshot>(
+        host,
+        "room:state",
+        (snapshot) => snapshot.players.some((player) => player.name === "Watcher" && player.seat === "white")
+      );
+      const sitAck = await emitAck(spectator, "room:sit", { roomCode });
+
+      expect(sitAck).toMatchObject({
+        ok: true,
+        value: {
+          role: "player",
+          seat: "white"
+        }
+      });
+      expect((await hostSawSit).spectators).toEqual([]);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("serves public chat and broadcasts messages", async () => {
     const harness = await createSocketHarness();
 

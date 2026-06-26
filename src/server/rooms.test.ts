@@ -79,6 +79,42 @@ describe("RoomStore", () => {
     });
   });
 
+  it("closes empty waiting rooms when the only player leaves", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+    const left = expectOk(store.leaveRoom(created.code, "player-1"));
+
+    expect(left.players).toEqual([]);
+    expect(left.spectators).toEqual([]);
+    expect(store.getSnapshot(created.code)).toMatchObject({
+      ok: false,
+      error: { code: "room-not-found" }
+    });
+    expect(store.listRooms().rooms).toEqual([]);
+  });
+
+  it("lets a spectator take an open waiting room player seat", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+
+    expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
+    expectOk(store.joinRoom(created.code, { playerId: "spectator-1", playerName: "Cara" }));
+    expectOk(store.leaveRoom(created.code, "player-2"));
+
+    const seated = expectOk(store.sitPlayer(created.code, "spectator-1"));
+
+    expect(seated.players).toEqual([
+      expect.objectContaining({ name: "Alice", seat: "black" }),
+      expect.objectContaining({ name: "Cara", seat: "white" })
+    ]);
+    expect(seated.spectators).toEqual([]);
+    expect(store.getParticipantRole(created.code, "spectator-1")).toEqual({
+      name: "Cara",
+      role: "player",
+      seat: "white"
+    });
+  });
+
   it("blocks spectators from player-only actions while keeping them connected to snapshots", () => {
     const { room, store } = createStartedRoom();
     const watched = expectOk(store.joinRoom(room.code, { playerId: "spectator-1", playerName: "Cara" }));
@@ -103,14 +139,11 @@ describe("RoomStore", () => {
 
     const disconnected = expectOk(store.markDisconnected(room.code, "spectator-1"));
 
-    expect(disconnected.spectators[0]).toMatchObject({ connected: false, name: "Cara" });
-
-    const reconnected = expectOk(
-      store.reconnectRoom(room.code, { playerId: "spectator-1", playerName: "Cara Back" })
-    );
-
-    expect(reconnected.spectators[0]).toMatchObject({ connected: true, name: "Cara Back" });
-    expect(expectOk(store.leaveRoom(room.code, "spectator-1")).spectators).toEqual([]);
+    expect(disconnected.spectators).toEqual([]);
+    expect(store.reconnectRoom(room.code, { playerId: "spectator-1", playerName: "Cara Back" })).toMatchObject({
+      ok: false,
+      error: { code: "not-room-member" }
+    });
   });
 
   it("exposes lobby room list summaries for waiting and watchable games", () => {

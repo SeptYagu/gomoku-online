@@ -368,3 +368,61 @@
   - `PASS create room URL - PN24UH`
   - `PASS copy invite - copied current URL`
   - `PASS leave room URL clear - http://gomoku.yagu.ddns-ip.net/en`
+
+## 阶段 3 联机回归修复：房间生命周期、补位和邀请链接
+
+状态：本地完成，待推送并等待真实服务器验证。
+
+触发问题：
+
+- 一台电脑多用户测试时，对局中离开后再加入提示房间不存在。
+- 对局中断线后 60 秒没有判胜负，断线玩家仍占座。
+- 观战席不能补入空玩家座位。
+- 邀请链接根路径先进入首页，未自动跳转并加入房间。
+- 房间里没有人时没有关房，同一个用户可以连续创建多个新房。
+
+实现：
+
+- `src/server/rooms.ts`
+  - 新增 `RoomStore.sitPlayer()`，允许观战者在非 `playing` 状态下补入空玩家座位。
+  - `markDisconnected()` 对观战者和非对局玩家立即释放席位；对局中玩家保留 60 秒断线宽限期。
+  - `leaveRoom()` 在非对局状态释放玩家/观战者，并在无人时立即删除房间。
+  - 同一房间无玩家、无观战者时立即从房间表和 lobby 中清理。
+  - `playing` 中断线超时后仍按在线对手胜、双方均离线则 abandoned 的规则结算。
+- `src/server/room-socket.ts`
+  - 新增 `room:sit` socket 事件。
+  - `room:create`、`room:join`、`room:rejoin` 在切换房间前先释放当前 socket 的旧房间身份，避免重复创建空房。
+- `src/app/(root)/page.tsx`
+  - 根路径重定向保留 query，支持 `/?room=ABC123` 进入 `/en?room=ABC123`。
+- `src/components/useFriendRoom.ts`
+  - URL 上带 `room` 时自动加入房间。
+  - 同浏览器多标签使用 session 级玩家身份，避免本机多游客互相挤掉身份。
+  - 加入遇到重复身份/重名时自动刷新游客身份后重试一次。
+  - 新增 `sitRoom()` 和 `canSit`。
+- `src/components/GameShell.tsx`
+  - URL 带 `room` 时首屏直接进入好友房模式。
+  - 房间工具栏新增入座按钮。
+- `tools/smoke-room-lifecycle.ts`
+  - 新增房间生命周期冒烟：重复创建关闭旧房、观战者补位、对局中断线 60 秒后判负。
+- `tools/smoke-share-url.ts`
+  - 新增根路径邀请链接自动进房验证。
+
+本地验证：
+
+- `npm test`：通过，5 个测试文件、66 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3034 npm start` 后运行 `npm run smoke:room-lifecycle -- http://127.0.0.1:3034`，通过。
+  - `PASS repeated create closes previous room - 63UE44 -> WYT2WW`
+  - `PASS spectator sits in open seat - 2ZGJPM`
+  - `PASS disconnect timeout forfeit - NNGYDS`
+- 本地生产服务：`npm run smoke:share-url -- http://127.0.0.1:3034`，通过。
+  - `PASS create room URL - DBPRJ7`
+  - `PASS invite link auto join - root URL preserved room`
+  - `PASS copy invite - copied current URL`
+  - `PASS leave room URL clear - http://127.0.0.1:3034/en`
+- 本地生产服务：`npm run smoke:online-room -- http://127.0.0.1:3034`，通过。
+- 本地生产服务：`npm run smoke:lobby-ui -- http://127.0.0.1:3034`，通过。
+- 本地生产服务：`npm run smoke:lobby -- http://127.0.0.1:3034`，通过。
+- 本地生产服务：`npm run smoke:room-chat -- http://127.0.0.1:3034`，通过。
+- 本地生产服务：`npm run smoke:public-chat -- http://127.0.0.1:3034`，通过。
