@@ -237,9 +237,11 @@ function writeJson(
 
 function parseLeaderboardQuery(url: URL): LeaderboardQuery {
   const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+  const identity = url.searchParams.get("identity");
   const scope = url.searchParams.get("scope");
 
   return {
+    identity: identity === "registered" || identity === "guest" || identity === "all" ? identity : undefined,
     limit: Number.isFinite(rawLimit) ? rawLimit : undefined,
     scope: scope === "overall" || scope === "daily" || scope === "streak" ? scope : undefined
   };

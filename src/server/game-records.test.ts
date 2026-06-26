@@ -87,8 +87,12 @@ describe("GameRecordStore", () => {
     store.submit(verifiedRecord, createSubmission(verifiedRecord, "player-2"));
     store.submit(partialRecord, createSubmission(partialRecord, "player-1"));
 
-    const overall = store.getLeaderboard({ scope: "overall" });
+    const registered = store.getLeaderboard({ scope: "overall" });
+    const overall = store.getLeaderboard({ identity: "guest", scope: "overall" });
 
+    expect(registered.identity).toBe("registered");
+    expect(registered.entries).toEqual([]);
+    expect(overall.identity).toBe("guest");
     expect(overall.scope).toBe("overall");
     expect(overall.entries).toEqual([
       expect.objectContaining({
@@ -110,15 +114,47 @@ describe("GameRecordStore", () => {
     ]);
     expect(overall.entries.some((entry) => entry.displayName === "Cara")).toBe(false);
 
-    expect(store.getLeaderboard({ scope: "daily" }).entries[0]).toMatchObject({
+    expect(store.getLeaderboard({ identity: "guest", scope: "daily" }).entries[0]).toMatchObject({
       dailyWins: 1,
       displayName: "Bob"
     });
-    expect(store.getLeaderboard({ scope: "streak" }).entries[0]).toMatchObject({
+    expect(store.getLeaderboard({ identity: "guest", scope: "streak" }).entries[0]).toMatchObject({
       currentStreak: 1,
       displayName: "Bob",
       maxStreak: 1
     });
+  });
+
+  it("separates registered, guest, and all leaderboard audiences", () => {
+    const store = new GameRecordStore({ now: createClock() });
+    const guestRecord = createAuthoritativeGameRecord();
+    const registeredRecord = createAuthoritativeGameRecord({
+      gameId: "ROOM03-1",
+      players: [
+        { identity: "registered", name: "Registered Alice", playerId: "acct_alice", seat: "black" },
+        { identity: "registered", name: "Registered Bob", playerId: "acct_bob", seat: "white" }
+      ],
+      roomCode: "ROOM03"
+    });
+
+    store.submit(guestRecord, createSubmission(guestRecord, "player-1"));
+    store.submit(guestRecord, createSubmission(guestRecord, "player-2"));
+    store.submit(registeredRecord, createSubmission(registeredRecord, "acct_alice"));
+    store.submit(registeredRecord, createSubmission(registeredRecord, "acct_bob"));
+
+    const defaultRegistered = store.getLeaderboard();
+    const guests = store.getLeaderboard({ identity: "guest" });
+    const all = store.getLeaderboard({ identity: "all" });
+
+    expect(defaultRegistered.identity).toBe("registered");
+    expect(defaultRegistered.entries.map((entry) => entry.identity)).toEqual(["registered", "registered"]);
+    expect(defaultRegistered.entries.map((entry) => entry.playerId)).toEqual(["acct_bob", "acct_alice"]);
+    expect(guests.identity).toBe("guest");
+    expect(guests.entries.map((entry) => entry.identity)).toEqual(["guest", "guest"]);
+    expect(guests.entries.map((entry) => entry.playerId)).toEqual(["player-2", "player-1"]);
+    expect(all.identity).toBe("all");
+    expect(all.entries).toHaveLength(4);
+    expect(new Set(all.entries.map((entry) => entry.identity))).toEqual(new Set(["guest", "registered"]));
   });
 });
 

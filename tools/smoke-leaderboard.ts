@@ -83,6 +83,9 @@ async function main(): Promise<void> {
     const streakGuest = streak.entries.find((entry) => entry.playerId === guestId);
     const overallHost = overall.entries.find((entry) => entry.playerId === hostId);
 
+    assert(overall.identity === "guest", "guest smoke should read the guest leaderboard");
+    assert(daily.identity === "guest", "guest daily smoke should read the guest leaderboard");
+    assert(streak.identity === "guest", "guest streak smoke should read the guest leaderboard");
     assert(overallGuest?.wins === 1, "winner should appear with one overall win");
     assert(overallGuest.rating > 1200, "winner rating should increase");
     assert(overallHost?.losses === 1, "loser should appear with one overall loss");
@@ -97,6 +100,7 @@ async function main(): Promise<void> {
 
 async function fetchLeaderboard(baseUrl: string, scope: "daily" | "overall" | "streak"): Promise<LeaderboardSnapshot> {
   const params = new URLSearchParams({
+    identity: "guest",
     limit: "100",
     scope
   });

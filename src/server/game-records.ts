@@ -102,8 +102,10 @@ export type PlayerProfileSnapshot = {
 };
 
 export type LeaderboardScope = "overall" | "daily" | "streak";
+export type LeaderboardIdentity = "all" | PlayerIdentityKind;
 
 export type LeaderboardQuery = {
+  identity?: LeaderboardIdentity;
   limit?: number;
   scope?: LeaderboardScope;
 };
@@ -114,7 +116,7 @@ export type LeaderboardEntry = {
   displayName: string;
   draws: number;
   games: number;
-  identity: "guest" | "registered";
+  identity: PlayerIdentityKind;
   lastPlayedAt: number;
   losses: number;
   maxStreak: number;
@@ -127,6 +129,7 @@ export type LeaderboardEntry = {
 export type LeaderboardSnapshot = {
   entries: LeaderboardEntry[];
   generatedAt: number;
+  identity: LeaderboardIdentity;
   scope: LeaderboardScope;
   version: number;
 };
@@ -161,8 +164,11 @@ export class GameRecordStore {
   }
 
   getLeaderboard(query: LeaderboardQuery = {}): LeaderboardSnapshot {
+    const identity = normalizeLeaderboardIdentity(query.identity);
     const scope = normalizeLeaderboardScope(query.scope);
-    const entries = calculateLeaderboardEntries([...this.records.values()], this.now());
+    const entries = calculateLeaderboardEntries([...this.records.values()], this.now()).filter(
+      (entry) => identity === "all" || entry.identity === identity
+    );
     const sortedEntries = sortLeaderboardEntries(entries, scope)
       .slice(0, clampLeaderboardLimit(query.limit))
       .map((entry, index) => ({
@@ -173,6 +179,7 @@ export class GameRecordStore {
     return {
       entries: sortedEntries,
       generatedAt: this.now(),
+      identity,
       scope,
       version: getLeaderboardVersion([...this.records.values()])
     };
@@ -571,6 +578,10 @@ function sortLeaderboardEntries(entries: LeaderboardEntry[], scope: LeaderboardS
 
 function normalizeLeaderboardScope(scope: LeaderboardScope | undefined): LeaderboardScope {
   return scope === "daily" || scope === "streak" || scope === "overall" ? scope : "overall";
+}
+
+function normalizeLeaderboardIdentity(identity: LeaderboardIdentity | undefined): LeaderboardIdentity {
+  return identity === "guest" || identity === "all" ? identity : "registered";
 }
 
 function clampLeaderboardLimit(limit: number | undefined): number {

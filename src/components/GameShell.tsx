@@ -36,6 +36,7 @@ import type {
   GameRecordFinishReason,
   GameRecordStatus,
   LeaderboardEntry,
+  LeaderboardIdentity,
   LeaderboardScope,
   PlayerGameRecordResult,
   PlayerGameRecordSummary
@@ -84,6 +85,7 @@ const AI_WORKER_TIMEOUT_GRACE_MS = 750;
 const AI_EMERGENCY_TIME_LIMIT_MS = 50;
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
 const LEADERBOARD_SCOPES: LeaderboardScope[] = ["overall", "daily", "streak"];
+const LEADERBOARD_IDENTITIES: LeaderboardIdentity[] = ["registered", "guest", "all"];
 
 export function GameShell({ dictionary, locale }: GameShellProps) {
   const [board, setBoard] = useState<Board>(() => createBoard());
@@ -784,31 +786,34 @@ function FriendRoomControls({
       </div>
 
       <div className="room-actions">
-        {room.canCancelMatch ? (
-          <button className="mode-pill danger" onClick={room.cancelMatch} type="button">
-            <X aria-hidden="true" focusable={false} />
-            {labels.cancelMatch}
-          </button>
-        ) : (
-          <button className="mode-pill" disabled={!room.canFindMatch} onClick={room.findMatch} type="button">
-            <Search aria-hidden="true" focusable={false} />
-            {room.matchmakingStatus === "searching" ? labels.matchmakingSearching : labels.findMatch}
-          </button>
-        )}
-        <button className="mode-pill" disabled={!room.canCreateRoom} onClick={room.createRoom} type="button">
-          <Wifi aria-hidden="true" focusable={false} />
-          {labels.createRoom}
-        </button>
-        <button className="mode-pill" onClick={room.joinRoom} type="button">
-          <LogOut aria-hidden="true" focusable={false} />
-          {labels.joinRoom}
-        </button>
         {snapshot ? (
           <button className="mode-pill" onClick={room.copyInvite} type="button">
             <Copy aria-hidden="true" focusable={false} />
             {room.copiedInvite ? labels.copied : labels.copyInvite}
           </button>
-        ) : null}
+        ) : (
+          <>
+            {room.canCancelMatch ? (
+              <button className="mode-pill danger" onClick={room.cancelMatch} type="button">
+                <X aria-hidden="true" focusable={false} />
+                {labels.cancelMatch}
+              </button>
+            ) : (
+              <button className="mode-pill" disabled={!room.canFindMatch} onClick={room.findMatch} type="button">
+                <Search aria-hidden="true" focusable={false} />
+                {room.matchmakingStatus === "searching" ? labels.matchmakingSearching : labels.findMatch}
+              </button>
+            )}
+            <button className="mode-pill" disabled={!room.canCreateRoom} onClick={room.createRoom} type="button">
+              <Wifi aria-hidden="true" focusable={false} />
+              {labels.createRoom}
+            </button>
+            <button className="mode-pill" onClick={room.joinRoom} type="button">
+              <LogOut aria-hidden="true" focusable={false} />
+              {labels.joinRoom}
+            </button>
+          </>
+        )}
       </div>
 
       <PublicChatPanel dictionary={dictionary} room={room} />
@@ -1106,11 +1111,27 @@ function LeaderboardPanel({
       <div className="room-leaderboard-header">
         <div>
           <p className="metric-label">{labels.leaderboard}</p>
-          <strong>{getLeaderboardScopeLabel(room.leaderboardScope, labels)}</strong>
+          <strong>
+            {getLeaderboardIdentityLabel(room.leaderboardIdentity, labels)} /{" "}
+            {getLeaderboardScopeLabel(room.leaderboardScope, labels)}
+          </strong>
         </div>
         <button className="icon-button" onClick={room.refreshLeaderboard} title={labels.refreshLeaderboard} type="button">
           <RefreshCw aria-hidden="true" focusable={false} />
         </button>
+      </div>
+
+      <div className="room-leaderboard-tabs" aria-label={labels.leaderboard}>
+        {LEADERBOARD_IDENTITIES.map((identity) => (
+          <button
+            className={`mode-pill ${room.leaderboardIdentity === identity ? "active" : ""}`}
+            key={identity}
+            onClick={() => room.setLeaderboardIdentity(identity)}
+            type="button"
+          >
+            {getLeaderboardIdentityLabel(identity, labels)}
+          </button>
+        ))}
       </div>
 
       <div className="room-leaderboard-tabs" aria-label={labels.leaderboard}>
@@ -1179,6 +1200,7 @@ function LeaderboardEntryItem({
         </p>
       </div>
       <div className="room-leaderboard-metrics">
+        <span>{getLeaderboardEntryIdentityLabel(entry.identity, labels)}</span>
         <span>{primaryMetric}</span>
         {scope === "overall" ? null : <span>{labels.leaderboardRating.replace("{rating}", String(entry.rating))}</span>}
       </div>
@@ -1549,6 +1571,21 @@ function getLeaderboardScopeLabel(scope: LeaderboardScope, labels: GameDictionar
   }
 
   return labels.leaderboardOverall;
+}
+
+function getLeaderboardIdentityLabel(identity: LeaderboardIdentity, labels: GameDictionary["room"]): string {
+  if (identity === "all") {
+    return labels.leaderboardAll;
+  }
+
+  return getLeaderboardEntryIdentityLabel(identity, labels);
+}
+
+function getLeaderboardEntryIdentityLabel(
+  identity: Exclude<LeaderboardIdentity, "all">,
+  labels: GameDictionary["room"]
+): string {
+  return identity === "registered" ? labels.leaderboardRegistered : labels.leaderboardGuests;
 }
 
 function formatRecordTime(finishedAt: number): string {

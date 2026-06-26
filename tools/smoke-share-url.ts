@@ -43,6 +43,7 @@ const STEP_TIMEOUT_MS = 20_000;
 async function main(): Promise<void> {
   const baseUrl = normalizeBaseUrl(process.argv[2] ?? DEFAULT_BASE_URL);
   const baseOrigin = new URL(baseUrl).origin;
+  const hostName = `Share Host ${Date.now().toString(36)}`;
   const chromePath = findChromePath();
   const port = await getFreePort();
   const userDataDir = await mkdtemp(path.join(tmpdir(), "gomoku-share-smoke-"));
@@ -64,6 +65,7 @@ async function main(): Promise<void> {
         .catch(() => undefined);
       await waitForRuntime(cdp);
       await clickButton(cdp, "Friend room");
+      await setPlayerName(cdp, hostName);
       await clickButton(cdp, "Create room");
 
       const roomUrl = await waitForValue(async () => {
@@ -73,6 +75,12 @@ async function main(): Promise<void> {
         return roomCode ? href : null;
       }, STEP_TIMEOUT_MS);
       const roomCode = new URL(roomUrl).searchParams.get("room") ?? "";
+
+      await assertCreateRoomUnavailable(cdp);
+      await assertHostRoomCount(baseUrl, hostName, 1);
+      await clickCreateRoomIfAvailable(cdp);
+      await sleep(750);
+      await assertHostRoomCount(baseUrl, hostName, 1);
 
       const inviteTargetUrl = await openBrowserTarget(port, `${baseOrigin}/?room=${roomCode}`);
       const inviteCdp = await CdpClient.connect(inviteTargetUrl);
@@ -91,9 +99,11 @@ async function main(): Promise<void> {
             : null;
         }, STEP_TIMEOUT_MS);
       } finally {
+        await inviteCdp.send("Page.close").catch(() => undefined);
         inviteCdp.close();
       }
 
+      await sleep(750);
       await cdp.send("Page.bringToFront").catch(() => undefined);
       await clickButton(cdp, "Copy invite");
       const copyState = await waitForValue(async () => {
@@ -122,11 +132,15 @@ async function main(): Promise<void> {
         return hasRoom ? null : href;
       }, STEP_TIMEOUT_MS);
 
+      await waitForRoomAbsent(baseUrl, roomCode);
+
       console.log(`Share URL smoke: ${baseUrl}`);
       console.log(`PASS create room URL - ${roomCode}`);
+      console.log("PASS create room locked while already in room");
       console.log("PASS invite link auto join - root URL preserved room");
       console.log("PASS copy invite - copied current URL");
       console.log(`PASS leave room URL clear - ${clearedUrl}`);
+      console.log(`PASS empty room closed after leave - ${roomCode}`);
     } finally {
       cdp.close();
     }
@@ -237,6 +251,61 @@ async function clickButton(cdp: CdpClient, text: string): Promise<void> {
   }
 }
 
+async function clickCreateRoomIfAvailable(cdp: CdpClient): Promise<void> {
+  await evaluate(
+    cdp,
+    `(() => {
+      const button = Array.from(document.querySelectorAll("button")).find((candidate) =>
+        (candidate.textContent || "").includes("Create room")
+      );
+
+      if (button && !button.disabled) {
+        button.click();
+      }
+    })()`
+  );
+}
+
+async function assertCreateRoomUnavailable(cdp: CdpClient): Promise<void> {
+  const state = await evaluate<{ disabled: boolean; found: boolean }>(
+    cdp,
+    `(() => {
+      const button = Array.from(document.querySelectorAll("button")).find((candidate) =>
+        (candidate.textContent || "").includes("Create room")
+      );
+
+      return { disabled: Boolean(button?.disabled), found: Boolean(button) };
+    })()`
+  );
+
+  if (state.found && !state.disabled) {
+    throw new Error("Create room button remained available after joining a room");
+  }
+}
+
+async function setPlayerName(cdp: CdpClient, value: string): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const input = document.querySelector(".room-field input");
+
+      if (!input) {
+        return { ok: false, detail: document.body.innerText };
+      }
+
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      valueSetter?.call(input, ${JSON.stringify(value)});
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+
+      return { ok: true, detail: input.value };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error("Could not set player name before creating room");
+  }
+}
+
 async function waitForRuntime(cdp: CdpClient): Promise<void> {
   await waitForValue(
     async () => {
@@ -248,6 +317,43 @@ async function waitForRuntime(cdp: CdpClient): Promise<void> {
       return ready ? true : null;
     },
     START_TIMEOUT_MS
+  );
+}
+
+async function assertHostRoomCount(baseUrl: string, hostName: string, expectedCount: number): Promise<void> {
+  const rooms = await fetchRoomList(baseUrl);
+  const count = rooms.filter((room) => room.hostName === hostName).length;
+
+  if (count !== expectedCount) {
+    throw new Error(`Expected ${expectedCount} rooms for ${hostName}, found ${count}`);
+  }
+}
+
+async function waitForRoomAbsent(baseUrl: string, roomCode: string): Promise<void> {
+  await waitForValue(async () => {
+    const rooms = await fetchRoomList(baseUrl);
+
+    return rooms.some((room) => room.code === roomCode) ? null : true;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function fetchRoomList(baseUrl: string): Promise<Array<{ code: string; hostName: string }>> {
+  const response = await fetch(`${baseUrl}/api/rooms?limit=100`, {
+    headers: {
+      "accept": "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`GET /api/rooms failed: ${response.status}`);
+  }
+
+  const snapshot = (await response.json()) as { rooms?: Array<{ code?: unknown; hostName?: unknown }> };
+
+  return (snapshot.rooms ?? []).flatMap((room) =>
+    typeof room.code === "string" && typeof room.hostName === "string"
+      ? [{ code: room.code, hostName: room.hostName }]
+      : []
   );
 }
 
@@ -265,6 +371,10 @@ async function waitForValue<T>(read: () => Promise<T | null>, timeoutMs: number)
   }
 
   throw new Error("Timed out waiting for condition");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeBaseUrl(input: string): string {

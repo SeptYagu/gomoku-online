@@ -106,7 +106,7 @@ npm run verify:online -- http://gomoku.yagu.ddns-ip.net <expected-version>
 npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net
 ```
 
-分享链接改动可用系统 Chrome 做真实页面冒烟：
+分享链接改动可用系统 Chrome 做真实页面冒烟；该脚本也会检查入房后不能继续创建新房、离开后空房会关闭：
 
 ```bash
 npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net
@@ -170,6 +170,12 @@ npm run smoke:profile-page -- http://gomoku.yagu.ddns-ip.net
 
 ```bash
 npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net
+```
+
+注册用户/游客排行榜隔离可跑 Socket.IO + REST 冒烟，确认注册榜、游客榜和全部榜不会串榜：
+
+```bash
+npm run smoke:leaderboard-audience -- http://gomoku.yagu.ddns-ip.net
 ```
 
 账号身份第一版可跑 REST + Socket.IO 冒烟，确认注册账号、账号 token、注册玩家对局棋谱、Profile 和排行榜身份归属：

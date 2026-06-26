@@ -28,6 +28,7 @@
     "smoke:profile-records": "tsx tools/smoke-profile-records.ts",
     "smoke:profile-page": "tsx tools/smoke-profile-page.ts",
     "smoke:leaderboard": "tsx tools/smoke-leaderboard.ts",
+    "smoke:leaderboard-audience": "tsx tools/smoke-leaderboard-audience.ts",
     "smoke:account": "tsx tools/smoke-account.ts",
     "verify:online": "tsx tools/verify-online-server.ts"
   },

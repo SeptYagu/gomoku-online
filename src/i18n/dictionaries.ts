@@ -56,11 +56,14 @@ export type GameDictionary = {
     guestAccount: string;
     joinRoom: string;
     leaderboard: string;
+    leaderboardAll: string;
     leaderboardDaily: string;
+    leaderboardGuests: string;
     leaderboardNoEntries: string;
     leaderboardOverall: string;
     leaderboardRating: string;
     leaderboardRecord: string;
+    leaderboardRegistered: string;
     leaderboardStreak: string;
     leaderboardStreakValue: string;
     leaderboardTodayWins: string;
@@ -223,11 +226,14 @@ const en = {
       guestAccount: "Guest",
       joinRoom: "Join room",
       leaderboard: "Rankings",
+      leaderboardAll: "All",
       leaderboardDaily: "Today",
+      leaderboardGuests: "Guests",
       leaderboardNoEntries: "No ranked games yet",
       leaderboardOverall: "Overall",
       leaderboardRating: "Rating {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardRegistered: "Registered",
       leaderboardStreak: "Streak",
       leaderboardStreakValue: "Streak {count}",
       leaderboardTodayWins: "Today {count}",
@@ -386,11 +392,14 @@ const zh = {
       guestAccount: "游客",
       joinRoom: "加入房间",
       leaderboard: "排行榜",
+      leaderboardAll: "全部",
       leaderboardDaily: "今日",
+      leaderboardGuests: "游客",
       leaderboardNoEntries: "暂无排行",
       leaderboardOverall: "总榜",
       leaderboardRating: "积分 {rating}",
       leaderboardRecord: "{wins}胜 {losses}负 {draws}和",
+      leaderboardRegistered: "注册",
       leaderboardStreak: "连胜",
       leaderboardStreakValue: "连胜 {count}",
       leaderboardTodayWins: "今日胜 {count}",
@@ -549,11 +558,14 @@ const fr = {
       guestAccount: "Invité",
       joinRoom: "Rejoindre",
       leaderboard: "Classement",
+      leaderboardAll: "Tous",
       leaderboardDaily: "Aujourd'hui",
+      leaderboardGuests: "Invités",
       leaderboardNoEntries: "Aucun classement",
       leaderboardOverall: "Global",
       leaderboardRating: "Score {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardRegistered: "Inscrits",
       leaderboardStreak: "Série",
       leaderboardStreakValue: "Série {count}",
       leaderboardTodayWins: "Jour {count}",
@@ -712,11 +724,14 @@ const es = {
       guestAccount: "Invitado",
       joinRoom: "Unirse",
       leaderboard: "Ranking",
+      leaderboardAll: "Todos",
       leaderboardDaily: "Hoy",
+      leaderboardGuests: "Invitados",
       leaderboardNoEntries: "Sin ranking",
       leaderboardOverall: "General",
       leaderboardRating: "Puntos {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardRegistered: "Registrados",
       leaderboardStreak: "Racha",
       leaderboardStreakValue: "Racha {count}",
       leaderboardTodayWins: "Hoy {count}",
@@ -875,11 +890,14 @@ const ru = {
       guestAccount: "Гость",
       joinRoom: "Войти",
       leaderboard: "Рейтинг",
+      leaderboardAll: "Все",
       leaderboardDaily: "Сегодня",
+      leaderboardGuests: "Гости",
       leaderboardNoEntries: "Рейтинга пока нет",
       leaderboardOverall: "Общий",
       leaderboardRating: "Рейтинг {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardRegistered: "Зарегистр.",
       leaderboardStreak: "Серия",
       leaderboardStreakValue: "Серия {count}",
       leaderboardTodayWins: "Сегодня {count}",
@@ -1038,11 +1056,14 @@ const ar = {
       guestAccount: "ضيف",
       joinRoom: "انضمام",
       leaderboard: "الترتيب",
+      leaderboardAll: "الكل",
       leaderboardDaily: "اليوم",
+      leaderboardGuests: "ضيوف",
       leaderboardNoEntries: "لا يوجد ترتيب",
       leaderboardOverall: "عام",
       leaderboardRating: "التقييم {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
+      leaderboardRegistered: "مسجلون",
       leaderboardStreak: "سلسلة",
       leaderboardStreakValue: "سلسلة {count}",
       leaderboardTodayWins: "اليوم {count}",

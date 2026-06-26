@@ -1049,3 +1049,73 @@
 下一步：
 
 - 阶段 3 继续推进注册用户和游客排行榜隔离、棋谱逐手回放、棋谱导出与开局库准备。
+
+## 小步 14：注册用户 / 游客排行榜隔离与创建房 UI 收口
+
+状态：本地完成，待提交、推送和真实服务器验证。
+
+目标：
+
+- 正式注册用户 Ranking 与游客棋谱 Ranking 分开，避免游客棋谱混入注册玩家榜。
+- 保留 `all` 总览用于调试和后续总体分析。
+- 用户进入房间后，页面不再展示“创建房间 / 加入房间”入口，避免在同一页面连续创建多个新房的误操作。
+- 分享 URL 冒烟补充真实页面检查：入房后创建入口不可再次触发，离开后空房关闭。
+
+实现：
+
+- `src/server/game-records.ts`
+  - 新增 `LeaderboardIdentity = registered | guest | all`。
+  - `getLeaderboard()` 默认返回 `registered` 榜。
+  - `identity=guest` 只返回游客条目，`identity=all` 返回注册用户和游客合并结果。
+- `src/server/online-server.ts`
+  - `/api/leaderboard` 新增 `identity` 查询参数。
+- `src/components/useFriendRoom.ts`
+  - 新增 `leaderboardIdentity` 状态，默认 `registered`。
+  - `refreshLeaderboard()` 请求带上 `identity`。
+- `src/components/GameShell.tsx`
+  - Rankings 面板新增 Registered / Guests / All 分栏，并保留 Overall / Today / Streak。
+  - 入房后顶部入口区只保留 Copy invite；创建、找局、加入只在未入房时显示。
+  - 排行榜条目显示来源身份，并继续链接到 Profile。
+- `src/i18n/dictionaries.ts`
+  - 六语言新增排行榜身份分栏文案。
+- `tools/smoke-leaderboard-audience.ts`、`package.json`、`README.md`
+  - 新增 `npm run smoke:leaderboard-audience`，同轮创建游客棋谱和注册棋谱，验证 registered / guest / all 三种榜单。
+- `tools/smoke-leaderboard.ts`
+  - 显式读取 `identity=guest`。
+- `tools/smoke-account.ts`
+  - 显式读取 `identity=registered`。
+- `tools/smoke-share-url.ts`
+  - 设置唯一 hostName 后用真实页面创建房。
+  - 验证入房后 Create room 不可再次触发。
+  - 验证同一 hostName 只留下一个房间。
+  - 关闭邀请页、host 离开后，验证空房从 `/api/rooms` 消失。
+
+本地验证：
+
+- `npm test`：通过，7 个测试文件、87 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3043 npm run start:online`。
+- `npm run smoke:share-url -- http://127.0.0.1:3043`：通过。
+  - `PASS create room URL - PXRK5F`
+  - `PASS create room locked while already in room`
+  - `PASS empty room closed after leave - PXRK5F`
+- `npm run smoke:room-lifecycle -- http://127.0.0.1:3043`：通过。
+  - `PASS repeated create closes previous room - NZKE7A -> XCA6NV`
+  - `PASS same player create closes previous room - XHHG7T -> 6A7ZZM`
+  - `PASS empty waiting room closes on disconnect - 64BLJC`
+  - `PASS disconnect timeout forfeit - RBAX78`
+- `npm run smoke:leaderboard-audience -- http://127.0.0.1:3043`：通过。
+  - `PASS guest ranked record - 9LAVQW-1`
+  - `PASS registered ranked record - PA4THQ-1`
+  - `PASS leaderboard audience split`
+- `npm run smoke:leaderboard -- http://127.0.0.1:3043`：通过。
+  - `PASS leaderboard readback - XM4CDG-1`
+- `npm run smoke:account -- http://127.0.0.1:3043`：通过。
+  - `PASS registered record verified - X8ZDNB-1`
+  - `PASS registered leaderboard readback`
+
+下一步：
+
+- 提交并推送本轮小步 14。
+- 等待真实服务器更新后运行 `verify:online`、`smoke:share-url`、`smoke:room-lifecycle`、`smoke:leaderboard-audience`、`smoke:leaderboard` 和 `smoke:account`。

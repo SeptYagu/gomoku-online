@@ -3042,3 +3042,64 @@ b6faf9e
 下一步：
 
 - 阶段 3 继续推进注册用户和游客排行榜隔离、棋谱逐手回放、棋谱导出与开局库准备。
+
+## 62. 2026-06-25 阶段 3 小步 14 本地完成：注册/游客排行榜隔离与创建房 UI 收口
+
+本轮目标：
+
+- 按阶段 3 主线推进注册用户和游客排行榜隔离。
+- 回应用户反馈：“房间里没有人的话需要关房；页面上可以一直点创建新房”。
+- 保持 handoff 追加规则，不修改过去窗口记录。
+
+实现记录：
+
+- `src/server/game-records.ts`
+  - 新增 `LeaderboardIdentity = registered | guest | all`。
+  - `getLeaderboard()` 默认 `registered`，避免游客棋谱混入正式注册用户 Ranking。
+  - `identity=guest` 返回游客榜，`identity=all` 返回合并榜。
+- `src/server/online-server.ts`
+  - `/api/leaderboard` 新增 `identity` 查询参数。
+- `src/components/useFriendRoom.ts`
+  - 新增 `leaderboardIdentity` 状态和 setter。
+  - `refreshLeaderboard()` 带 `identity`。
+- `src/components/GameShell.tsx`
+  - Rankings 面板新增 Registered / Guests / All 分栏。
+  - 入房后顶部入口区只显示 Copy invite；Create / Find / Join 只在未入房时显示。
+  - 排行榜条目显示注册/游客来源身份，并继续链接到 Profile。
+- `src/i18n/dictionaries.ts`
+  - 六语言补齐排行榜身份分栏文案。
+- `tools/smoke-leaderboard-audience.ts`
+  - 新增注册/游客/全部榜隔离冒烟。
+- `tools/smoke-share-url.ts`
+  - 增强真实页面冒烟：创建后不能再次触发创建；同一 hostName 只保留一个房间；host 离开后空房从 `/api/rooms` 消失。
+- `tools/smoke-leaderboard.ts`
+  - 显式读取 `identity=guest`。
+- `tools/smoke-account.ts`
+  - 显式读取 `identity=registered`。
+- `README.md`、`docs/STAGE_3_PROGRESS.md`、`docs/logic/rating-leaderboard-module.md`
+  - 记录新 smoke 命令、排行榜身份参数和本地验证结果。
+
+本地验证：
+
+- `npm test`：通过，7 个测试文件、87 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- 本地生产服务：`PORT=3043 npm run start:online`。
+- `npm run smoke:share-url -- http://127.0.0.1:3043`：通过。
+  - `PASS create room locked while already in room`
+  - `PASS empty room closed after leave - PXRK5F`
+- `npm run smoke:room-lifecycle -- http://127.0.0.1:3043`：通过。
+  - `PASS repeated create closes previous room - NZKE7A -> XCA6NV`
+  - `PASS same player create closes previous room - XHHG7T -> 6A7ZZM`
+  - `PASS empty waiting room closes on disconnect - 64BLJC`
+  - `PASS disconnect timeout forfeit - RBAX78`
+- `npm run smoke:leaderboard-audience -- http://127.0.0.1:3043`：通过。
+  - `PASS leaderboard audience split`
+- `npm run smoke:leaderboard -- http://127.0.0.1:3043`：通过。
+- `npm run smoke:account -- http://127.0.0.1:3043`：通过。
+
+当前截止：
+
+- 最新提交：待本轮提交生成。
+- 是否已推送：待提交后推送到 `origin/main`。
+- 下一步：提交并推送，等待真实服务器更新后跑 `verify:online`、`smoke:share-url`、`smoke:room-lifecycle`、`smoke:leaderboard-audience`、`smoke:leaderboard` 和 `smoke:account`。

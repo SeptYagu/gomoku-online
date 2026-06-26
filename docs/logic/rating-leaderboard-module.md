@@ -508,3 +508,25 @@ Game 增加：
 - 棋谱导出和开局库生成入口。
 - 正式邮箱/密码/OAuth 登录。
 - 账号改名、合并、注销和 token 轮换。
+
+## 当前落地：注册用户 / 游客排行榜隔离（2026-06-25）
+
+本轮推进 Ranking 的身份分栏：
+
+- `GET /api/leaderboard` 新增 `identity=registered|guest|all`。
+- 默认榜单为 `registered`，用于正式注册玩家 Ranking。
+- `identity=guest` 单独展示游客棋谱计算出的游客榜。
+- `identity=all` 用于调试和总体回看，会合并注册用户与游客。
+- 好友房 Rankings 面板新增 Registered / Guests / All 分栏，并保留 Overall / Today / Streak 切换。
+- 排行榜条目显示来源身份，并继续链接到对应 Profile。
+- `npm run smoke:leaderboard` 显式验证游客榜。
+- `npm run smoke:account` 显式验证注册榜。
+- `npm run smoke:leaderboard-audience` 同轮造游客棋谱和注册棋谱，验证三种榜单不会串榜。
+
+仍保留到后续小步：
+
+- 排行榜分页、搜索和增量事件。
+- 棋谱逐手回放。
+- 棋谱导出和开局库生成入口。
+- 正式邮箱/密码/OAuth 登录。
+- 账号改名、合并、注销和 token 轮换。
