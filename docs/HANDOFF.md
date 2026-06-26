@@ -2061,3 +2061,39 @@ b6faf9e
 - 最新提交：待本轮提交生成。
 - 是否已推送：待提交后推送到 `origin/main`。
 - 下一步：提交并推送小步 6，等待真实服务器更新后跑 `verify:online`、`smoke:public-chat`、`smoke:room-chat`、`smoke:lobby-ui`、`smoke:online-room`、`smoke:lobby` 和 `smoke:share-url`。
+
+## 44. 2026-06-25 阶段 3 小步 6 线上验证补记
+
+本轮目标：
+
+- 保持 handoff 后续交接记录只从文件末尾追加。
+- 补记小步 6 推送和真实服务器验证结果。
+
+实际结果：
+
+- 阶段 3 小步 6 公共聊天频道提交：`3c37afb Implement stage 3 public chat`。
+- `3c37afb` 已推送到 `origin/main`。
+- 推送后等待 90 秒，真实服务器显示 `version 3c37afb`。
+- `npm run verify:online -- http://gomoku.yagu.ddns-ip.net 3c37afb`：通过。
+- `npm run smoke:public-chat -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - `PASS public chat join - 0 messages`
+  - `PASS public chat broadcast`
+  - `PASS public chat rate limit - chat-rate-limited`
+  - `PASS public empty chat rejected - chat-message-empty`
+  - `PASS public long chat rejected - chat-message-too-long`
+- `npm run smoke:room-chat -- http://gomoku.yagu.ddns-ip.net`：通过，房间聊天无回归。
+- `npm run smoke:lobby-ui -- http://gomoku.yagu.ddns-ip.net`：通过，房间列表 UI 无回归。
+- `npm run smoke:online-room -- http://gomoku.yagu.ddns-ip.net`：通过，三客户端三局好友房流程无回归，覆盖换先、观战、悔棋允许/拒绝、同局面拒绝后禁止连续请求和认输。
+- `npm run smoke:lobby -- http://gomoku.yagu.ddns-ip.net`：通过，lobby REST/socket 无回归。
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过，分享 URL 行为无回归。
+- `docs/STAGE_3_PROGRESS.md` 已更新小步 6 为完成并通过真实服务器验证。
+
+当前阶段 3 状态：
+
+- 小步 1：真实分享链接，完成并通过真实服务器验证。
+- 小步 2：观战席，完成并通过真实服务器验证。
+- 小步 3：房间列表 API 和 lobby socket channel，完成并通过真实服务器验证。
+- 小步 4：房间列表 UI：Join / Watch，完成并通过真实服务器验证。
+- 小步 5：房间聊天频道，完成并通过真实服务器验证。
+- 小步 6：公共聊天频道，完成并通过真实服务器验证。
+- 下一步：小步 7，随机匹配。
