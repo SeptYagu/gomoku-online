@@ -4197,3 +4197,40 @@ b6faf9e
 - `git diff --cached --check`：通过。
 - staged diff 疑似密钥扫描：未发现匹配项。
 - 下一步创建实现提交并推送 `main`，随后以该提交 hash 检查自动部署。
+
+### 实现提交、部署与线上验证
+
+提交与推送：
+
+- 实现提交：`a9f2ccd Harden online identity and authoritative records`。
+- `git push origin main`：成功，`e8b0771..a9f2ccd`。
+- 推送后工作树只剩未跟踪 `.codex/`，没有遗漏的产品文件。
+
+部署等待：
+
+- 推送后立即运行 `verify:online`：页面、Socket.IO polling、WebSocket 通过，但线上版本仍为旧的 `e8b0771`。
+- 30 秒后第二次检查：仍为 `e8b0771`，服务入口继续正常。
+- 再等待约 30 秒，`npm run verify:online -- http://gomoku.yagu.ddns-ip.net a9f2ccd`：全部通过。
+  - 页面加载：通过。
+  - `/api/version`：`a9f2ccd`。
+  - Socket.IO polling：通过。
+  - Socket.IO WebSocket：通过。
+
+线上关键路径回归：
+
+- `npm run smoke:share-url -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - 创建/邀请/复制/离房清理通过。
+  - 注册账号在全新邀请页先恢复账号身份，再自动加入房间；未以 guest 错误入房。
+- `npm run smoke:game-records -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - 服务端权威终局在任一客户端审计前已经进入排行榜。
+  - 首次/第二次审计和重复提交去重通过。
+- `npm run smoke:leaderboard -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - verified 记录、榜单读回、搜索和分页通过。
+- `npm run smoke:room-lifecycle -- http://gomoku.yagu.ddns-ip.net`：通过。
+  - 重复创建复用当前房、同玩家携带 token 跨 socket 关闭旧房、同名不同 guest session、空房关闭、观战补位均通过。
+  - 真实等待 60 秒的断线超时判负通过。
+
+最终判断：
+
+- 本轮安全、权威数据、身份竞态、资源增长和排行榜请求/计算问题已经在 `a9f2ccd` 部署并通过对应线上回归。
+- 本次只再提交这段 handoff 验证记录；不改产品代码，不纳入 `.codex/`。
