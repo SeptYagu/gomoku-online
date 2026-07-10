@@ -4753,3 +4753,10 @@ b6faf9e
 1. 最终 `npm run lint`、15 文件/144 测试、`npm audit --omit=dev`、`git diff --check` 全部通过。
 2. 停止并核对无本仓库 online-server 子进程后，按已验证的工作区路径清理 `.next`，最终 `npm run build` 编译、TypeScript 和 11 页面生成通过。
 3. `.codex/validation/ix03` 四张截图继续作为未跟踪证据排除；当前工作区下一步只应暂存 IX-03 代码、smoke 和文档。
+
+### IX-03 提交与推送
+
+- 提交：`14c95f9 feat: add responsive online table sidebar`。
+- 提交范围：15 个文件，937 行新增、115 行删除；包含桌边栏/页签/聊天组件、响应式与 RTL 样式、两份 UI smoke 更新、六语种文案、验证报告与计划同步。
+- `git push origin main`：成功，`dd74769..14c95f9`。
+- 本段作为单独 handoff 记录提交后再次推送；持续目标继续进入 IX-04。
