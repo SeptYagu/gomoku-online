@@ -4477,3 +4477,11 @@ b6faf9e
 - 当前创建房没有 visibility/private/inviteCode，都会进入公开大厅；“朋友桌”已更正为公开链接房，真正私密房拆为服务端可见性/授权全栈任务。
 - 当前 Cancel Match 按钮实际不可达：`canCancelMatch=true` 要求已有 snapshot，但按钮只在无 snapshot 分支渲染。计划已把可达的“取消等待/退出”列为 IX-04 明确任务。
 - 最终更正项由 16 组增加为 22 组，核验报告已同步。
+
+### 核验提交与推送
+
+- 提交：`3d6993a docs: verify interaction redesign plan`。
+- `git push origin main`：成功，`748c52f..3d6993a`。
+- 提交范围仅为计划更正、真实性核验报告和本 handoff，共 308 行新增、40 行删除。
+- `git diff --cached --check`：通过；仅有 Windows 工作区 LF/CRLF 转换提示。
+- 疑似密钥扫描无匹配；`.codex/` 未暂存。
