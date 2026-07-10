@@ -1,6 +1,6 @@
 # 大厅与匹配模块逻辑
 
-更新日期：2026-06-23
+更新日期：2026-07-10
 
 ## 参考来源
 
@@ -306,6 +306,15 @@ Custom Game：
   - `tools/smoke-room-chat.ts` 覆盖玩家/观战者发言、房内广播、频率限制、空/超长消息和非成员拒绝。
 
 ## 六语种文案 key
+
+### 2026-07-10 IX-01 前端工作区边界
+
+- 在线大厅现在由 `OnlineLobbyView` 单独承载身份、快速匹配、创建/加入、公共聊天、Presence、Profile 摘要、排行榜和公开房间列表。
+- 已进入房间后改为只渲染 `GameTableView`；大厅专属内容不再与房间摘要、玩家、房间聊天、桌内动作和棋盘同时出现。
+- `OnlineJoiningView` 作为邀请 URL 和 stored-session 恢复期间的等待门；成功 ack 直接进入牌桌，失败才回到大厅并显示错误。
+- `useFriendRoom({ enabled })` 的自动 rejoin 只在在线模式启用；真实 Chrome smoke 已验证应用初始 local 及切换 AI 时没有 `/socket.io` Resource Timing 记录，进入在线模式后才执行大厅订阅。
+- 本阶段只重组既有入口，没有改变 `lobby:join`、`lobby:room-updated`、`lobby:room-deleted`、`matchmaking:find`、`room:join` 或 URL/session 契约。
+- 入口主次、空大厅降级、Profile/排行榜下沉和真正的 unlisted 朋友桌仍分别属于 `IX-04`、`IX-04B`，不能把本次视图拆分描述成这些能力已经完成。
 
 大厅与匹配至少需要：
 

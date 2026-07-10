@@ -1,28 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Bot,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  CircleDot,
-  Copy,
-  Eye,
-  Flag,
-  LogIn,
-  LogOut,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  Send,
-  Trophy,
-  Undo2,
-  UserRound,
-  Users,
-  Wifi,
-  X
-} from "lucide-react";
+import { Bot, CircleDot, Users, Wifi } from "lucide-react";
 import {
   chooseAiMove,
   getAiTimeLimitMs,
@@ -34,29 +13,20 @@ import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/boar
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
-import type {
-  GameRecordFinishReason,
-  GameRecordStatus,
-  LeaderboardEntry,
-  LeaderboardIdentity,
-  LeaderboardScope,
-  PlayerGameRecordResult,
-  PlayerGameRecordSummary
-} from "@/server/game-records";
-import type { PresenceStatus, RoomSnapshot, UndoRequestSnapshot, UserPresenceSnapshot } from "@/server/rooms";
-import { GomokuBoard } from "./GomokuBoard";
+import type { RoomSnapshot } from "@/server/rooms";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
-import { getProfileUrl } from "./profile/profile-url";
+import { GameTableView } from "./online/GameTableView";
+import { OnlineJoiningView, OnlineLobbyView } from "./online/OnlineLobbyView";
+import { deriveGameWorkspace, isOnlineWorkspaceEnabled, type GameMode } from "./online/workspace-state";
+import { AiGameView, type FirstPlayer } from "./play/AiGameView";
+import { LocalGameView } from "./play/LocalGameView";
 import { useFriendRoom, type FriendRoomController } from "./useFriendRoom";
 
 type GameShellProps = {
   dictionary: GameDictionary;
   locale: Locale;
 };
-
-type GameMode = "local" | "ai" | "room";
-type FirstPlayer = "human" | "ai";
 
 type GameSnapshot = {
   board: Board;
@@ -82,12 +52,9 @@ type AiWorkerDoneResult = {
   source: AiMoveSource;
 };
 
-const AI_DIFFICULTIES: AiDifficulty[] = ["normal", "hard", "expert", "insane"];
 const AI_WORKER_TIMEOUT_GRACE_MS = 750;
 const AI_EMERGENCY_TIME_LIMIT_MS = 50;
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
-const LEADERBOARD_SCOPES: LeaderboardScope[] = ["overall", "daily", "streak"];
-const LEADERBOARD_IDENTITIES: LeaderboardIdentity[] = ["registered", "guest", "all"];
 
 export function GameShell({ dictionary, locale }: GameShellProps) {
   const [board, setBoard] = useState<Board>(() => createBoard());
@@ -102,7 +69,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const aiWorkerTimeoutRef = useRef<number | null>(null);
   const aiRequestIdRef = useRef(0);
   const openingSeedRef = useRef(createOpeningSeed());
-  const friendRoom = useFriendRoom();
+  const friendRoom = useFriendRoom({ enabled: isOnlineWorkspaceEnabled(mode) });
 
   function resetGame({
     nextMode = mode,
@@ -401,8 +368,13 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   }
 
   const roomSnapshot = friendRoom.room?.snapshot ?? null;
+  const workspace = deriveGameWorkspace({
+    hasRoom: roomSnapshot !== null,
+    isJoiningRoom: friendRoom.isJoiningRoom,
+    mode
+  });
   const activeBoard = mode === "room" && roomSnapshot ? roomSnapshot.board : board;
-  const activeMoves = mode === "room" && roomSnapshot ? roomSnapshot.moves : moves;
+  const activeMoves = mode === "room" ? (roomSnapshot?.moves ?? []) : moves;
   const activeStatus = mode === "room" ? getRoomGameStatus(roomSnapshot) : status;
   const activeNextPlayer =
     activeStatus.state === "playing" ? activeStatus.nextPlayer : (activeMoves.at(-1)?.stone ?? "black");
@@ -448,7 +420,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             className={`mode-pill ${mode === "local" ? "active" : ""}`}
             type="button"
             onClick={() => handleModeChange("local")}
-            disabled={isAiThinking}
+            disabled={isAiThinking || friendRoom.isJoiningRoom}
           >
             <Users aria-hidden="true" focusable={false} />
             {dictionary.modes.local}
@@ -457,7 +429,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             className={`mode-pill ${mode === "ai" ? "active" : ""}`}
             type="button"
             onClick={() => handleModeChange("ai")}
-            disabled={isAiThinking}
+            disabled={isAiThinking || friendRoom.isJoiningRoom}
           >
             <Bot aria-hidden="true" focusable={false} />
             {dictionary.modes.ai}
@@ -466,83 +438,68 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             className={`mode-pill ${mode === "room" ? "active" : ""}`}
             type="button"
             onClick={() => handleModeChange("room")}
-            disabled={isAiThinking}
+            disabled={isAiThinking || friendRoom.isJoiningRoom}
           >
             <Wifi aria-hidden="true" focusable={false} />
             {dictionary.modes.room}
           </button>
         </div>
 
-        {mode === "ai" ? (
-          <div className="difficulty-strip" aria-label={dictionary.ai.firstPlayerLabel}>
-            <button
-              className={`mode-pill ${firstPlayer === "human" ? "active" : ""}`}
-              type="button"
-              onClick={() => handleFirstPlayerChange("human")}
-              disabled={isAiThinking}
-            >
-              <UserRound aria-hidden="true" focusable={false} />
-              {dictionary.ai.humanFirst}
-            </button>
-            <button
-              className={`mode-pill ${firstPlayer === "ai" ? "active" : ""}`}
-              type="button"
-              onClick={() => handleFirstPlayerChange("ai")}
-              disabled={isAiThinking}
-            >
-              <Bot aria-hidden="true" focusable={false} />
-              {dictionary.ai.aiFirst}
-            </button>
-          </div>
-        ) : null}
-
-        {mode === "ai" ? (
-          <div className="difficulty-strip" aria-label={dictionary.ai.difficultyLabel}>
-            {AI_DIFFICULTIES.map((difficulty) => (
-              <button
-                className={`mode-pill ${aiDifficulty === difficulty ? "active" : ""}`}
-                key={difficulty}
-                type="button"
-                onClick={() => handleDifficultyChange(difficulty)}
-                disabled={isAiThinking}
-              >
-                <CircleDot aria-hidden="true" focusable={false} />
-                {dictionary.ai[difficulty]}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {mode !== "room" ? (
-          <div className="game-actions">
-            <button className="mode-pill" disabled={!canUndo} onClick={handleUndo} type="button">
-              <Undo2 aria-hidden="true" focusable={false} />
-              {dictionary.controls.undo}
-            </button>
-            <button className="mode-pill" disabled={isAiThinking} onClick={() => resetGame()} type="button">
-              <RotateCcw aria-hidden="true" focusable={false} />
-              {dictionary.controls.reset}
-            </button>
-          </div>
-        ) : null}
-
-        {mode === "room" ? <FriendRoomControls dictionary={dictionary} locale={locale} room={friendRoom} /> : null}
-
-        <div className="play-area">
-          <GomokuBoard
-            board={activeBoard}
-            isInteractive={canPlayPoint}
-            labels={{
-              board: dictionary.board.label,
-              point: dictionary.board.point
-            }}
+        {workspace === "local" ? (
+          <LocalGameView
+            board={board}
+            canPlay={canPlayPoint}
+            canUndo={canUndo}
+            dictionary={dictionary}
             lastMove={lastMove}
-            previewStone={activeNextPlayer}
-            winningKey={winningKey}
+            nextPlayer={activeNextPlayer}
             onPointSelect={handlePointSelect}
+            onReset={() => resetGame()}
+            onUndo={handleUndo}
+            winningKey={winningKey}
           />
-          {mode === "room" ? <RoomUndoRequestOverlay dictionary={dictionary} room={friendRoom} /> : null}
-        </div>
+        ) : null}
+
+        {workspace === "ai" ? (
+          <AiGameView
+            aiDifficulty={aiDifficulty}
+            board={board}
+            canPlay={canPlayPoint}
+            canUndo={canUndo}
+            dictionary={dictionary}
+            firstPlayer={firstPlayer}
+            isAiThinking={isAiThinking}
+            lastMove={lastMove}
+            nextPlayer={activeNextPlayer}
+            onDifficultyChange={handleDifficultyChange}
+            onFirstPlayerChange={handleFirstPlayerChange}
+            onPointSelect={handlePointSelect}
+            onReset={() => resetGame()}
+            onUndo={handleUndo}
+            winningKey={winningKey}
+          />
+        ) : null}
+
+        {workspace === "online-lobby" ? (
+          <OnlineLobbyView dictionary={dictionary} locale={locale} room={friendRoom} />
+        ) : null}
+
+        {workspace === "online-joining" ? (
+          <OnlineJoiningView dictionary={dictionary} locale={locale} room={friendRoom} />
+        ) : null}
+
+        {workspace === "online-table" ? (
+          <GameTableView
+            board={activeBoard}
+            dictionary={dictionary}
+            isInteractive={canPlayPoint}
+            lastMove={lastMove}
+            onPointSelect={handlePointSelect}
+            previewStone={activeNextPlayer}
+            room={friendRoom}
+            winningKey={winningKey}
+          />
+        ) : null}
       </section>
 
       <aside className="side-panel" aria-label={dictionary.status.panelLabel}>
@@ -718,953 +675,6 @@ function getInitialGameMode(): GameMode {
   return new URLSearchParams(window.location.search).has("room") ? "room" : "local";
 }
 
-function FriendRoomControls({
-  dictionary,
-  locale,
-  room
-}: {
-  dictionary: GameDictionary;
-  locale: Locale;
-  room: FriendRoomController;
-}) {
-  const labels = dictionary.room;
-  const snapshot = room.room?.snapshot ?? null;
-  const selfPlayer =
-    room.room?.role === "player" ? snapshot?.players.find((player) => player.seat === room.room?.seat) : null;
-  const remainingUndoRequests = selfPlayer?.undoRequestsRemaining ?? 0;
-
-  return (
-    <div className="room-panel" aria-label={labels.panelLabel}>
-      <div className="room-fields">
-        <label className="room-field">
-          <span>{labels.playerName}</span>
-          <input
-            maxLength={24}
-            onChange={(event) => room.setPlayerName(event.target.value)}
-            placeholder={labels.playerNamePlaceholder}
-            type="text"
-            value={room.playerName}
-          />
-        </label>
-        <label className="room-field">
-          <span>{labels.roomCode}</span>
-          <input
-            maxLength={8}
-            onChange={(event) => room.setJoinCode(event.target.value)}
-            placeholder={labels.roomCodePlaceholder}
-            type="text"
-            value={room.joinCode}
-          />
-        </label>
-      </div>
-
-      <div className="room-account">
-        <div>
-          <p className="metric-label">{labels.account}</p>
-          <strong>{room.account ? room.account.displayName : labels.guestAccount}</strong>
-        </div>
-        {room.account ? (
-          <div className="room-account-actions">
-            <a className="mode-pill" href={getProfileUrl(locale, room.account.playerId, room.account.displayName)}>
-              <UserRound aria-hidden="true" focusable={false} />
-              {labels.profile}
-            </a>
-            <button className="mode-pill" onClick={room.signOutAccount} type="button">
-              <LogOut aria-hidden="true" focusable={false} />
-              {labels.signOutAccount}
-            </button>
-          </div>
-        ) : (
-          <button
-            className="mode-pill"
-            disabled={room.accountStatus === "loading"}
-            onClick={room.registerAccount}
-            type="button"
-          >
-            <UserRound aria-hidden="true" focusable={false} />
-            {room.accountStatus === "loading" ? labels.accountLoading : labels.registerAccount}
-          </button>
-        )}
-      </div>
-
-      <div className="room-actions">
-        {snapshot ? (
-          <button className="mode-pill" onClick={room.copyInvite} type="button">
-            <Copy aria-hidden="true" focusable={false} />
-            {room.copiedInvite ? labels.copied : labels.copyInvite}
-          </button>
-        ) : (
-          <>
-            {room.canCancelMatch ? (
-              <button className="mode-pill danger" onClick={room.cancelMatch} type="button">
-                <X aria-hidden="true" focusable={false} />
-                {labels.cancelMatch}
-              </button>
-            ) : (
-              <button className="mode-pill" disabled={!room.canFindMatch} onClick={room.findMatch} type="button">
-                <Search aria-hidden="true" focusable={false} />
-                {room.matchmakingStatus === "searching" ? labels.matchmakingSearching : labels.findMatch}
-              </button>
-            )}
-            <button className="mode-pill" disabled={!room.canCreateRoom} onClick={room.createRoom} type="button">
-              <Wifi aria-hidden="true" focusable={false} />
-              {labels.createRoom}
-            </button>
-            <button className="mode-pill" disabled={!room.canJoinRoom} onClick={room.joinRoom} type="button">
-              <LogOut aria-hidden="true" focusable={false} />
-              {labels.joinRoom}
-            </button>
-          </>
-        )}
-      </div>
-
-      <PublicChatPanel dictionary={dictionary} room={room} />
-
-      <OnlineUsersPanel dictionary={dictionary} room={room} />
-
-      <RoomProfilePanel dictionary={dictionary} room={room} />
-
-      <LeaderboardPanel dictionary={dictionary} locale={locale} room={room} />
-
-      <RoomLobbyList dictionary={dictionary} room={room} />
-
-      {snapshot ? (
-        <div className="room-summary">
-          <div>
-            <p className="metric-label">{labels.roomCode}</p>
-            <strong>{snapshot.code}</strong>
-          </div>
-          <div>
-            <p className="metric-label">{labels.yourSeat}</p>
-            <strong>
-              {room.room?.role === "spectator"
-                ? labels.spectatorSeat
-                : room.room?.seat === "black"
-                  ? labels.blackSeat
-                  : labels.whiteSeat}
-            </strong>
-          </div>
-          <div>
-            <p className="metric-label">{labels.spectators}</p>
-            <strong>{snapshot.spectators.length}</strong>
-          </div>
-          <div>
-            <p className="metric-label">{labels.connection}</p>
-            <strong>{room.connectionStatus === "connected" ? labels.connected : labels.disconnected}</strong>
-          </div>
-        </div>
-      ) : null}
-
-      {snapshot ? (
-        <div className="room-players">
-          {snapshot.players.map((player) => (
-            <div className="room-player" key={player.seat}>
-              <span
-                aria-label={player.seat === "black" ? dictionary.status.blackStone : dictionary.status.whiteStone}
-                className={`stone-preview ${player.seat}`}
-                role="img"
-              />
-              <div>
-                <strong>
-                  {player.name}
-                  {player.seat === room.room?.seat ? ` ${labels.you}` : ""}
-                </strong>
-                <p>
-                  {player.ready ? labels.ready : labels.notReady}
-                  {" · "}
-                  {player.connected ? labels.connected : labels.disconnected}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {snapshot?.spectators.length ? (
-        <div className="room-spectators">
-          <p className="metric-label">{labels.spectators}</p>
-          <div className="room-players">
-            {snapshot.spectators.map((spectator) => (
-              <div className="room-player" key={`${spectator.name}-${spectator.joinedAt}`}>
-                <Users aria-hidden="true" className="room-spectator-icon" focusable={false} />
-                <div>
-                  <strong>
-                    {spectator.name}
-                    {room.room?.role === "spectator" && spectator.name === room.room.name ? ` ${labels.you}` : ""}
-                  </strong>
-                  <p>{spectator.connected ? labels.connected : labels.disconnected}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {snapshot ? <RoomChatPanel dictionary={dictionary} room={room} /> : null}
-
-      {snapshot ? (
-        <div className="room-actions">
-          {room.canReady ? (
-            <button
-              className={`mode-pill ${room.ready ? "danger" : "success"}`}
-              onClick={room.toggleReady}
-              type="button"
-            >
-              <Check aria-hidden="true" focusable={false} />
-              {room.ready ? labels.unready : labels.readyAction}
-            </button>
-          ) : null}
-          <button className="mode-pill" disabled={!room.canUndo} onClick={room.undoMove} type="button">
-            <Undo2 aria-hidden="true" focusable={false} />
-            {dictionary.controls.undo} ({remainingUndoRequests})
-          </button>
-          <button className="mode-pill" disabled={!room.canResign} onClick={room.resignGame} type="button">
-            <Flag aria-hidden="true" focusable={false} />
-            {labels.resign}
-          </button>
-          <button className="mode-pill" disabled={!room.canRestart} onClick={room.restartGame} type="button">
-            <RotateCcw aria-hidden="true" focusable={false} />
-            {labels.restartRoom}
-          </button>
-          {room.canSit ? (
-            <button className="mode-pill" onClick={room.sitRoom} type="button">
-              <UserRound aria-hidden="true" focusable={false} />
-              {labels.sitDown}
-            </button>
-          ) : null}
-          <button className="mode-pill" onClick={room.leaveRoom} type="button">
-            <LogOut aria-hidden="true" focusable={false} />
-            {labels.leaveRoom}
-          </button>
-        </div>
-      ) : null}
-
-      {room.room ? (
-        <p className="room-message">
-          {(room.room.role === "spectator" ? labels.spectatorStatus : labels.selfStatus).replace(
-            "{name}",
-            room.room.name || selfPlayer?.name || room.playerName
-          )}
-        </p>
-      ) : null}
-      {room.error ? <p className="room-error">{room.error}</p> : null}
-    </div>
-  );
-}
-
-function OnlineUsersPanel({
-  dictionary,
-  room
-}: {
-  dictionary: GameDictionary;
-  room: FriendRoomController;
-}) {
-  const labels = dictionary.room;
-  const { refreshPresence } = room;
-
-  useEffect(() => {
-    refreshPresence();
-  }, [refreshPresence]);
-
-  return (
-    <section aria-label={labels.onlineUsers} className="room-presence">
-      <div className="room-presence-header">
-        <p className="metric-label">{labels.onlineUsers}</p>
-        <button className="icon-button" onClick={room.refreshPresence} title={labels.refreshPresence} type="button">
-          <RefreshCw aria-hidden="true" focusable={false} />
-        </button>
-      </div>
-      {room.presenceUsers.length > 0 ? (
-        <div className="room-presence-list">
-          {room.presenceUsers.map((user) => (
-            <PresenceUserItem key={user.playerId} labels={labels} user={user} />
-          ))}
-        </div>
-      ) : (
-        <p className="room-message">
-          {room.presenceStatus === "loading" ? labels.refreshPresence : labels.noOnlineUsers}
-        </p>
-      )}
-    </section>
-  );
-}
-
-function PresenceUserItem({
-  labels,
-  user
-}: {
-  labels: GameDictionary["room"];
-  user: UserPresenceSnapshot;
-}) {
-  return (
-    <div className={`room-presence-user ${user.status}`}>
-      <Users aria-hidden="true" className="room-presence-icon" focusable={false} />
-      <div>
-        <strong>{user.name}</strong>
-        <p>
-          {getPresenceStatusLabel(user.status, labels)}
-          {user.roomCode ? ` · ${user.roomCode}` : ""}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function RoomProfilePanel({
-  dictionary,
-  room
-}: {
-  dictionary: GameDictionary;
-  room: FriendRoomController;
-}) {
-  const labels = dictionary.room;
-  const { refreshProfile } = room;
-  const profile = room.profile;
-  const records = profile?.recentRecords ?? [];
-
-  useEffect(() => {
-    refreshProfile();
-  }, [refreshProfile]);
-
-  return (
-    <section aria-label={labels.profile} className="room-profile">
-      <div className="room-profile-header">
-        <div>
-          <p className="metric-label">{labels.profile}</p>
-          <strong>{profile?.displayName ?? room.playerName}</strong>
-        </div>
-        <button className="icon-button" onClick={room.refreshProfile} title={labels.refreshProfile} type="button">
-          <RefreshCw aria-hidden="true" focusable={false} />
-        </button>
-      </div>
-
-      <div className="room-profile-stats">
-        <span>{labels.gamesCount.replace("{count}", String(profile?.stats.games ?? 0))}</span>
-        <span>{labels.profileWins.replace("{count}", String(profile?.stats.wins ?? 0))}</span>
-        <span>{labels.profileLosses.replace("{count}", String(profile?.stats.losses ?? 0))}</span>
-        <span>{labels.profileDraws.replace("{count}", String(profile?.stats.draws ?? 0))}</span>
-      </div>
-
-      {records.length > 0 ? (
-        <div className="room-record-list">
-          {records.map((record) => (
-            <RoomRecordItem key={record.gameId} labels={labels} record={record} />
-          ))}
-        </div>
-      ) : (
-        <p className="room-message">
-          {room.profileStatus === "loading" && !profile ? labels.refreshProfile : labels.noGameRecords}
-        </p>
-      )}
-    </section>
-  );
-}
-
-function RoomRecordItem({
-  labels,
-  record
-}: {
-  labels: GameDictionary["room"];
-  record: PlayerGameRecordSummary;
-}) {
-  return (
-    <article className={`room-record-item ${record.result}`}>
-      <div>
-        <strong>
-          {getPlayerResultLabel(record.result, labels)}
-          {" · "}
-          {getFinishReasonLabel(record.finishReason, labels)}
-        </strong>
-        <p>
-          {labels.recordOpponent.replace("{name}", record.opponentName)}
-          {" · "}
-          {record.roomCode}
-          {" · "}
-          {formatRecordTime(record.finishedAt)}
-        </p>
-      </div>
-      <div className="room-record-metrics">
-        <span>{labels.recordMoves.replace("{count}", String(record.moveSeq))}</span>
-        <span>{getRecordStatusLabel(record.recordStatus, labels)}</span>
-      </div>
-    </article>
-  );
-}
-
-function LeaderboardPanel({
-  dictionary,
-  locale,
-  room
-}: {
-  dictionary: GameDictionary;
-  locale: Locale;
-  room: FriendRoomController;
-}) {
-  const labels = dictionary.room;
-  const { refreshLeaderboard } = room;
-  const entries = room.leaderboard?.entries ?? [];
-  const pageOffset = room.leaderboard?.offset ?? room.leaderboardOffset;
-  const pageStart = entries.length > 0 ? pageOffset + 1 : 0;
-  const pageEnd = pageOffset + entries.length;
-  const totalEntries = room.leaderboard?.totalEntries ?? 0;
-  const canPreviousPage = pageOffset > 0 && room.leaderboardStatus !== "loading";
-  const canNextPage =
-    room.leaderboard !== null &&
-    room.leaderboard.offset + room.leaderboard.limit < room.leaderboard.totalEntries &&
-    room.leaderboardStatus !== "loading";
-  const pageLabel = labels.leaderboardPage
-    .replace("{start}", String(pageStart))
-    .replace("{end}", String(pageEnd))
-    .replace("{total}", String(totalEntries));
-
-  useEffect(() => {
-    refreshLeaderboard();
-  }, [refreshLeaderboard]);
-
-  return (
-    <section aria-label={labels.leaderboard} className="room-leaderboard">
-      <div className="room-leaderboard-header">
-        <div>
-          <p className="metric-label">{labels.leaderboard}</p>
-          <strong>
-            {getLeaderboardIdentityLabel(room.leaderboardIdentity, labels)} /{" "}
-            {getLeaderboardScopeLabel(room.leaderboardScope, labels)}
-          </strong>
-        </div>
-        <button className="icon-button" onClick={room.refreshLeaderboard} title={labels.refreshLeaderboard} type="button">
-          <RefreshCw aria-hidden="true" focusable={false} />
-        </button>
-      </div>
-
-      <div className="room-leaderboard-tabs" aria-label={labels.leaderboard}>
-        {LEADERBOARD_IDENTITIES.map((identity) => (
-          <button
-            className={`mode-pill ${room.leaderboardIdentity === identity ? "active" : ""}`}
-            key={identity}
-            onClick={() => room.setLeaderboardIdentity(identity)}
-            type="button"
-          >
-            {getLeaderboardIdentityLabel(identity, labels)}
-          </button>
-        ))}
-      </div>
-
-      <div className="room-leaderboard-tabs" aria-label={labels.leaderboard}>
-        {LEADERBOARD_SCOPES.map((scope) => (
-          <button
-            className={`mode-pill ${room.leaderboardScope === scope ? "active" : ""}`}
-            key={scope}
-            onClick={() => room.setLeaderboardScope(scope)}
-            type="button"
-          >
-            {getLeaderboardScopeLabel(scope, labels)}
-          </button>
-        ))}
-      </div>
-
-      <form
-        className="room-leaderboard-search"
-        onSubmit={(event) => {
-          event.preventDefault();
-          room.submitLeaderboardSearch();
-        }}
-      >
-        <button className="icon-button" title={labels.leaderboardSearchPlaceholder} type="submit">
-          <Search aria-hidden="true" focusable={false} />
-        </button>
-        <input
-          aria-label={labels.leaderboardSearchPlaceholder}
-          maxLength={64}
-          onChange={(event) => room.setLeaderboardSearch(event.target.value)}
-          placeholder={labels.leaderboardSearchPlaceholder}
-          type="search"
-          value={room.leaderboardSearch}
-        />
-      </form>
-
-      {entries.length > 0 ? (
-        <div className="room-leaderboard-list">
-          {entries.map((entry) => (
-            <LeaderboardEntryItem
-              entry={entry}
-              key={entry.playerId}
-              labels={labels}
-              locale={locale}
-              scope={room.leaderboardScope}
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="room-message">
-          {room.leaderboardStatus === "loading" ? labels.refreshLeaderboard : labels.leaderboardNoEntries}
-        </p>
-      )}
-
-      <div className="room-leaderboard-pagination">
-        <button
-          className="icon-button"
-          disabled={!canPreviousPage}
-          onClick={room.previousLeaderboardPage}
-          title={labels.leaderboardPrevious}
-          type="button"
-        >
-          <ChevronLeft aria-hidden="true" focusable={false} />
-        </button>
-        <span>{pageLabel}</span>
-        <button
-          className="icon-button"
-          disabled={!canNextPage}
-          onClick={room.nextLeaderboardPage}
-          title={labels.leaderboardNext}
-          type="button"
-        >
-          <ChevronRight aria-hidden="true" focusable={false} />
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function LeaderboardEntryItem({
-  entry,
-  labels,
-  locale,
-  scope
-}: {
-  entry: LeaderboardEntry;
-  labels: GameDictionary["room"];
-  locale: Locale;
-  scope: LeaderboardScope;
-}) {
-  const primaryMetric =
-    scope === "daily"
-      ? labels.leaderboardTodayWins.replace("{count}", String(entry.dailyWins))
-      : scope === "streak"
-        ? labels.leaderboardStreakValue.replace("{count}", String(entry.currentStreak))
-        : labels.leaderboardRating.replace("{rating}", String(entry.rating));
-
-  return (
-    <a className="room-leaderboard-item" href={getProfileUrl(locale, entry.playerId, entry.displayName)}>
-      <span className="room-leaderboard-rank">#{entry.rank}</span>
-      <Trophy aria-hidden="true" className="room-leaderboard-icon" focusable={false} />
-      <div>
-        <strong>{entry.displayName}</strong>
-        <p>
-          {labels.leaderboardRecord
-            .replace("{wins}", String(entry.wins))
-            .replace("{losses}", String(entry.losses))
-            .replace("{draws}", String(entry.draws))}
-        </p>
-      </div>
-      <div className="room-leaderboard-metrics">
-        <span>{getLeaderboardEntryIdentityLabel(entry.identity, labels)}</span>
-        <span>{primaryMetric}</span>
-        {scope === "overall" ? null : <span>{labels.leaderboardRating.replace("{rating}", String(entry.rating))}</span>}
-      </div>
-    </a>
-  );
-}
-
-function PublicChatPanel({
-  dictionary,
-  room
-}: {
-  dictionary: GameDictionary;
-  room: FriendRoomController;
-}) {
-  const labels = dictionary.room;
-  const { refreshPublicChat } = room;
-
-  useEffect(() => {
-    refreshPublicChat();
-  }, [refreshPublicChat]);
-
-  return (
-    <section aria-label={labels.publicChat} className="room-chat public-chat">
-      <div className="room-chat-header">
-        <p className="metric-label">{labels.publicChat}</p>
-      </div>
-      <div aria-live="polite" className="room-chat-list" role="log">
-        {room.publicChatMessages.length > 0 ? (
-          room.publicChatMessages.map((message) => (
-            <div className="room-chat-message" key={message.id}>
-              <div className="room-chat-meta">
-                <strong>{message.name}</strong>
-                <span>{formatChatMessageTime(message.sentAt)}</span>
-              </div>
-              <p>{message.text}</p>
-            </div>
-          ))
-        ) : (
-          <p className="room-message">{labels.noMessages}</p>
-        )}
-      </div>
-      <form
-        className="room-chat-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          room.sendPublicChatMessage();
-        }}
-      >
-        <input
-          maxLength={160}
-          onChange={(event) => room.setPublicChatText(event.target.value)}
-          placeholder={labels.publicChatPlaceholder}
-          type="text"
-          value={room.publicChatText}
-        />
-        <button
-          className="icon-button"
-          disabled={room.accountStatus === "loading" || !room.publicChatText.trim()}
-          title={labels.sendMessage}
-          type="submit"
-        >
-          <Send aria-hidden="true" focusable={false} />
-        </button>
-      </form>
-    </section>
-  );
-}
-
-function RoomChatPanel({
-  dictionary,
-  room
-}: {
-  dictionary: GameDictionary;
-  room: FriendRoomController;
-}) {
-  const labels = dictionary.room;
-  const messages = room.room?.snapshot.chatMessages ?? [];
-
-  return (
-    <section aria-label={labels.roomChat} className="room-chat">
-      <div className="room-chat-header">
-        <p className="metric-label">{labels.roomChat}</p>
-      </div>
-      <div aria-live="polite" className="room-chat-list" role="log">
-        {messages.length > 0 ? (
-          messages.map((message) => (
-            <div className="room-chat-message" key={message.id}>
-              <div className="room-chat-meta">
-                <strong>{message.name}</strong>
-                <span>{formatChatMessageTime(message.sentAt)}</span>
-              </div>
-              <p>{message.text}</p>
-            </div>
-          ))
-        ) : (
-          <p className="room-message">{labels.noMessages}</p>
-        )}
-      </div>
-      <form
-        className="room-chat-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          room.sendChatMessage();
-        }}
-      >
-        <input
-          maxLength={160}
-          onChange={(event) => room.setChatText(event.target.value)}
-          placeholder={labels.chatPlaceholder}
-          type="text"
-          value={room.chatText}
-        />
-        <button
-          className="icon-button"
-          disabled={!room.chatText.trim()}
-          title={labels.sendMessage}
-          type="submit"
-        >
-          <Send aria-hidden="true" focusable={false} />
-        </button>
-      </form>
-    </section>
-  );
-}
-
-function RoomLobbyList({
-  dictionary,
-  room
-}: {
-  dictionary: GameDictionary;
-  room: FriendRoomController;
-}) {
-  const labels = dictionary.room;
-  const { refreshLobby } = room;
-
-  useEffect(() => {
-    refreshLobby();
-  }, [refreshLobby]);
-
-  return (
-    <div className="room-lobby">
-      <div className="room-lobby-header">
-        <p className="metric-label">{labels.availableRooms}</p>
-        <button className="icon-button" onClick={room.refreshLobby} title={labels.refreshRooms} type="button">
-          <RefreshCw aria-hidden="true" focusable={false} />
-        </button>
-      </div>
-      {room.lobbyStatus === "loading" && room.lobbyRooms.length === 0 ? (
-        <p className="room-message">{labels.loadingRooms}</p>
-      ) : room.lobbyRooms.length > 0 ? (
-        <div className="room-lobby-list">
-          {room.lobbyRooms.map((lobbyRoom) => {
-            const actionLabel = lobbyRoom.canJoin ? labels.joinRoom : labels.watchRoom;
-            const isCurrentRoom = room.room?.snapshot.code === lobbyRoom.code;
-
-            return (
-              <div className="room-lobby-item" key={lobbyRoom.code}>
-                <div>
-                  <strong>{lobbyRoom.hostName}</strong>
-                  <p>
-                    {lobbyRoom.code}
-                    {" · "}
-                    {getLobbyStatusLabel(lobbyRoom.status, labels)}
-                  </p>
-                </div>
-                <div className="room-lobby-metrics">
-                  <span>{labels.playersCount.replace("{count}", String(lobbyRoom.playerCount))}</span>
-                  <span>{`${labels.spectators}: ${lobbyRoom.spectatorCount}`}</span>
-                </div>
-                <button
-                  className="mode-pill"
-                  disabled={
-                    room.accountStatus === "loading" ||
-                    isCurrentRoom ||
-                    (!lobbyRoom.canJoin && !lobbyRoom.canWatch)
-                  }
-                  onClick={() => room.joinListedRoom(lobbyRoom.code)}
-                  type="button"
-                >
-                  {lobbyRoom.canJoin ? (
-                    <LogIn aria-hidden="true" focusable={false} />
-                  ) : (
-                    <Eye aria-hidden="true" focusable={false} />
-                  )}
-                  {actionLabel}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="room-message">{labels.noRooms}</p>
-      )}
-    </div>
-  );
-}
-
-function RoomUndoRequestOverlay({
-  dictionary,
-  room
-}: {
-  dictionary: GameDictionary;
-  room: FriendRoomController;
-}) {
-  const labels = dictionary.room;
-  const snapshot = room.room?.snapshot ?? null;
-  const undoRequest = snapshot?.undoRequest ?? null;
-  const isTarget = Boolean(undoRequest && room.room?.role === "player" && room.room.seat === undoRequest.targetSeat);
-
-  if (!undoRequest || !isTarget || !snapshot) {
-    return null;
-  }
-
-  const requester = snapshot.players.find((player) => player.seat === undoRequest.requesterSeat);
-  const requesterName = requester?.name ?? (undoRequest.requesterSeat === "black" ? labels.blackSeat : labels.whiteSeat);
-
-  return (
-    <RoomUndoRequestDialog
-      key={undoRequest.id}
-      labels={labels}
-      requesterName={requesterName}
-      respondUndoRequest={room.respondUndoRequest}
-      undoRequest={undoRequest}
-    />
-  );
-}
-
-function RoomUndoRequestDialog({
-  labels,
-  requesterName,
-  respondUndoRequest,
-  undoRequest
-}: {
-  labels: GameDictionary["room"];
-  requesterName: string;
-  respondUndoRequest: (accepted: boolean) => void;
-  undoRequest: UndoRequestSnapshot;
-}) {
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  const handledRequestRef = useRef(false);
-  const secondsLeft = Math.max(0, Math.ceil((undoRequest.expiresAt - nowMs) / 1000));
-
-  useEffect(() => {
-    const interval = window.setInterval(() => setNowMs(Date.now()), 250);
-
-    return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (secondsLeft > 0 || handledRequestRef.current) {
-      return;
-    }
-
-    handledRequestRef.current = true;
-    respondUndoRequest(false);
-  }, [respondUndoRequest, secondsLeft]);
-
-  function respond(accepted: boolean) {
-    if (handledRequestRef.current) {
-      return;
-    }
-
-    handledRequestRef.current = true;
-    respondUndoRequest(accepted);
-  }
-
-  return (
-    <div aria-modal="true" className="undo-request-modal" role="dialog">
-      <h2>{labels.undoRequestTitle}</h2>
-      <p>{labels.undoRequestCopy.replace("{name}", requesterName)}</p>
-      <div className="undo-request-actions">
-        <button className="mode-pill danger" onClick={() => respond(false)} type="button">
-          <X aria-hidden="true" focusable={false} />
-          {labels.rejectUndo.replace("{seconds}", String(secondsLeft))}
-        </button>
-        <button className="mode-pill success" onClick={() => respond(true)} type="button">
-          <Check aria-hidden="true" focusable={false} />
-          {labels.allowUndo}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function getLobbyStatusLabel(status: RoomSnapshot["status"], labels: GameDictionary["room"]): string {
-  if (status === "playing") {
-    return labels.lobbyPlaying;
-  }
-
-  if (status === "finished") {
-    return labels.roomClosed;
-  }
-
-  return labels.lobbyWaiting;
-}
-
-function getPlayerResultLabel(result: PlayerGameRecordResult, labels: GameDictionary["room"]): string {
-  if (result === "win") {
-    return labels.resultWin;
-  }
-
-  if (result === "loss") {
-    return labels.resultLoss;
-  }
-
-  if (result === "draw") {
-    return labels.resultDraw;
-  }
-
-  return labels.resultAbandoned;
-}
-
-function getPresenceStatusLabel(status: PresenceStatus, labels: GameDictionary["room"]): string {
-  if (status === "playing") {
-    return labels.presencePlaying;
-  }
-
-  if (status === "in_room") {
-    return labels.presenceInRoom;
-  }
-
-  if (status === "spectating") {
-    return labels.presenceSpectating;
-  }
-
-  if (status === "offline") {
-    return labels.presenceOffline;
-  }
-
-  return labels.presenceOnline;
-}
-
-function getFinishReasonLabel(reason: GameRecordFinishReason, labels: GameDictionary["room"]): string {
-  if (reason === "five") {
-    return labels.finishFive;
-  }
-
-  if (reason === "draw") {
-    return labels.finishDraw;
-  }
-
-  if (reason === "resign") {
-    return labels.finishResign;
-  }
-
-  if (reason === "disconnect") {
-    return labels.finishDisconnect;
-  }
-
-  return labels.finishAbandoned;
-}
-
-function getRecordStatusLabel(status: GameRecordStatus, labels: GameDictionary["room"]): string {
-  if (status === "verified") {
-    return labels.recordVerified;
-  }
-
-  if (status === "conflicted") {
-    return labels.recordConflicted;
-  }
-
-  return labels.recordPartial;
-}
-
-function getLeaderboardScopeLabel(scope: LeaderboardScope, labels: GameDictionary["room"]): string {
-  if (scope === "daily") {
-    return labels.leaderboardDaily;
-  }
-
-  if (scope === "streak") {
-    return labels.leaderboardStreak;
-  }
-
-  return labels.leaderboardOverall;
-}
-
-function getLeaderboardIdentityLabel(identity: LeaderboardIdentity, labels: GameDictionary["room"]): string {
-  if (identity === "all") {
-    return labels.leaderboardAll;
-  }
-
-  return getLeaderboardEntryIdentityLabel(identity, labels);
-}
-
-function getLeaderboardEntryIdentityLabel(
-  identity: Exclude<LeaderboardIdentity, "all">,
-  labels: GameDictionary["room"]
-): string {
-  return identity === "registered" ? labels.leaderboardRegistered : labels.leaderboardGuests;
-}
-
-function formatRecordTime(finishedAt: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(finishedAt));
-}
-
-function formatChatMessageTime(sentAt: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(sentAt));
-}
-
 function getRoomGameStatus(snapshot: RoomSnapshot | null): GameStatus {
   if (!snapshot) {
     return { state: "playing", nextPlayer: "black" };
@@ -1685,7 +695,7 @@ function getRoomStatusText(room: FriendRoomController, dictionary: GameDictionar
   const snapshot = room.room?.snapshot;
 
   if (!snapshot) {
-    return dictionary.room.notInRoom;
+    return room.isJoiningRoom ? dictionary.room.joiningRoom : dictionary.room.notInRoom;
   }
 
   if (snapshot.status === "waiting") {
@@ -1723,7 +733,7 @@ function getRoomStatusNote(room: FriendRoomController, dictionary: GameDictionar
   const snapshot = room.room?.snapshot;
 
   if (!snapshot) {
-    return dictionary.room.createOrJoin;
+    return room.isJoiningRoom ? dictionary.room.joiningRoom : dictionary.room.createOrJoin;
   }
 
   return `${dictionary.room.roomCode}: ${snapshot.code} · ${dictionary.room.spectators}: ${snapshot.spectators.length}`;

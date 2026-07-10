@@ -291,6 +291,9 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/M3_PUBLIC_TEST_LOG.md`：M3 公开测试问题记录。
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`：以后参考项目研究和子代理分工的标准流程。
 - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`：主控、实现子代理、验证子代理的标准开发流程。
+- `docs/COMPETITOR_INTERACTION_RESEARCH.md`：竞品界面逻辑和用户路径研究。
+- `docs/INTERACTION_REDESIGN_PLAN.md`：交互重构任务、依赖和当前实施进度。
+- `docs/INTERACTION_REDESIGN_IX00_IX01_VERIFICATION.md`：首批互斥工作区实施验证。
 - `docs/HANDOFF.md`：当前任务交接文档，方便新窗口接手。
 - `docs/logic/`：按模块记录从参考项目提取出的实现逻辑。
 

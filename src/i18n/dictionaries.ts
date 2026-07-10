@@ -56,6 +56,7 @@ export type GameDictionary = {
     gamesCount: string;
     guestAccount: string;
     joinRoom: string;
+    joiningRoom: string;
     leaderboard: string;
     leaderboardAll: string;
     leaderboardDaily: string;
@@ -234,6 +235,7 @@ const en = {
       gamesCount: "Games {count}",
       guestAccount: "Guest",
       joinRoom: "Join room",
+      joiningRoom: "Joining room",
       leaderboard: "Rankings",
       leaderboardAll: "All",
       leaderboardDaily: "Today",
@@ -408,6 +410,7 @@ const zh = {
       gamesCount: "对局 {count}",
       guestAccount: "游客",
       joinRoom: "加入房间",
+      joiningRoom: "正在进入房间",
       leaderboard: "排行榜",
       leaderboardAll: "全部",
       leaderboardDaily: "今日",
@@ -582,6 +585,7 @@ const fr = {
       gamesCount: "Parties {count}",
       guestAccount: "Invité",
       joinRoom: "Rejoindre",
+      joiningRoom: "Connexion au salon",
       leaderboard: "Classement",
       leaderboardAll: "Tous",
       leaderboardDaily: "Aujourd'hui",
@@ -756,6 +760,7 @@ const es = {
       gamesCount: "Partidas {count}",
       guestAccount: "Invitado",
       joinRoom: "Unirse",
+      joiningRoom: "Entrando en la sala",
       leaderboard: "Ranking",
       leaderboardAll: "Todos",
       leaderboardDaily: "Hoy",
@@ -930,6 +935,7 @@ const ru = {
       gamesCount: "Партии {count}",
       guestAccount: "Гость",
       joinRoom: "Войти",
+      joiningRoom: "Вход в комнату",
       leaderboard: "Рейтинг",
       leaderboardAll: "Все",
       leaderboardDaily: "Сегодня",
@@ -1104,6 +1110,7 @@ const ar = {
       gamesCount: "الألعاب {count}",
       guestAccount: "ضيف",
       joinRoom: "انضمام",
+      joiningRoom: "جارٍ الانضمام إلى الغرفة",
       leaderboard: "الترتيب",
       leaderboardAll: "الكل",
       leaderboardDaily: "اليوم",

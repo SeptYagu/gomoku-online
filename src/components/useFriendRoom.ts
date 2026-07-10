@@ -73,6 +73,7 @@ export type FriendRoomController = {
   createRoom: () => void;
   error: string | null;
   inviteUrl: string;
+  isJoiningRoom: boolean;
   joinCode: string;
   joinListedRoom: (roomCode: string) => void;
   joinRoom: () => void;
@@ -125,6 +126,10 @@ export type FriendRoomController = {
   undoMove: () => void;
 };
 
+type UseFriendRoomOptions = {
+  enabled?: boolean;
+};
+
 const PLAYER_ID_STORAGE_KEY = "gomoku-room-player-id";
 const PLAYER_NAME_STORAGE_KEY = "gomoku-room-player-name";
 const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
@@ -132,7 +137,7 @@ const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
 const GUEST_TOKEN_STORAGE_KEY = "gomoku-guest-token";
 const LEADERBOARD_PAGE_SIZE = 10;
 
-export function useFriendRoom(): FriendRoomController {
+export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
   const leaderboardAbortControllerRef = useRef<AbortController | null>(null);
   const leaderboardRequestSeqRef = useRef(0);
@@ -164,6 +169,7 @@ export function useFriendRoom(): FriendRoomController {
   const [leaderboardStatus, setLeaderboardStatus] = useState<FriendRoomController["leaderboardStatus"]>("idle");
   const [matchmakingStatus, setMatchmakingStatus] = useState<FriendRoomController["matchmakingStatus"]>("idle");
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(() => enabled && Boolean(getRoomCodeFromCurrentUrl()));
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const autoJoinRoomCodeRef = useRef<string | null>(null);
@@ -174,21 +180,24 @@ export function useFriendRoom(): FriendRoomController {
   const ready = currentPlayer?.ready ?? false;
   const lastMove = room?.snapshot.moves.at(-1) ?? null;
   const hasPendingUndoRequest = room?.snapshot.undoRequest !== null && room?.snapshot.undoRequest !== undefined;
-  const canReady = isPlayer && room?.snapshot.status === "waiting";
-  const canPlay = isPlayer && room?.snapshot.status === "playing" && room.snapshot.currentTurn === room.seat && !hasPendingUndoRequest;
-  const canResign = isPlayer && room?.snapshot.status === "playing";
-  const canRestart = isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
-  const canSit = room?.role === "spectator" && hasOpenPlayerSeat(room.snapshot);
+  const canReady = enabled && isPlayer && room?.snapshot.status === "waiting";
+  const canPlay =
+    enabled && isPlayer && room?.snapshot.status === "playing" && room.snapshot.currentTurn === room.seat && !hasPendingUndoRequest;
+  const canResign = enabled && isPlayer && room?.snapshot.status === "playing";
+  const canRestart = enabled && isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
+  const canSit = enabled && room?.role === "spectator" && hasOpenPlayerSeat(room.snapshot);
   const identityReady = isAccountIdentityReady(accountStatus);
-  const canCreateRoom = identityReady && !room && !isCreatingRoom && matchmakingStatus !== "searching";
-  const canFindMatch = identityReady && !room && matchmakingStatus !== "searching";
-  const canJoinRoom = identityReady && !room && matchmakingStatus !== "searching";
+  const canCreateRoom = enabled && identityReady && !room && !isCreatingRoom && matchmakingStatus !== "searching";
+  const canFindMatch = enabled && identityReady && !room && matchmakingStatus !== "searching";
+  const canJoinRoom = enabled && identityReady && !room && matchmakingStatus !== "searching";
   const canCancelMatch =
+    enabled &&
     matchmakingStatus !== "searching" &&
     isPlayer &&
     room?.snapshot.status === "waiting" &&
     room.snapshot.players.length === 1;
   const canUndo =
+    enabled &&
     isPlayer &&
     room?.snapshot.status === "playing" &&
     lastMove?.stone === room.seat &&
@@ -228,6 +237,7 @@ export function useFriendRoom(): FriendRoomController {
 
       clearRoomSession();
       clearRoomUrl();
+      setIsJoiningRoom(false);
       setChatText("");
       setMatchmakingStatus("idle");
       setError(null);
@@ -297,6 +307,8 @@ export function useFriendRoom(): FriendRoomController {
   }, [clearClosedRoom]);
 
   const applyRoomAck = useCallback((response: RoomAck) => {
+    setIsJoiningRoom(false);
+
     if (!response.ok) {
       setError(response.error.message);
       return;
@@ -340,18 +352,21 @@ export function useFriendRoom(): FriendRoomController {
   }, [applyRoomAck, canCreateRoom, ensureSocket, getActivePlayer]);
 
   const joinRoomByCode = useCallback((roomCode: string, retryWithFreshIdentity = true) => {
-    if (!identityReady) {
+    if (!enabled || !identityReady) {
       return;
     }
 
-    const socket = ensureSocket();
-    let player = getActivePlayer();
     const nextRoomCode = normalizeRoomCode(roomCode);
 
     if (!nextRoomCode) {
+      setIsJoiningRoom(false);
       setError("Enter a room code.");
       return;
     }
+
+    setIsJoiningRoom(true);
+    const socket = ensureSocket();
+    let player = getActivePlayer();
 
     setPlayerNameState(player.playerName);
     setJoinCodeState(nextRoomCode);
@@ -386,7 +401,7 @@ export function useFriendRoom(): FriendRoomController {
         applyRoomAck(response);
       }
     );
-  }, [applyRoomAck, ensureSocket, getActivePlayer, identityReady]);
+  }, [applyRoomAck, enabled, ensureSocket, getActivePlayer, identityReady]);
 
   const joinRoom = useCallback(() => {
     joinRoomByCode(joinCode);
@@ -429,6 +444,7 @@ export function useFriendRoom(): FriendRoomController {
 
       clearRoomSession();
       clearRoomUrl();
+      setIsJoiningRoom(false);
       setRoom(null);
       setChatText("");
       setError(null);
@@ -723,6 +739,7 @@ export function useFriendRoom(): FriendRoomController {
 
       clearRoomSession();
       clearRoomUrl();
+      setIsJoiningRoom(false);
       setRoom(null);
       setChatText("");
       setMatchmakingStatus("idle");
@@ -887,6 +904,11 @@ export function useFriendRoom(): FriendRoomController {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      autoJoinRoomCodeRef.current = null;
+      return;
+    }
+
     if (!identityReady) {
       return;
     }
@@ -928,6 +950,7 @@ export function useFriendRoom(): FriendRoomController {
       return;
     }
 
+    window.setTimeout(() => setIsJoiningRoom(true), 0);
     ensureSocket().emit("room:rejoin", storedSession, (response: RoomAck) => {
       if (response.ok) {
         applyRoomAck(response);
@@ -944,7 +967,7 @@ export function useFriendRoom(): FriendRoomController {
 
       applyRoomAck(response);
     });
-  }, [applyRoomAck, ensureSocket, identityReady, joinRoomByCode, room]);
+  }, [applyRoomAck, enabled, ensureSocket, identityReady, joinRoomByCode, room]);
 
   useEffect(() => {
     const snapshot = room?.snapshot;
@@ -1027,6 +1050,7 @@ export function useFriendRoom(): FriendRoomController {
     createRoom,
     error,
     inviteUrl,
+    isJoiningRoom: enabled && isJoiningRoom,
     joinCode,
     joinListedRoom,
     joinRoom,

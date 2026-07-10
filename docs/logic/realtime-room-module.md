@@ -1,6 +1,6 @@
 # 实时好友房模块逻辑
 
-更新日期：2026-06-25
+更新日期：2026-07-10
 
 ## 参考来源
 
@@ -173,7 +173,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `src/server/room-socket.ts`：Socket.IO 事件层，只把客户端事件转换为 `RoomStore` 调用，并广播返回的 `RoomSnapshot`；不在 Socket handler 里重新实现棋盘规则。
 - `src/server/online-server.ts`：Next + Socket.IO 自定义在线服务，开发时用 `npm run dev:online` 启动。
 - `src/components/useFriendRoom.ts`：浏览器端好友房状态、localStorage session、重连、邀请链接、ready、落子和联机悔棋 socket 事件封装。
-- `src/components/GameShell.tsx`：好友房 UI 接入棋盘、状态栏和控制按钮。
+- `src/components/GameShell.tsx`：只编排模式和互斥工作区；好友房牌桌由 `src/components/online/GameTableView.tsx` 承载。
 
 房间对象：
 
@@ -202,6 +202,15 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 设置 `reconnectDeadline`。
 - 宽限期内可用 session token 恢复座位。
 - 超时后按规则判负、弃局或转 abandoned。
+
+### 2026-07-10 IX-00/IX-01 客户端状态与连接边界
+
+- 新增纯前端 `deriveTableUiState()`，完整枚举 13 个牌桌语义状态，但只组织后续 UI，不替代服务端 `can*` 权限和权威快照。
+- `GameShell` 用 workspace selector 保证在线大厅、joining gate、在线牌桌三者互斥；有 room ack 时牌桌优先于可能残留的 joining 标志。
+- `useFriendRoom({ enabled })` 在 local/AI 模式禁止新的自动 rejoin；从活跃房切换模式时仍先发既有 `room:leave`，没有为了门控提前断开 socket 或改变 leave ack 语义。
+- 邀请 URL 和 stored session 恢复期间进入 `OnlineJoiningView`；ack 成功仍以服务端 `snapshot.code` 同步 URL/session，失败仍走原错误与重新加入路径。
+- `GameTableView` 本批保留 ready、undo、resign、restart、sit、leave 和当前 undo dialog 的兼容行为；非阻塞任务栏、有序动作和终局再战属于后续 `IX-02`/`IX-06A`。
+- 新增状态与真实 Chrome smoke 覆盖视图互斥及 local/AI 不建立 Socket.IO 资源；本批没有修改本节列出的任何房间/对局事件。
 
 ## 推荐事件
 

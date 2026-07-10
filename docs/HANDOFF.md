@@ -4584,3 +4584,64 @@ b6faf9e
 - `git diff --cached --check`：通过；仅有 Windows 工作区 LF/CRLF 转换提示。
 - `git push origin main`：成功，`819cd84..5fbc2ee`。
 - 本段提交结果将作为单独 handoff 记录提交并再次推送。
+
+## 2026-07-10 IX-00 + IX-01 交互重构第一批实施
+
+### 用户目标
+
+- 开始执行 `docs/INTERACTION_REDESIGN_PLAN.md`。
+- 每次上下文压缩后先重读计划和相关代码，避免依据残缺上下文继续实现。
+- 延续逐步更新 handoff 的工作方式。
+
+### 恢复规则
+
+- 若后续发生上下文压缩，恢复工作的第一步固定为：重新完整读取交互计划中当前 Phase、真实性核验报告的对应条目、当前 `git status`、本节 handoff 以及本批实际修改文件；在完成这些读取前不继续编辑。
+
+### 步骤 1：重读计划、流程和当前实现
+
+1. 重读 `INTERACTION_REDESIGN_PLAN.md`、真实性核验报告、标准开发流程、大厅/匹配逻辑、实时房间逻辑和 Stage 3 相关进度。
+2. 确认第一批范围严格为 `IX-00 + IX-01`：状态测试骨架、互斥工作区、邀请加入等待门控和 `useFriendRoom` 在线启用门控。
+3. 确认本批不实现 `IX-02` 的任务栏动作替换，不修改 socket 事件、RoomStore 业务语义、URL 参数、token、public handle、unlisted、双方再战、活跃度或赛事能力。
+4. 读取当前 `GameShell.tsx`、`useFriendRoom.ts`、房间类型/契约、六语种字典和现有 lobby/share smoke；确认巨型 `FriendRoomControls` 仍混合大厅与牌桌，auto rejoin effect 仍会在 hook 挂载后无模式门控运行。
+5. 第一批实现策略：新增纯函数 workspace/table-state selector 及表驱动测试；提取 Local、AI、OnlineLobby、GameTable 四个视图；URL/stored-session 加入期间只显示 joining gate；成功后进入牌桌，失败后回大厅。
+
+### 步骤 2：建立 IX-00 状态基线
+
+1. 新增 `online/workspace-state.ts`，纯函数区分 local、AI、online-lobby、online-joining、online-table，并把“只有 room mode 启用在线 effect”固化为可测试判断。
+2. 新增 `online/table-ui-state.ts`，覆盖 spectator、sit、waiting、ready compatibility、双方回合、悔棋请求方/响应方、finished host/guest 和 abandoned；该函数只派生 UI 状态，不改变 controller 权限。
+3. 新增两份表驱动测试，共覆盖 21 个用例；定向 Vitest 运行通过。
+
+### 步骤 3：拆分互斥工作区并接入门控
+
+1. 新增 `play/LocalGameView.tsx` 与 `play/AiGameView.tsx`，把各自控制条和棋盘从 `GameShell` 提取到独立工作区。
+2. 新增 `online/OnlineLobbyView.tsx`，只承载身份/创建加入、公共聊天、Presence、Profile 摘要、排行榜和大厅房间列表；不包含牌桌动作或棋盘。
+3. 新增 `online/GameTableView.tsx`，只承载房间摘要、玩家/观战者、房间聊天、现有桌内动作、棋盘和现有悔棋 dialog；不包含创建加入、公共聊天、排行榜或大厅列表。
+4. `GameShell` 现只负责应用壳、模式选择、AI 状态编排、workspace selector 和公共状态侧栏；已机械删除搬迁后的旧联机组件连续定义块，并核对保留的函数只剩游戏/状态编排函数。
+5. `useFriendRoom({ enabled })` 现在只在在线 mode 运行 auto rejoin；新增 `isJoiningRoom`，邀请 URL 或 stored session 恢复时显示 joining gate，成功进入牌桌、失败回大厅。加入期间暂时禁用模式切换，避免未完成 ack 跨工作区落地。
+6. 六语种字典新增 joining-room 文案。第一次字典补丁因阿拉伯语现有翻译上下文不匹配而未应用；读取精确值后重试成功，没有覆盖其他文案。
+7. `smoke-lobby-ui` 新增 lobby/table 互斥断言：大厅没有棋盘/牌桌，加入或观战后没有公共聊天、Presence、排行榜和房间列表，离房后恢复大厅。
+8. 首次 lint 发现 disabled mode 的 effect 分支同步 setState；移除冗余同步更新、让 stored-session 指示异步触发后，`npm run lint` 通过。
+9. `npm test`：15 个测试文件、130 个测试通过；`npm run build`：编译、TypeScript、11 个静态页面生成全部通过。
+
+### 步骤 4：上下文压缩后的强制复核与回归补强
+
+1. 上下文压缩后停止编辑，重新读取计划中的 IX-00、IX-01、下一阶段 IX-02、当前 handoff、`git status`，并逐项重读 `GameShell`、`useFriendRoom`、四个提取视图、workspace/table-state 纯函数与测试、字典和 lobby UI smoke。
+2. 复核确认当前实现仍在第一批边界内：没有修改 socket 事件名、RoomStore、URL/session 规范或 IX-02 动作逻辑；`GameTableView` 保留当前兼容动作和悔棋 modal，任务栏替换继续留给 IX-02。
+3. 发现已有单元测试只证明 `isOnlineWorkspaceEnabled()` 的纯函数规则，已有 UI smoke 只证明大厅/牌桌互斥，尚未直接证明真实页面在 local/AI 工作区不会创建 Socket.IO 资源。
+4. 补强 `smoke-lobby-ui`：页面启动后分别在 local 与 AI 工作区等待并检查 Resource Timing，不允许出现 `/socket.io` 资源；随后才进入在线大厅并继续原有 Join/Watch 与大厅/牌桌互斥流程。
+
+### 步骤 5：同步进度、逻辑边界与验证资产
+
+1. 更新 `INTERACTION_REDESIGN_PLAN.md` 的实时状态：IX-00、IX-01 标为本地验证完成，下一步固定为 IX-02，并再次列出本批没有实现的 P1/P2 协议。
+2. 新增 `INTERACTION_REDESIGN_IX00_IX01_VERIFICATION.md`，记录状态覆盖、互斥工作区、连接门控、既有在线 smoke、浏览器/视口证据、应用内 Browser 附着失败和已知延期项。
+3. 更新大厅/匹配与实时房间逻辑文档，明确 `OnlineLobbyView` / `OnlineJoiningView` / `GameTableView` 的职责、`useFriendRoom({ enabled })` 的 leave-ack 边界，以及本阶段没有改变 socket 事件和 RoomStore。
+4. README 文档索引增加竞品研究、交互计划和首批验证报告入口。
+5. 最终门禁重新执行：`npm run lint` 通过；`npm test` 15 个文件、130 个测试通过；`npm audit --omit=dev` 为 0 个漏洞；停止本轮生产服务后重新 `npm run build`，编译、TypeScript 和 11 个页面生成通过。
+
+### 步骤 6：提交前范围与环境清理
+
+1. `git diff --check` 通过；仅出现 Windows 工作区的预期 LF/CRLF 提示。
+2. 变更路径核对确认没有 `src/server/`、在线 server、`package.json` 或 lockfile 改动；本批仍是前端工作区重组、测试和文档。
+3. 对全部跟踪差异及新增验证报告执行可疑密钥赋值扫描，无匹配。
+4. 已停止本轮 3050 生产服务和截图辅助 socket，重置应用内 Browser 视口能力；验证目录对应的 Chrome 进程为 0，3050 端口已关闭。
+5. `.codex/` 继续作为既有未跟踪本地元数据和截图证据排除在提交之外。

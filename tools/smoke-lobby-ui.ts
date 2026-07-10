@@ -70,26 +70,39 @@ async function main(): Promise<void> {
       await cdp.send("Page.enable");
       await cdp.send("Runtime.enable");
       await waitForRuntime(cdp);
+      await assertNoRealtimeConnection(cdp, "local");
+      await clickButton(cdp, "AI");
+      await assertNoRealtimeConnection(cdp, "AI");
       await clickButton(cdp, "Friend room");
+      await waitForOnlineView(cdp, "lobby");
+      await assertOnlineWorkspaceIsolation(cdp, "lobby");
       await assertLeaderboardSearchSubmit(cdp);
 
       await waitForBodyText(cdp, preparedRooms.waitingCode);
       await assertLobbyRowContains(cdp, preparedRooms.waitingCode, "Join room");
       await clickLobbyRoomButton(cdp, preparedRooms.waitingCode);
       await waitForRoomUrl(cdp, preparedRooms.waitingCode);
+      await waitForOnlineView(cdp, "table");
+      await assertOnlineWorkspaceIsolation(cdp, "table");
       await clickButton(cdp, "Leave");
       await waitForNoRoomUrl(cdp);
+      await waitForOnlineView(cdp, "lobby");
+      await assertOnlineWorkspaceIsolation(cdp, "lobby");
 
       await waitForBodyText(cdp, preparedRooms.playingCode);
       await assertLobbyRowContains(cdp, preparedRooms.playingCode, "Watch");
       await clickLobbyRoomButton(cdp, preparedRooms.playingCode);
       await waitForRoomUrl(cdp, preparedRooms.playingCode);
+      await waitForOnlineView(cdp, "table");
+      await assertOnlineWorkspaceIsolation(cdp, "table");
       await waitForBodyText(cdp, "Spectator");
 
       console.log(`Lobby UI smoke: ${baseUrl}`);
+      console.log("PASS local and AI workspaces do not create a realtime connection");
       console.log("PASS leaderboard search has an explicit submit button");
       console.log(`PASS lobby waiting row join - ${preparedRooms.waitingCode}`);
       console.log(`PASS lobby playing row watch - ${preparedRooms.playingCode}`);
+      console.log("PASS online lobby and table are mutually exclusive");
     } finally {
       cdp.close();
     }
@@ -98,6 +111,20 @@ async function main(): Promise<void> {
     chrome.kill();
     await waitForProcessExit(chrome);
     await rm(userDataDir, { force: true, maxRetries: 10, recursive: true, retryDelay: 250 });
+  }
+}
+
+async function assertNoRealtimeConnection(cdp: CdpClient, workspace: "local" | "AI"): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const socketResources = await evaluate<string[]>(
+    cdp,
+    `performance.getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .filter((name) => name.includes("/socket.io"))`
+  );
+
+  if (socketResources.length > 0) {
+    throw new Error(`${workspace} workspace opened a realtime connection: ${socketResources.join(", ")}`);
   }
 }
 
@@ -110,6 +137,40 @@ async function assertLeaderboardSearchSubmit(cdp: CdpClient): Promise<void> {
 
     return hasSubmit ? true : null;
   }, STEP_TIMEOUT_MS);
+}
+
+async function waitForOnlineView(cdp: CdpClient, view: "lobby" | "table"): Promise<void> {
+  await waitForValue(async () => {
+    const found = await evaluate<boolean>(cdp, `Boolean(document.querySelector('[data-online-view="${view}"]'))`);
+
+    return found ? true : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function assertOnlineWorkspaceIsolation(cdp: CdpClient, expected: "lobby" | "table"): Promise<void> {
+  const result = await evaluate<{
+    hasLobbyOnlyContent: boolean;
+    hasLobbyView: boolean;
+    hasPlayArea: boolean;
+    hasTableView: boolean;
+  }>(
+    cdp,
+    `(() => ({
+      hasLobbyOnlyContent: Boolean(document.querySelector('.room-lobby, .public-chat, .room-leaderboard, .room-presence')),
+      hasLobbyView: Boolean(document.querySelector('[data-online-view="lobby"]')),
+      hasPlayArea: Boolean(document.querySelector('[data-online-view="table"] .play-area')),
+      hasTableView: Boolean(document.querySelector('[data-online-view="table"]'))
+    }))()`
+  );
+
+  const isValid =
+    expected === "lobby"
+      ? result.hasLobbyView && result.hasLobbyOnlyContent && !result.hasTableView && !result.hasPlayArea
+      : result.hasTableView && result.hasPlayArea && !result.hasLobbyView && !result.hasLobbyOnlyContent;
+
+  if (!isValid) {
+    throw new Error(`Online workspace isolation failed for ${expected}: ${JSON.stringify(result)}`);
+  }
 }
 
 class CdpClient {
