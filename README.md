@@ -294,6 +294,7 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/COMPETITOR_INTERACTION_RESEARCH.md`：竞品界面逻辑和用户路径研究。
 - `docs/INTERACTION_REDESIGN_PLAN.md`：交互重构任务、依赖和当前实施进度。
 - `docs/INTERACTION_REDESIGN_IX00_IX01_VERIFICATION.md`：首批互斥工作区实施验证。
+- `docs/INTERACTION_REDESIGN_IX02_VERIFICATION.md`：牌桌任务栏、动作模型和非阻塞悔棋验证。
 - `docs/HANDOFF.md`：当前任务交接文档，方便新窗口接手。
 - `docs/logic/`：按模块记录从参考项目提取出的实现逻辑。
 

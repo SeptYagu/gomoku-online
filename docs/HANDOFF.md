@@ -4652,3 +4652,50 @@ b6faf9e
 - 提交范围：18 个文件，1798 行新增、1070 行删除；新增四类视图文件、workspace/table-state 及测试、实施验证报告，并更新 controller、字典、smoke、计划和模块文档。
 - `git push origin main`：成功，`aaf262b..5a8b7ca`。
 - 本段提交结果作为单独 handoff 记录提交，随后再次推送；`.codex/` 仍不进入版本库。
+
+## 2026-07-10 IX-02 牌桌任务栏与状态动作模型
+
+### 用户目标
+
+- 继续执行并把“完成整个交互界面改动计划”设为持续目标。
+- 按计划依赖从 IX-02 开始逐阶段实现、验证、记录、提交和推送；计划明确延期的赛事范围不冒充完成。
+- 延续上下文压缩后的恢复规则：任何压缩发生后，先重读当前 Phase、handoff、Git 状态和相关实现，再继续编辑。
+
+### 步骤 1：重读 IX-02 与当前牌桌实现
+
+1. 重新读取 IX-02 的动作和验收：语义状态驱动有序动作、一个明确主任务、1–2 个当前决策动作、总动作不超过 4、无关动作隐藏、悔棋响应非阻塞且不遮棋盘。
+2. 核对当前 `GameTableView` 仍把 Copy/Ready/Undo/Resign/Restart/Sit/Leave 分散在两个旧 `room-actions` 区域，Undo/Resign/Restart 长期 disabled，悔棋响应仍使用棋盘中央 `aria-modal`。
+3. 核对 `useFriendRoom` 已提供全部安全权限和动作回调；IX-02 不需要修改 RoomStore、room contract 或 socket 事件，只在权限之上增加纯 UI 动作模型。
+4. 确认实现边界：扩展 `table-ui-state.ts` 增加 `getTableActions`；新增 `TableTaskBar`、`TableActionBar`；把倒计时自动拒绝从 modal 迁移到任务栏；扩展真实 Chrome lobby UI smoke 覆盖 Ready、悔棋请求、Allow、动作上限和 modal 消失。
+
+### 步骤 2：建立纯动作模型
+
+1. 在 `table-ui-state.ts` 新增 `TableActionId`、placement、controller capability 和 `getTableActions(state, capabilities)`；动作只会在 controller capability 允许时出现，没有 disabled 作为状态替代品。
+2. 13 个状态均固定动作顺序和落位：当前决策进入 task 区，Undo/Resign/Leave 等次动作进入 toolbar；悔棋响应只保留 Reject/Allow，暂停普通协商动作。
+3. 全状态动作最多 3 个，task 决策最多 2 个；spectator sit、Ready/Unready、Copy invite、Restart 和 abandoned 返回大厅均由状态决定。
+4. 扩展 `table-ui-state.test.ts`，新增 14 个动作模型用例；定向测试现为 28 个用例全部通过。
+
+### 步骤 3：接入任务栏、动作栏与非阻塞悔棋
+
+1. 新增 `TableTaskBar.tsx`、`TableActionBar.tsx` 和 `TablePlayers.tsx`；任务栏显示当前主任务和最多两个决策动作，toolbar 只显示当前可用次动作。
+2. `GameTableView` 删除两个旧 `room-actions` 区块和棋盘中央 `RoomUndoRequestDialog`，统一通过 `getTableActions` 分派 controller 回调；没有权限的 Undo/Resign/Restart/Sit 不再渲染 disabled 按钮。
+3. 悔棋响应方在任务栏同时看见 Reject 倒计时与 Allow；10 秒到期仍自动拒绝。请求方看见等待回应，待处理期间 controller 已继续禁止落子和重复请求。
+4. 六语种新增“等待悔棋回应”和“等待房主重开”文案；任务提示其余部分复用现有准备、回合、观战、胜负与关闭文案。
+5. 新样式把任务栏保持在棋盘附近并支持 sticky；移动端任务和按钮改为纵向优先，旧 modal 样式已删除。
+6. 扩展 `smoke-lobby-ui` 的真实页面流程：浏览器 Guest Ready、Socket Host Ready/落子/请求悔棋、页面 Allow、观战状态，并断言 task 最多 2 个、总动作最多 4、没有 disabled 动作、没有 `aria-modal`、棋盘仍存在。
+7. 静态门禁通过：`npm run lint`；全量 `npm test` 为 15 个文件、144 个测试通过；`npm run build` 编译、TypeScript 和 11 个页面生成通过。
+
+### 步骤 4：真实浏览器、目标视口与协议回归
+
+1. 扩展后的 `smoke:lobby-ui` 通过，覆盖 Ready -> playing -> Host 落子 -> Host 请求悔棋 -> Guest 非阻塞 Allow -> 返回 playing，以及 playing 房观战。
+2. 三个目标视口 1440×900、1280×720、390×844 均自动断言任务栏/棋盘同屏、无遮挡、两个决策按钮可见且不小于 32px；可选截图写入 `.codex/validation/ix02/` 并逐张人工检查通过。
+3. 应用内 Browser 已选中但新标签两次无法附着到当前任务；按 Browser 技能恢复文档检查后停止盲试，未把失败通道冒充成功。实际交互和截图使用项目既有系统 Chrome/CDP。
+4. `smoke:online-room`、`smoke:room-lifecycle`、`smoke:matchmaking`、room/public chat、Presence 均通过；依赖审计为 0 个漏洞。
+5. share-url 与 60 秒生命周期 smoke 并行时首次在等待空房清理处超时；生命周期完成后单独重跑 share-url 全流程通过，判断为并发测试污染，不隐藏首次失败。
+6. 新增独立 `INTERACTION_REDESIGN_IX02_VERIFICATION.md`，计划状态更新为 IX-02 完成、下一步 IX-03；实时房间逻辑文档和 README 索引同步。
+
+### 步骤 5：IX-02 最终门禁
+
+1. 最终 `npm run lint` 通过；`npm test` 为 15 个文件、144 个测试通过；停止生产服务后重新 `npm run build`，编译、TypeScript 和 11 个页面生成通过。
+2. `git diff --check` 通过，仅有 Windows 工作区 LF/CRLF 提示；依赖审计此前已确认 0 个漏洞。
+3. Browser 临时 viewport override 已 reset，3050 本地生产服务已停止；`.codex/validation/ix02` 截图继续排除在 Git 之外。

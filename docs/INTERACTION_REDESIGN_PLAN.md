@@ -2,7 +2,7 @@
 
 更新日期：2026-07-10
 
-状态：实施中；`IX-00 + IX-01` 已完成本地验证，下一步为 `IX-02`
+状态：实施中；`IX-00 + IX-01 + IX-02` 已完成本地验证，下一步为 `IX-03`
 
 文档性质：竞品研究、现有代码对照、实施顺序与当前进度的统一计划
 
@@ -10,15 +10,18 @@
 
 首批实施验证：`docs/INTERACTION_REDESIGN_IX00_IX01_VERIFICATION.md`
 
+牌桌任务栏验证：`docs/INTERACTION_REDESIGN_IX02_VERIFICATION.md`
+
 ## 当前实施进度
 
 | 任务 | 状态 | 2026-07-10 结果 |
 | --- | --- | --- |
 | `IX-00` | 完成 | 建立 workspace 与 13 类 `TableUiState` 纯函数基线；新增 21 个表驱动测试；固定 1440×900、1280×720、390×844 三个后续验收视口；关键在线协议 smoke 未改变业务期望 |
 | `IX-01` | 完成 | `GameShell` 拆为 Local、AI、OnlineLobby、OnlineJoining、GameTable 互斥工作区；在线模式外不自动 rejoin；邀请/恢复加入期间显示 joining gate；URL、session 和 socket 事件保持不变 |
-| `IX-02` | 下一步 | 以已建立的 `TableUiState` 为输入，增加非阻塞任务栏和有序动作模型；本批保留的兼容悔棋 modal 与长期 disabled 动作将在该阶段处理 |
+| `IX-02` | 完成 | 新增纯 `getTableActions`、`TableTaskBar`、`TableActionBar`、`TablePlayers`；当前任务最多 2 个决策、总动作最多 3 个；旧 disabled 动作排和阻塞式悔棋 modal 已删除；三目标视口的悔棋/棋盘同屏验证通过 |
+| `IX-03` | 下一步 | 把玩家、聊天、历史/房间信息重排到桌边栏，完成桌面首屏与移动端优先级、RTL 和触摸目标验收 |
 
-本次实施没有新增 public handle、unlisted、双方再战、activity summary、`matchConfig`、挑战或赛事协议。当前移动端堆叠和桌面牌桌首屏高度问题也没有伪装成已解决，仍属于 `IX-02 + IX-03` 的布局验收范围。
+当前实施没有新增 public handle、unlisted、双方再战、activity summary、`matchConfig`、挑战或赛事协议。牌桌任务和动作逻辑已经收敛，但房间摘要、玩家和聊天仍位于棋盘上方，桌边栏、移动端完整优先级与 RTL 视觉验收仍属于 `IX-03`，没有伪装成已解决。
 
 ## 结论先行
 
@@ -32,7 +35,7 @@
 6. 当前 `acct_...` 注册玩家 ID 具备稳定身份用途，但同样是随机串；它可以作为加入房间的备用查找值，不能替代规范 `roomCode`。面向传播应新增唯一、可读的 `@publicHandle`，并让同一输入框同时解析邀请 URL、房间码、handle 和原始账户 ID。
 7. 再次与 PlayOK/BGA 等竞品逻辑对照后，牌桌不应机械限制为“只能有一个按钮”：应保持一个明确主任务，允许 1–2 个当前决策动作，总动作不超过 4；终局还应把当前房主单方面重开升级为双方表达再战意愿。
 
-建议先完成 P0 的“工作区分离 + 牌桌状态机”，再做桌面/移动端布局。`matchConfig`、点名挑战和赛事属于后续能力，不能阻塞本轮交互主线。
+P0 的“工作区分离 + 牌桌状态机”已经完成，下一步进入桌面/移动端布局。`matchConfig`、点名挑战和赛事属于后续能力，不能阻塞当前交互主线。
 
 ## 研究与代码依据
 

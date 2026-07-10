@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Flag, LogOut, RotateCcw, Send, Undo2, UserRound, Users, X } from "lucide-react";
+import { Send } from "lucide-react";
 import type { Board, Move, Point, Stone } from "@/game/types";
 import type { GameDictionary } from "@/i18n/dictionaries";
-import type { UndoRequestSnapshot } from "@/server/rooms";
 import { GomokuBoard } from "../GomokuBoard";
 import type { FriendRoomController } from "../useFriendRoom";
-import { deriveTableUiState } from "./table-ui-state";
+import { TableActionBar } from "./TableActionBar";
+import { TablePlayers } from "./TablePlayers";
+import { TableTaskBar } from "./TableTaskBar";
+import { deriveTableUiState, getTableActions, type TableActionId } from "./table-ui-state";
 
 type GameTableViewProps = {
   board: Board;
@@ -43,16 +44,62 @@ export function GameTableView({
   const remainingUndoRequests = selfPlayer?.undoRequestsRemaining ?? 0;
   const tableUiState = deriveTableUiState({ canSit: room.canSit, room: clientState });
 
-  return (
-    <section data-online-view="table" data-table-state={tableUiState ?? undefined}>
-      <div className="room-panel" aria-label={labels.panelLabel}>
-        <div className="room-actions">
-          <button className="mode-pill" onClick={room.copyInvite} type="button">
-            <Copy aria-hidden="true" focusable={false} />
-            {room.copiedInvite ? labels.copied : labels.copyInvite}
-          </button>
-        </div>
+  if (!tableUiState) {
+    return null;
+  }
 
+  const actions = getTableActions(tableUiState, {
+    canReady: room.canReady,
+    canResign: room.canResign,
+    canRestart: room.canRestart,
+    canSit: room.canSit,
+    canUndo: room.canUndo,
+    ready: room.ready
+  });
+  const undoRequest = snapshot.undoRequest ?? null;
+  const requester = undoRequest
+    ? snapshot.players.find((player) => player.seat === undoRequest.requesterSeat)
+    : null;
+  const requesterName = undoRequest
+    ? requester?.name ?? (undoRequest.requesterSeat === "black" ? labels.blackSeat : labels.whiteSeat)
+    : null;
+  const playerName = clientState.name || selfPlayer?.name || room.playerName;
+
+  function handleAction(action: TableActionId) {
+    switch (action) {
+      case "allow-undo":
+        room.respondUndoRequest(true);
+        return;
+      case "copy-invite":
+        room.copyInvite();
+        return;
+      case "leave":
+        room.leaveRoom();
+        return;
+      case "ready":
+      case "unready":
+        room.toggleReady();
+        return;
+      case "reject-undo":
+        room.respondUndoRequest(false);
+        return;
+      case "resign":
+        room.resignGame();
+        return;
+      case "restart":
+        room.restartGame();
+        return;
+      case "sit":
+        room.sitRoom();
+        return;
+      case "undo":
+        room.undoMove();
+    }
+  }
+
+  return (
+    <section data-online-view="table" data-table-state={tableUiState}>
+      <div className="room-panel" aria-label={labels.panelLabel}>
         <div className="room-summary">
           <div>
             <p className="metric-label">{labels.roomCode}</p>
@@ -78,109 +125,54 @@ export function GameTableView({
           </div>
         </div>
 
-        <div className="room-players">
-          {snapshot.players.map((player) => (
-            <div className="room-player" key={player.seat}>
-              <span
-                aria-label={player.seat === "black" ? dictionary.status.blackStone : dictionary.status.whiteStone}
-                className={`stone-preview ${player.seat}`}
-                role="img"
-              />
-              <div>
-                <strong>
-                  {player.name}
-                  {player.seat === clientState.seat ? ` ${labels.you}` : ""}
-                </strong>
-                <p>
-                  {player.ready ? labels.ready : labels.notReady}
-                  {" · "}
-                  {player.connected ? labels.connected : labels.disconnected}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {snapshot.spectators.length ? (
-          <div className="room-spectators">
-            <p className="metric-label">{labels.spectators}</p>
-            <div className="room-players">
-              {snapshot.spectators.map((spectator) => (
-                <div className="room-player" key={`${spectator.name}-${spectator.joinedAt}`}>
-                  <Users aria-hidden="true" className="room-spectator-icon" focusable={false} />
-                  <div>
-                    <strong>
-                      {spectator.name}
-                      {clientState.role === "spectator" && spectator.name === clientState.name ? ` ${labels.you}` : ""}
-                    </strong>
-                    <p>{spectator.connected ? labels.connected : labels.disconnected}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+        <TablePlayers dictionary={dictionary} room={clientState} />
 
         <RoomChatPanel dictionary={dictionary} room={room} />
-
-        <div className="room-actions">
-          {room.canReady ? (
-            <button
-              className={`mode-pill ${room.ready ? "danger" : "success"}`}
-              onClick={room.toggleReady}
-              type="button"
-            >
-              <Check aria-hidden="true" focusable={false} />
-              {room.ready ? labels.unready : labels.readyAction}
-            </button>
-          ) : null}
-          <button className="mode-pill" disabled={!room.canUndo} onClick={room.undoMove} type="button">
-            <Undo2 aria-hidden="true" focusable={false} />
-            {dictionary.controls.undo} ({remainingUndoRequests})
-          </button>
-          <button className="mode-pill" disabled={!room.canResign} onClick={room.resignGame} type="button">
-            <Flag aria-hidden="true" focusable={false} />
-            {labels.resign}
-          </button>
-          <button className="mode-pill" disabled={!room.canRestart} onClick={room.restartGame} type="button">
-            <RotateCcw aria-hidden="true" focusable={false} />
-            {labels.restartRoom}
-          </button>
-          {room.canSit ? (
-            <button className="mode-pill" onClick={room.sitRoom} type="button">
-              <UserRound aria-hidden="true" focusable={false} />
-              {labels.sitDown}
-            </button>
-          ) : null}
-          <button className="mode-pill" onClick={room.leaveRoom} type="button">
-            <LogOut aria-hidden="true" focusable={false} />
-            {labels.leaveRoom}
-          </button>
-        </div>
 
         <p className="room-message">
           {(clientState.role === "spectator" ? labels.spectatorStatus : labels.selfStatus).replace(
             "{name}",
-            clientState.name || selfPlayer?.name || room.playerName
+            playerName
           )}
         </p>
         {room.error ? <p className="room-error">{room.error}</p> : null}
       </div>
 
-      <div className="play-area">
-        <GomokuBoard
-          board={board}
-          isInteractive={isInteractive}
-          labels={{
-            board: dictionary.board.label,
-            point: dictionary.board.point
-          }}
-          lastMove={lastMove}
-          previewStone={previewStone}
-          winningKey={winningKey}
-          onPointSelect={onPointSelect}
+      <div className="table-play-stack">
+        <TableTaskBar
+          actions={actions}
+          copiedInvite={room.copiedInvite}
+          dictionary={dictionary}
+          key={undoRequest?.id ?? tableUiState}
+          onAction={handleAction}
+          playerName={playerName}
+          remainingUndoRequests={remainingUndoRequests}
+          requesterName={requesterName}
+          resultText={getTableResultText(clientState.role, clientState.seat, dictionary, snapshot.winner)}
+          state={tableUiState}
+          undoRequest={undoRequest}
         />
-        <RoomUndoRequestOverlay dictionary={dictionary} room={room} />
+        <div className="play-area">
+          <GomokuBoard
+            board={board}
+            isInteractive={isInteractive}
+            labels={{
+              board: dictionary.board.label,
+              point: dictionary.board.point
+            }}
+            lastMove={lastMove}
+            previewStone={previewStone}
+            winningKey={winningKey}
+            onPointSelect={onPointSelect}
+          />
+        </div>
+        <TableActionBar
+          actions={actions}
+          copiedInvite={room.copiedInvite}
+          dictionary={dictionary}
+          onAction={handleAction}
+          remainingUndoRequests={remainingUndoRequests}
+        />
       </div>
     </section>
   );
@@ -237,90 +229,26 @@ function RoomChatPanel({ dictionary, room }: { dictionary: GameDictionary; room:
   );
 }
 
-function RoomUndoRequestOverlay({ dictionary, room }: { dictionary: GameDictionary; room: FriendRoomController }) {
-  const labels = dictionary.room;
-  const snapshot = room.room?.snapshot ?? null;
-  const undoRequest = snapshot?.undoRequest ?? null;
-  const isTarget = Boolean(undoRequest && room.room?.role === "player" && room.room.seat === undoRequest.targetSeat);
-
-  if (!undoRequest || !isTarget || !snapshot) {
-    return null;
-  }
-
-  const requester = snapshot.players.find((player) => player.seat === undoRequest.requesterSeat);
-  const requesterName = requester?.name ?? (undoRequest.requesterSeat === "black" ? labels.blackSeat : labels.whiteSeat);
-
-  return (
-    <RoomUndoRequestDialog
-      key={undoRequest.id}
-      labels={labels}
-      requesterName={requesterName}
-      respondUndoRequest={room.respondUndoRequest}
-      undoRequest={undoRequest}
-    />
-  );
-}
-
-function RoomUndoRequestDialog({
-  labels,
-  requesterName,
-  respondUndoRequest,
-  undoRequest
-}: {
-  labels: GameDictionary["room"];
-  requesterName: string;
-  respondUndoRequest: (accepted: boolean) => void;
-  undoRequest: UndoRequestSnapshot;
-}) {
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  const handledRequestRef = useRef(false);
-  const secondsLeft = Math.max(0, Math.ceil((undoRequest.expiresAt - nowMs) / 1000));
-
-  useEffect(() => {
-    const interval = window.setInterval(() => setNowMs(Date.now()), 250);
-
-    return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (secondsLeft > 0 || handledRequestRef.current) {
-      return;
-    }
-
-    handledRequestRef.current = true;
-    respondUndoRequest(false);
-  }, [respondUndoRequest, secondsLeft]);
-
-  function respond(accepted: boolean) {
-    if (handledRequestRef.current) {
-      return;
-    }
-
-    handledRequestRef.current = true;
-    respondUndoRequest(accepted);
-  }
-
-  return (
-    <div aria-modal="true" className="undo-request-modal" role="dialog">
-      <h2>{labels.undoRequestTitle}</h2>
-      <p>{labels.undoRequestCopy.replace("{name}", requesterName)}</p>
-      <div className="undo-request-actions">
-        <button className="mode-pill danger" onClick={() => respond(false)} type="button">
-          <X aria-hidden="true" focusable={false} />
-          {labels.rejectUndo.replace("{seconds}", String(secondsLeft))}
-        </button>
-        <button className="mode-pill success" onClick={() => respond(true)} type="button">
-          <Check aria-hidden="true" focusable={false} />
-          {labels.allowUndo}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function formatChatMessageTime(sentAt: number): string {
   return new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(sentAt));
+}
+
+function getTableResultText(
+  role: "player" | "spectator",
+  seat: Stone | null,
+  dictionary: GameDictionary,
+  winner: Stone | null
+): string | null {
+  if (!winner) {
+    return dictionary.status.draw;
+  }
+
+  if (role === "spectator" || !seat) {
+    return winner === "black" ? dictionary.status.blackWins : dictionary.status.whiteWins;
+  }
+
+  return winner === seat ? dictionary.room.youWin : dictionary.room.youLose;
 }

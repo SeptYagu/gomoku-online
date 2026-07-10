@@ -3,7 +3,14 @@ import type { Stone } from "@/game/types";
 import type { RoomClientState } from "@/server/room-contract";
 import type { RoomPlayerSnapshot, RoomSnapshot, RoomStatus, UndoRequestSnapshot } from "@/server/rooms";
 import { describe, expect, it } from "vitest";
-import { deriveTableUiState, type TableUiState, type TableUiStateInput } from "./table-ui-state";
+import {
+  deriveTableUiState,
+  getTableActions,
+  type TableActionCapabilities,
+  type TableActionId,
+  type TableUiState,
+  type TableUiStateInput
+} from "./table-ui-state";
 
 describe("deriveTableUiState", () => {
   const cases: Array<{ expected: TableUiState; input: TableUiStateInput; name: string }> = [
@@ -86,6 +93,67 @@ describe("deriveTableUiState", () => {
 
   it("returns null outside a table", () => {
     expect(deriveTableUiState({ canSit: false, room: null })).toBeNull();
+  });
+});
+
+describe("getTableActions", () => {
+  const enabledCapabilities: TableActionCapabilities = {
+    canReady: true,
+    canResign: true,
+    canRestart: true,
+    canSit: true,
+    canUndo: true,
+    ready: false
+  };
+  const cases: Array<{
+    expected: TableActionId[];
+    state: TableUiState;
+    capabilities?: Partial<TableActionCapabilities>;
+  }> = [
+    { expected: ["leave"], state: "spectating" },
+    { expected: ["sit", "leave"], state: "spectating-can-sit" },
+    { expected: ["copy-invite", "leave"], state: "seated-waiting-opponent" },
+    { expected: ["ready", "leave"], state: "seated-not-ready" },
+    { expected: ["unready", "leave"], state: "seated-ready", capabilities: { ready: true } },
+    { expected: ["leave"], state: "ready-compat" },
+    { expected: ["undo", "resign", "leave"], state: "playing-my-turn" },
+    { expected: ["undo", "resign", "leave"], state: "playing-opponent-turn" },
+    { expected: ["resign", "leave"], state: "undo-request-pending" },
+    { expected: ["reject-undo", "allow-undo"], state: "undo-response-required" },
+    { expected: ["restart", "leave"], state: "finished-host" },
+    { expected: ["leave"], state: "finished-guest" },
+    { expected: ["leave"], state: "abandoned" }
+  ];
+
+  for (const testCase of cases) {
+    it(`orders actions for ${testCase.state}`, () => {
+      const actions = getTableActions(testCase.state, {
+        ...enabledCapabilities,
+        ...testCase.capabilities
+      });
+
+      expect(actions.map((action) => action.id)).toEqual(testCase.expected);
+      expect(actions.length).toBeLessThanOrEqual(4);
+      expect(actions.filter((action) => action.placement === "task")).toHaveLength(
+        testCase.state === "undo-response-required" ? 2 : actions.some((action) => action.placement === "task") ? 1 : 0
+      );
+    });
+  }
+
+  it("hides actions when their controller capability is false", () => {
+    const capabilities: TableActionCapabilities = {
+      canReady: false,
+      canResign: false,
+      canRestart: false,
+      canSit: false,
+      canUndo: false,
+      ready: false
+    };
+
+    expect(getTableActions("spectating-can-sit", capabilities).map((action) => action.id)).toEqual(["leave"]);
+    expect(getTableActions("seated-not-ready", capabilities).map((action) => action.id)).toEqual(["leave"]);
+    expect(getTableActions("playing-my-turn", capabilities).map((action) => action.id)).toEqual(["leave"]);
+    expect(getTableActions("finished-host", capabilities).map((action) => action.id)).toEqual(["leave"]);
   });
 });
 

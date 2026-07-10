@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { io } from "socket.io-client";
@@ -41,6 +41,7 @@ type PreparedRooms = {
   cleanup: () => void;
   playingCode: string;
   waitingCode: string;
+  waitingHost: SmokeSocket;
 };
 
 type ClickResult = {
@@ -84,6 +85,37 @@ async function main(): Promise<void> {
       await waitForRoomUrl(cdp, preparedRooms.waitingCode);
       await waitForOnlineView(cdp, "table");
       await assertOnlineWorkspaceIsolation(cdp, "table");
+      await waitForTableState(cdp, "seated-not-ready");
+      await assertTableTaskModel(cdp, "seated-not-ready", ["Ready"]);
+      await clickButton(cdp, "Ready");
+      await waitForTableState(cdp, "seated-ready");
+      const startedRoom = requireOk(
+        await emitAck(preparedRooms.waitingHost, "room:ready", {
+          ready: true,
+          roomCode: preparedRooms.waitingCode
+        }),
+        "waiting host ready"
+      ).snapshot;
+      await waitForTableState(cdp, "playing-opponent-turn");
+      const movedRoom = requireOk(
+        await emitAck(preparedRooms.waitingHost, "game:move", {
+          expectedMoveSeq: startedRoom.moveSeq,
+          point: { col: 7, row: 7 },
+          roomCode: preparedRooms.waitingCode
+        }),
+        "waiting host move"
+      ).snapshot;
+      requireOk(
+        await emitAck(preparedRooms.waitingHost, "game:undo-request", {
+          roomCode: movedRoom.code
+        }),
+        "waiting host undo request"
+      );
+      await waitForTableState(cdp, "undo-response-required");
+      await assertTableTaskModel(cdp, "undo-response-required", ["Reject", "Allow"]);
+      await assertUndoLayoutAtTargetViewports(cdp);
+      await clickButton(cdp, "Allow");
+      await waitForTableState(cdp, "playing-opponent-turn");
       await clickButton(cdp, "Leave");
       await waitForNoRoomUrl(cdp);
       await waitForOnlineView(cdp, "lobby");
@@ -96,6 +128,8 @@ async function main(): Promise<void> {
       await waitForOnlineView(cdp, "table");
       await assertOnlineWorkspaceIsolation(cdp, "table");
       await waitForBodyText(cdp, "Spectator");
+      await waitForTableState(cdp, "spectating");
+      await assertTableTaskModel(cdp, "spectating", []);
 
       console.log(`Lobby UI smoke: ${baseUrl}`);
       console.log("PASS local and AI workspaces do not create a realtime connection");
@@ -103,6 +137,8 @@ async function main(): Promise<void> {
       console.log(`PASS lobby waiting row join - ${preparedRooms.waitingCode}`);
       console.log(`PASS lobby playing row watch - ${preparedRooms.playingCode}`);
       console.log("PASS online lobby and table are mutually exclusive");
+      console.log("PASS table tasks are state-driven, non-blocking, and limited to four actions");
+      console.log("PASS undo decisions and board remain visible at 1440x900, 1280x720, and 390x844");
     } finally {
       cdp.close();
     }
@@ -170,6 +206,146 @@ async function assertOnlineWorkspaceIsolation(cdp: CdpClient, expected: "lobby" 
 
   if (!isValid) {
     throw new Error(`Online workspace isolation failed for ${expected}: ${JSON.stringify(result)}`);
+  }
+}
+
+async function waitForTableState(cdp: CdpClient, state: string): Promise<void> {
+  await waitForValue(async () => {
+    const currentState = await evaluate<string | null>(
+      cdp,
+      `document.querySelector('[data-online-view="table"]')?.getAttribute('data-table-state') ?? null`
+    );
+
+    return currentState === state ? currentState : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function assertTableTaskModel(cdp: CdpClient, expectedState: string, expectedTaskLabels: string[]): Promise<void> {
+  const result = await evaluate<{
+    disabledActions: number;
+    hasBoard: boolean;
+    hasBlockingModal: boolean;
+    hasTaskBar: boolean;
+    state: string | null;
+    taskLabels: string[];
+    totalActions: number;
+  }>(
+    cdp,
+    `(() => {
+      const table = document.querySelector('[data-online-view="table"]');
+      const taskButtons = Array.from(table?.querySelectorAll('.table-task-actions button') ?? []);
+      const toolbarButtons = Array.from(table?.querySelectorAll('.table-action-bar button') ?? []);
+      const actions = [...taskButtons, ...toolbarButtons];
+      return {
+        disabledActions: actions.filter((button) => button.disabled).length,
+        hasBoard: Boolean(table?.querySelector('.play-area .board-wrap')),
+        hasBlockingModal: Boolean(table?.querySelector('.undo-request-modal, [aria-modal="true"]')),
+        hasTaskBar: Boolean(table?.querySelector('.table-task-bar')),
+        state: table?.getAttribute('data-table-state') ?? null,
+        taskLabels: taskButtons.map((button) => (button.textContent || '').trim()),
+        totalActions: actions.length
+      };
+    })()`
+  );
+
+  const hasExpectedLabels = expectedTaskLabels.every((label) =>
+    result.taskLabels.some((buttonLabel) => buttonLabel.includes(label))
+  );
+  const isValid =
+    result.state === expectedState &&
+    result.hasTaskBar &&
+    result.hasBoard &&
+    !result.hasBlockingModal &&
+    result.disabledActions === 0 &&
+    result.totalActions <= 4 &&
+    result.taskLabels.length <= 2 &&
+    hasExpectedLabels;
+
+  if (!isValid) {
+    throw new Error(`Table task model failed for ${expectedState}: ${JSON.stringify(result)}`);
+  }
+}
+
+async function assertUndoLayoutAtTargetViewports(cdp: CdpClient): Promise<void> {
+  const captureDir = process.env.GOMOKU_SMOKE_CAPTURE_DIR;
+  const viewports = [
+    { height: 900, width: 1440 },
+    { height: 720, width: 1280 },
+    { height: 844, width: 390 }
+  ];
+
+  try {
+    for (const viewport of viewports) {
+      await cdp.send("Emulation.setDeviceMetricsOverride", {
+        deviceScaleFactor: 1,
+        height: viewport.height,
+        mobile: viewport.width <= 640,
+        width: viewport.width
+      });
+      await evaluate<void>(
+        cdp,
+        `document.querySelector('.table-task-bar')?.scrollIntoView({ block: 'start' })`
+      );
+      const layout = await waitForValue(async () => {
+        const current = await evaluate<{
+          board: { bottom: number; top: number } | null;
+          task: { bottom: number; top: number } | null;
+          taskButtonsVisible: boolean;
+          viewport: { height: number; width: number };
+        }>(
+          cdp,
+          `(() => {
+            const task = document.querySelector('.table-task-bar');
+            const board = document.querySelector('.play-area .board-wrap');
+            const taskRect = task?.getBoundingClientRect();
+            const boardRect = board?.getBoundingClientRect();
+            const taskButtons = Array.from(document.querySelectorAll('.table-task-actions button'));
+            return {
+              board: boardRect ? { bottom: boardRect.bottom, top: boardRect.top } : null,
+              task: taskRect ? { bottom: taskRect.bottom, top: taskRect.top } : null,
+              taskButtonsVisible: taskButtons.length === 2 && taskButtons.every((button) => {
+                const rect = button.getBoundingClientRect();
+                return rect.width >= 32 && rect.height >= 32 && rect.top >= 0 && rect.bottom <= window.innerHeight;
+              }),
+              viewport: { height: window.innerHeight, width: window.innerWidth }
+            };
+          })()`
+        );
+
+        return current.viewport.width === viewport.width && current.viewport.height === viewport.height ? current : null;
+      }, STEP_TIMEOUT_MS);
+      const isVisible =
+        layout.task !== null &&
+        layout.board !== null &&
+        layout.task.top >= 0 &&
+        layout.task.bottom <= viewport.height &&
+        layout.board.top >= layout.task.bottom &&
+        layout.board.bottom <= viewport.height &&
+        layout.taskButtonsVisible;
+
+      if (!isVisible) {
+        throw new Error(`Undo layout failed at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
+      }
+
+      if (captureDir) {
+        await mkdir(captureDir, { recursive: true });
+        const screenshot = (await cdp.send("Page.captureScreenshot", {
+          format: "png",
+          fromSurface: true
+        })) as { data?: string };
+
+        if (!screenshot.data) {
+          throw new Error(`Chrome did not return a screenshot at ${viewport.width}x${viewport.height}`);
+        }
+
+        await writeFile(
+          path.join(captureDir, `undo-${viewport.width}x${viewport.height}.png`),
+          Buffer.from(screenshot.data, "base64")
+        );
+      }
+    }
+  } finally {
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
   }
 }
 
@@ -275,7 +451,8 @@ async function prepareRooms(baseUrl: string): Promise<PreparedRooms> {
       playingGuest.disconnect();
     },
     playingCode: playingRoom.code,
-    waitingCode: waitingRoom.code
+    waitingCode: waitingRoom.code,
+    waitingHost
   };
 }
 

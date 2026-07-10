@@ -142,6 +142,8 @@ export type GameDictionary = {
     rejectUndo: string;
     waitingForOpponent: string;
     waitingForReady: string;
+    waitingForRestart: string;
+    waitingForUndoResponse: string;
     watchRoom: string;
     whiteSeat: string;
     you: string;
@@ -321,6 +323,8 @@ const en = {
       rejectUndo: "Reject ({seconds})",
       waitingForOpponent: "Waiting for opponent",
       waitingForReady: "Waiting for ready",
+      waitingForRestart: "Waiting for the host to restart",
+      waitingForUndoResponse: "Waiting for the opponent to answer the undo request",
       watchRoom: "Watch",
       whiteSeat: "White",
       you: "(you)",
@@ -496,6 +500,8 @@ const zh = {
       rejectUndo: "拒绝（{seconds}）",
       waitingForOpponent: "等待对手加入",
       waitingForReady: "等待准备",
+      waitingForRestart: "等待房主重开",
+      waitingForUndoResponse: "等待对手回应悔棋请求",
       watchRoom: "观战",
       whiteSeat: "白棋",
       you: "（你）",
@@ -671,6 +677,8 @@ const fr = {
       rejectUndo: "Refuser ({seconds})",
       waitingForOpponent: "En attente d'un adversaire",
       waitingForReady: "En attente des joueurs",
+      waitingForRestart: "En attente du redémarrage par l'hôte",
+      waitingForUndoResponse: "En attente de la réponse adverse à l'annulation",
       watchRoom: "Regarder",
       whiteSeat: "Blancs",
       you: "(vous)",
@@ -846,6 +854,8 @@ const es = {
       rejectUndo: "Rechazar ({seconds})",
       waitingForOpponent: "Esperando rival",
       waitingForReady: "Esperando listos",
+      waitingForRestart: "Esperando que el anfitrión reinicie",
+      waitingForUndoResponse: "Esperando la respuesta del rival a deshacer",
       watchRoom: "Mirar",
       whiteSeat: "Blancas",
       you: "(tú)",
@@ -1021,6 +1031,8 @@ const ru = {
       rejectUndo: "Отклонить ({seconds})",
       waitingForOpponent: "Ожидание соперника",
       waitingForReady: "Ожидание готовности",
+      waitingForRestart: "Ожидание перезапуска от хозяина",
+      waitingForUndoResponse: "Ожидание ответа соперника на отмену хода",
       watchRoom: "Смотреть",
       whiteSeat: "Белые",
       you: "(вы)",
@@ -1196,6 +1208,8 @@ const ar = {
       rejectUndo: "رفض ({seconds})",
       waitingForOpponent: "بانتظار الخصم",
       waitingForReady: "بانتظار الجاهزية",
+      waitingForRestart: "بانتظار إعادة التشغيل من المضيف",
+      waitingForUndoResponse: "بانتظار رد الخصم على طلب التراجع",
       watchRoom: "مشاهدة",
       whiteSeat: "الأبيض",
       you: "(أنت)",

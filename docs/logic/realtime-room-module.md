@@ -203,14 +203,16 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 宽限期内可用 session token 恢复座位。
 - 超时后按规则判负、弃局或转 abandoned。
 
-### 2026-07-10 IX-00/IX-01 客户端状态与连接边界
+### 2026-07-10 IX-00/IX-01/IX-02 客户端状态与连接边界
 
 - 新增纯前端 `deriveTableUiState()`，完整枚举 13 个牌桌语义状态，但只组织后续 UI，不替代服务端 `can*` 权限和权威快照。
 - `GameShell` 用 workspace selector 保证在线大厅、joining gate、在线牌桌三者互斥；有 room ack 时牌桌优先于可能残留的 joining 标志。
 - `useFriendRoom({ enabled })` 在 local/AI 模式禁止新的自动 rejoin；从活跃房切换模式时仍先发既有 `room:leave`，没有为了门控提前断开 socket 或改变 leave ack 语义。
 - 邀请 URL 和 stored session 恢复期间进入 `OnlineJoiningView`；ack 成功仍以服务端 `snapshot.code` 同步 URL/session，失败仍走原错误与重新加入路径。
-- `GameTableView` 本批保留 ready、undo、resign、restart、sit、leave 和当前 undo dialog 的兼容行为；非阻塞任务栏、有序动作和终局再战属于后续 `IX-02`/`IX-06A`。
-- 新增状态与真实 Chrome smoke 覆盖视图互斥及 local/AI 不建立 Socket.IO 资源；本批没有修改本节列出的任何房间/对局事件。
+- `getTableActions(state, capabilities)` 现在把 controller 权限转换为有序可见动作；无权限动作直接隐藏，task 区最多 2 个决策，task + toolbar 总数最多 3 个。
+- `GameTableView` 通过 `TableTaskBar` / `TableActionBar` 承载 ready、undo、resign、restart、sit、leave；悔棋 Reject/Allow 和倒计时已从棋盘中央 modal 移到非阻塞任务栏，超时自动拒绝语义保持不变。
+- 新增状态与真实 Chrome smoke 覆盖视图互斥、local/AI 不建立 Socket.IO、Ready、Host 落子/发起悔棋、Guest Allow 和 spectator 状态；本批没有修改本节列出的任何房间/对局事件。
+- 终局仍沿用 host restart 兼容语义，双方再战属于后续 `IX-06A`；局中离桌确认属于 `IX-05`。
 
 ## 推荐事件
 
