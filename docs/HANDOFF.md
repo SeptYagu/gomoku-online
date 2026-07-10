@@ -4861,3 +4861,68 @@ b6faf9e
 - 提交范围：21 个文件，528 行新增、72 行删除；包含权威 visibility、列表/事件/Presence/记录发现面隔离、朋友入口和 Room info、六语种文案、149 测试与 Chrome smoke、验证报告和计划/逻辑文档。
 - `git push origin main`：成功，`832edcc..d3ff516`。
 - 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-04A。
+
+## 2026-07-10 IX-04A 统一加入标识与公开 handle
+
+### 步骤 1：重读账户、加入与房主生命周期
+
+1. 重读 IX-04A、AccountStore JSONL/注册/session、GuestSession、socket 身份解析、RoomStore hostSeat/离房/断线/重连、当前 joinCode 全大写逻辑、邀请 URL/session 恢复和限流基础设施；Git 与远端同步，仅 `.codex/` 未跟踪。
+2. `roomCode` 继续是 socket room、URL/session、gameId 和所有桌内动作的唯一规范键；新 `room:join-target` 只负责原子解析入口，成功 ack 必须继续返回 `snapshot.code`。
+3. `publicHandle` 必须是 AccountStore 持久字段和大小写无关唯一索引，不从可变 displayName 临时推导。旧 JSONL 账户需确定性迁移；当前单进程文件 store 只能声明该 store 内唯一，不能声称多实例全站唯一。
+4. handle 采用 ASCII 小写、3–20 字符、首尾字母数字、中间允许 `_`/`-`，拒绝保留词；注册可提交一次自选值，未提交时从 displayName 生成并用账户 ID 确定性消歧，创建后不可变。
+5. RoomStore 需要显式 `hostAccountId -> roomCode` 与反向索引；只有当前 hostSeat 对应的已注册且在线玩家、且房间策略允许时才绑定。不能在解析请求时扫描 rooms 或任意选择“最新房间”。
+6. public 房默认允许房主 handle/account-ID 解析；IX-04B 的 unlisted 默认关闭且当前 UI 不提供开启开关。直接房间码/同源邀请 URL 仍可加入 unlisted，别名不能旁路发现。
+7. 房主离开、转移、断线、重连、房间删除和 visibility 不同的新房创建都必须同步索引。对局中 host 断线时本阶段选择暂停别名解析，重连且没有其他显式目标时再恢复。
+8. 同一账户显式创建新可发现房时，房主索引原子重绑到新房，旧房不再是别名目标；普通旧房状态变化不得通过扫描或“最后更新时间”抢回索引。
+9. 统一输入服务端区分：同源 http(s) URL、裸 roomCode、`@handle`、原始 `acct_...`。只对裸 roomCode 大写；handle 大小写无关；account ID 保留原值和大小写。
+10. handle/account-ID 查询使用固定窗口限流并对不存在、关闭策略、无当前目标统一返回 room-not-found，避免把接口变成账户在线枚举。旧 `room:join` 继续兼容。
+11. 当前公开 Profile/排行榜已在 IX-04B 排除 unlisted 记录；IX-04A 不能通过 handle 展示重新泄漏 unlisted 目标。
+
+### 步骤 2：账户 handle 与显式房主索引
+
+1. `AccountSnapshot/Session` 与 JSONL `StoredAccount` 新增不可变 `publicHandle`；注册可提交一次自选 handle，省略时从 displayName 生成。规则为 3–20 位 ASCII 小写，首尾字母数字，中间允许 `_`/`-`，拒绝 admin/api/gomoku/guest/player/root/support/system 等保留词。
+2. AccountStore 新增大小写无关 handle 唯一索引，以及按 handle/原始 account ID 精确查询；重复 handle 返回 409，非法格式返回 400。旧 JSONL 无 handle 时用 displayName + account ID 确定性迁移，碰撞消歧且重启结果一致。
+3. 账户 token 解析现在把服务端权威 publicHandle 传给 RoomStore；游客不能伪造 registered handle。
+4. RoomPlayer/Spectator 保存内部 publicHandle；RoomSnapshot 只公开当前可解析房主的 `hostPublicHandle` 和 `allowJoinByHostHandle`，不公开玩家 ID。
+5. RoomStore 维护双向显式 hostAccountId <-> roomCode 索引：public 默认允许，unlisted 默认关闭；创建新目标可显式重绑，普通旧房状态变化不能抢回；删除/过期清除索引。
+6. waiting 房主离开后索引转移到新 hostSeat 的注册玩家；playing 房主断线时暂停别名，恢复连接后在没有其他显式目标时恢复；finished 保留窗口继续可解析并按既有语义加入观战。
+
+### 步骤 3：统一 join-target 协议与前端输入
+
+1. 新增向后兼容的 `room:join-target`：同源 http(s) URL、裸 roomCode、`@handle`、原始 `acct_...` 均在服务端原子解析后调用既有 joinRoom；旧 `room:join` 继续用于可信列表、邀请恢复兼容路径。
+2. 仅裸 roomCode 分支转大写；handle 大小写无关；account ID 保留原大小写；成功 ack 仍用 `snapshot.code` 更新 URL、stored session、输入框和所有后续动作。
+3. URL 依据 socket Origin/Host 校验同源，跨域 URL 与不存在/关闭策略/无目标的别名统一返回 room-not-found。
+4. handle/account-ID 查询使用按连接地址（代理场景读取 forwarded-for）的 20 次/分钟固定窗口限流；同 IP 重连不能重置，限流错误继续伪装为同一 not-found 结果，避免账户在线枚举。
+5. 前端 `joinCode` 全量重命名为 `joinTarget`，取消整体大写和 8 字符限制；朋友表单接受 256 字符 URL/code/@handle/account ID，一次提交，无额外确认。
+6. 注册身份区新增可选 handle 输入，注册后仅显示不可变 `@handle`；public 牌桌 Room info 显示 Host handle，unlisted 默认不显示/不解析。
+7. 六语种新增 public handle、统一目标与 host handle 文案，并把朋友入口说明更新为 link/code/@handle。
+8. 首次 build 在 AccountError 新增 handle 错误码后发现其联合类型不能赋给 RoomAck；没有使用断言，改为把 duplicate-handle/invalid-handle 纳入共享 RoomErrorCode，随后 TypeScript 构建通过。
+9. 单元/socket 测试覆盖 handle 规范/持久化/迁移/碰撞、唯一房主索引、转移/断线/恢复/finished、四种输入、跨域拒绝、unlisted 别名关闭和跨重连限流；三份定向测试 65 个通过。
+
+### 步骤 4：真实浏览器四种输入与失败修正
+
+1. Chrome share smoke 扩展为真实注册 handle、朋友 unlisted、以及同一统一输入框依次提交小写房间码、同源 URL、混合大小写 `@handle`、原始混合大小写 account ID；四次均进入同一规范 roomCode，离房后输入值也回写为规范 code。
+2. 首次扩展 smoke 让主标签注册后直接创建房间，新邀请标签共享同一 Chrome profile 的 account token，服务端正确拒绝同一注册账户再次加入自己的房间，旧等待断言超时。修正测试为截图验证注册 handle 后先 Sign out，再用游客身份模拟房主和受邀者两个用户。
+3. 第二次运行在注册 handle 处超时；直接 API 复核返回 429，确认同一 3050 进程的多轮 smoke 已触发账户注册限流。重启单一生产进程清空测试窗口后完整流程通过，没有修改产品限流。
+4. `public-handle-registration.png` 人工确认注册后 handle 只读显示；`public-host-handle.png` 确认 Public 牌桌显示 Host handle；IX-04B 的 unlisted 两张边界截图继续通过。
+
+### 步骤 5：提交前安全边界复核
+
+1. 再次逐段核对计划、账户迁移、房主索引、join-target、前端输入和测试后，发现 handle 分配的极端兜底仍引用 `Date.now()`；虽然只会在连续候选全部碰撞时触发，但会破坏旧账户迁移“同一文件每次加载结果一致”的承诺。兜底已改为账户 ID 的 SHA-256 确定性片段，协议规范化统一使用与运行区域无关的 ASCII `toLowerCase()`。
+2. Socket 别名枚举限流原先无条件采用 `X-Forwarded-For`，直连客户端可伪造该 header 规避按地址窗口。现与账户注册限流保持同一信任边界：只有 socket 远端地址为 loopback（本机反向代理）时才读取最后一段 forwarded 地址，其他连接始终以真实远端地址计数。
+3. 重新执行 `npm run lint`、账户/RoomStore/socket 三份定向测试和 `git diff --check`；65 个测试全部通过，无 lint 或空白错误。
+
+### 步骤 6：最终构建、浏览器与协议回归
+
+1. 全量 `npm test` 为 15 个文件、156 个测试通过；`npm audit --omit=dev` 为 0 个漏洞。确认旧 3050 服务后只停止明确属于本仓库的 `tsx src/server/online-server.ts` 进程，再以最终代码执行生产构建；编译、TypeScript 和 11 个页面生成通过。
+2. 最终构建上的 `smoke:share-url` 与 `smoke:lobby-ui` 通过：注册 handle、unlisted 边界、四种统一输入、规范 code 回写，以及三视口和 RTL 均无回归。
+3. lobby、matchmaking、online-room、room-lifecycle、公共/房间聊天、Presence、game-records、profile-records、profile-page 和 leaderboard smoke 全部通过。生命周期脚本首次因工具分段输出被误判结束，停止明确的孤立 smoke 进程后单独完整复跑并通过，没有把中间输出当最终结果。
+4. account smoke 首次收到 429；同一测试进程此前已由 share/profile 连续注册多名账户，确认触发现有 5 次/分钟注册限流。重启测试服务清空内存窗口后单独复跑，注册、session、权威记录、Profile 和排行榜全部通过；产品限流未放宽。
+5. 新增 `INTERACTION_REDESIGN_IX04A_VERIFICATION.md`，更新计划为 IX-04A 完成、下一步 IX-06A，并同步 README、大厅/匹配、实时房间、账户/排名逻辑以及 IX-04B 后续状态。
+
+### IX-04A 提交与推送
+
+- 提交：`1233bdd feat: add public handles and unified room join`。
+- 提交范围：20 个文件，1168 行新增、65 行删除；包含账户 handle/迁移、显式房主目标、统一 join-target、unlisted 别名边界、来源地址限流、六语种 UI、156 项全量测试与 Chrome smoke、验证报告及计划/逻辑文档。
+- `git push origin main`：成功，`0ea827d..1233bdd`。
+- 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-06A。
