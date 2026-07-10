@@ -66,6 +66,7 @@ export function TableActionButton({
       type="button"
     >
       {action.id === "copy-invite" ? <Copy aria-hidden="true" focusable={false} /> : null}
+      {action.id === "cancel-wait" ? <X aria-hidden="true" focusable={false} /> : null}
       {action.id === "ready" || action.id === "allow-undo" ? <Check aria-hidden="true" focusable={false} /> : null}
       {action.id === "unready" || action.id === "reject-undo" ? <X aria-hidden="true" focusable={false} /> : null}
       {action.id === "undo" ? <Undo2 aria-hidden="true" focusable={false} /> : null}
@@ -92,6 +93,8 @@ function getActionLabel(
       return labels.allowUndo;
     case "copy-invite":
       return copiedInvite ? labels.copied : labels.copyInvite;
+    case "cancel-wait":
+      return labels.cancelWaiting;
     case "leave":
       return labels.leaveRoom;
     case "ready":
@@ -116,7 +119,7 @@ function getActionTone(action: TableActionId): "danger" | "success" | null {
     return "success";
   }
 
-  if (action === "reject-undo" || action === "resign" || action === "unready") {
+  if (action === "cancel-wait" || action === "reject-undo" || action === "resign" || action === "unready") {
     return "danger";
   }
 

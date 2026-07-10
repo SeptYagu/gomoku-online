@@ -296,6 +296,7 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/INTERACTION_REDESIGN_IX00_IX01_VERIFICATION.md`：首批互斥工作区实施验证。
 - `docs/INTERACTION_REDESIGN_IX02_VERIFICATION.md`：牌桌任务栏、动作模型和非阻塞悔棋验证。
 - `docs/INTERACTION_REDESIGN_IX03_VERIFICATION.md`：桌边栏、移动端优先级和 RTL 布局验证。
+- `docs/INTERACTION_REDESIGN_IX04_VERIFICATION.md`：在线大厅主次入口、低活跃降级、取消等待和 RTL 验证。
 - `docs/HANDOFF.md`：当前任务交接文档，方便新窗口接手。
 - `docs/logic/`：按模块记录从参考项目提取出的实现逻辑。
 

@@ -281,7 +281,7 @@ Custom Game：
   - socket `matchmaking:find` 优先加入最早创建、未满员的 waiting 房；没有可用 waiting 房时创建新房。
   - socket `matchmaking:cancel` 释放当前等待房身份；若房间无人则立即从大厅移除。
   - 满员房、playing、finished、abandoned 房不会进入随机匹配。
-  - 好友房面板新增 Find match / Cancel match 按钮，继续使用游客随机名和 session 级玩家身份。
+  - 在线大厅以 Find match 为一次点击主动作；匹配成功进入单人 waiting 后，牌桌任务栏提供 Cancel waiting 并复用现有取消协议。
   - `tools/smoke-matchmaking.ts` 覆盖第一个匹配创建等待房、第二个匹配加入同房、第三个匹配不超员、取消匹配关闭单人等待房。
 - 多实例部署前仍需把匹配队列迁移到 Redis/PostgreSQL 原子锁；当前真实服务器是单进程内存版。
 
@@ -315,6 +315,27 @@ Custom Game：
 - `useFriendRoom({ enabled })` 的自动 rejoin 只在在线模式启用；真实 Chrome smoke 已验证应用初始 local 及切换 AI 时没有 `/socket.io` Resource Timing 记录，进入在线模式后才执行大厅订阅。
 - 本阶段只重组既有入口，没有改变 `lobby:join`、`lobby:room-updated`、`lobby:room-deleted`、`matchmaking:find`、`room:join` 或 URL/session 契约。
 - 入口主次、空大厅降级、Profile/排行榜下沉和真正的 unlisted 朋友桌仍分别属于 `IX-04`、`IX-04B`，不能把本次视图拆分描述成这些能力已经完成。
+
+### 2026-07-10 IX-04 大厅入口分层
+
+- 快速匹配是大厅唯一大型主动作；已恢复游客身份时，从大厅到 `matchmaking:find` 只需一次点击。
+- “和朋友玩”按需展开后才挂载创建房和房间码表单；创建区明确提示当前房间会出现在公开大厅，不能称为私密房。
+- 昵称和账号在“编辑身份”后展开；公共聊天/Presence 与 Profile/排行榜分别位于房间列表后的次级区，默认不建立对应读取 effect。
+- 房间列表直接按服务端 `RoomListItem.canJoin` / `canWatch` 分为 joinable/watchable；满员 waiting 房可以出现在 watchable 组，但仍显示真实 waiting 状态。
+- 空列表提供 `matchmaking:find`、`room:create` 和切换 AI 三条真实路径；不从分页列表或 Presence 样本推导全站热度。
+- 单人 waiting 通过 `FriendRoomController.canCancelMatch` 在任务栏显示 Cancel waiting；该动作调用既有 `matchmaking:cancel`，成功后清 stored session、room URL 和客户端房间态。
+- controller 尚未持久化房间入口意图，因此快速匹配和朋友创建的单人桌统一使用“取消等待”，不显示可能失真的“取消匹配”。
+- 手动朋友路径经 Chrome smoke 验证为：展开一次 -> 输入一次房间码 -> 提交一次；邀请 URL 继续自动直达 joining/table，不增加确认页。
+- 本阶段没有新增 visibility、invite token、handle/account-ID 解析或汇总统计；这些分别留给 IX-04B、IX-04A 和 IX-07。
+
+IX-04 新增并接入的六语种 UI 文案 key：
+
+- `playWithFriends`
+- `publicRoomNotice`
+- `editIdentity`
+- `joinableRooms`
+- `watchableRooms`
+- `cancelWaiting`
 
 大厅与匹配至少需要：
 

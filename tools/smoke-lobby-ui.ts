@@ -56,7 +56,7 @@ const STEP_TIMEOUT_MS = 20_000;
 async function main(): Promise<void> {
   const baseUrl = normalizeBaseUrl(process.argv[2] ?? DEFAULT_BASE_URL);
   const baseOrigin = new URL(baseUrl).origin;
-  const preparedRooms = await prepareRooms(baseUrl);
+  let preparedRooms: PreparedRooms | null = null;
   const chromePath = findChromePath();
   const port = await getFreePort();
   const userDataDir = await mkdtemp(path.join(tmpdir(), "gomoku-lobby-ui-smoke-"));
@@ -77,11 +77,26 @@ async function main(): Promise<void> {
       await clickButton(cdp, "Friend room");
       await waitForOnlineView(cdp, "lobby");
       await assertOnlineWorkspaceIsolation(cdp, "lobby");
+      await assertLobbyEntryHierarchy(cdp);
+      await clickButton(cdp, "Find match");
+      await waitForOnlineView(cdp, "table");
+      await waitForTableState(cdp, "seated-waiting-opponent");
+      await assertTableTaskModel(cdp, "seated-waiting-opponent", ["Cancel waiting"]);
+      await clickButton(cdp, "Cancel waiting");
+      await waitForNoRoomUrl(cdp);
+      await waitForOnlineView(cdp, "lobby");
+
+      preparedRooms = await prepareRooms(baseUrl);
+      await clickLobbySection(cdp, "progress");
       await assertLeaderboardSearchSubmit(cdp);
+      await clickLobbySection(cdp, "progress");
 
       await waitForBodyText(cdp, preparedRooms.waitingCode);
       await assertLobbyRowContains(cdp, preparedRooms.waitingCode, "Join room");
-      await clickLobbyRoomButton(cdp, preparedRooms.waitingCode);
+      await assertLobbyRoomGroup(cdp, preparedRooms.waitingCode, "joinable");
+      await clickLobbySection(cdp, "friends");
+      await setFriendRoomCode(cdp, preparedRooms.waitingCode);
+      await clickButton(cdp, "Join room");
       await waitForRoomUrl(cdp, preparedRooms.waitingCode);
       await waitForOnlineView(cdp, "table");
       await assertOnlineWorkspaceIsolation(cdp, "table");
@@ -126,6 +141,7 @@ async function main(): Promise<void> {
 
       await waitForBodyText(cdp, preparedRooms.playingCode);
       await assertLobbyRowContains(cdp, preparedRooms.playingCode, "Watch");
+      await assertLobbyRoomGroup(cdp, preparedRooms.playingCode, "watchable");
       await clickLobbyRoomButton(cdp, preparedRooms.playingCode);
       await waitForRoomUrl(cdp, preparedRooms.playingCode);
       await waitForOnlineView(cdp, "table");
@@ -136,21 +152,27 @@ async function main(): Promise<void> {
       await navigateToLocaleTable(cdp, baseUrl, "ar", preparedRooms.playingCode);
       await waitForTableState(cdp, "spectating");
       await assertRtlMobileTable(cdp);
+      await clickTableAction(cdp, "leave");
+      await waitForOnlineView(cdp, "lobby");
+      await assertRtlMobileLobby(cdp);
 
       console.log(`Lobby UI smoke: ${baseUrl}`);
       console.log("PASS local and AI workspaces do not create a realtime connection");
+      console.log("PASS quick match is the one-click primary action and solo waiting can be cancelled");
+      console.log("PASS friends, identity, community, and progress use progressive disclosure");
+      console.log("PASS manual friend join needs one disclosure, one room code, and one submit");
       console.log("PASS leaderboard search has an explicit submit button");
-      console.log(`PASS lobby waiting row join - ${preparedRooms.waitingCode}`);
-      console.log(`PASS lobby playing row watch - ${preparedRooms.playingCode}`);
+      console.log(`PASS lobby waiting row is joinable - ${preparedRooms.waitingCode}`);
+      console.log(`PASS lobby playing row is watchable - ${preparedRooms.playingCode}`);
       console.log("PASS online lobby and table are mutually exclusive");
       console.log("PASS table tasks are state-driven, non-blocking, and limited to four actions");
       console.log("PASS undo decisions and board remain visible at 1440x900, 1280x720, and 390x844");
-      console.log("PASS 1280x720 can play without scrolling and 390x844 Arabic preserves RTL table order");
+      console.log("PASS 1280x720 can play without scrolling and 390x844 Arabic preserves table and lobby order");
     } finally {
       cdp.close();
     }
   } finally {
-    preparedRooms.cleanup();
+    preparedRooms?.cleanup();
     chrome.kill();
     await waitForProcessExit(chrome);
     await rm(userDataDir, { force: true, maxRetries: 10, recursive: true, retryDelay: 250 });
@@ -213,6 +235,48 @@ async function assertOnlineWorkspaceIsolation(cdp: CdpClient, expected: "lobby" 
 
   if (!isValid) {
     throw new Error(`Online workspace isolation failed for ${expected}: ${JSON.stringify(result)}`);
+  }
+}
+
+async function assertLobbyEntryHierarchy(cdp: CdpClient): Promise<void> {
+  const result = await waitForValue(async () => {
+    const current = await evaluate<{
+      collapsedSections: boolean;
+      emptyActions: string[];
+      friendCollapsed: boolean;
+      primaryActionCount: number;
+      primaryBeforeFriends: boolean;
+    }>(
+      cdp,
+      `(() => {
+        const primary = document.querySelector('[data-lobby-action="quick-match"]');
+        const friends = document.querySelector('[data-lobby-section-toggle="friends"]');
+        const empty = document.querySelector('[data-lobby-empty-state]');
+        return {
+          collapsedSections: document.querySelectorAll('[data-lobby-section]').length === 0 &&
+            !document.querySelector('.room-field input, .public-chat, .room-presence, .room-leaderboard'),
+          emptyActions: Array.from(empty?.querySelectorAll('button') ?? []).map((button) => (button.textContent || '').trim()),
+          friendCollapsed: friends?.getAttribute('aria-expanded') === 'false',
+          primaryActionCount: document.querySelectorAll('[data-lobby-action="quick-match"]').length,
+          primaryBeforeFriends: Boolean(primary && friends && (primary.compareDocumentPosition(friends) & Node.DOCUMENT_POSITION_FOLLOWING))
+        };
+      })()`
+    );
+
+    return current.emptyActions.length === 3 ? current : null;
+  }, STEP_TIMEOUT_MS);
+  const hasEmptyFallbacks = ["Find match", "Create room", "AI"].every((label) =>
+    result.emptyActions.some((action) => action.includes(label))
+  );
+
+  if (
+    !result.collapsedSections ||
+    !result.friendCollapsed ||
+    result.primaryActionCount !== 1 ||
+    !result.primaryBeforeFriends ||
+    !hasEmptyFallbacks
+  ) {
+    throw new Error(`Lobby entry hierarchy failed: ${JSON.stringify(result)}`);
   }
 }
 
@@ -554,6 +618,72 @@ async function assertRtlMobileTable(cdp: CdpClient): Promise<void> {
   }
 }
 
+async function assertRtlMobileLobby(cdp: CdpClient): Promise<void> {
+  try {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 844,
+      mobile: false,
+      width: 390
+    });
+    await evaluate<void>(cdp, `window.scrollTo(0, 0)`);
+    const layout = await waitForValue(async () => {
+      const current = await evaluate<{
+        criticalTargetsLargeEnough: boolean;
+        direction: string;
+        noHorizontalOverflow: boolean;
+        order: Array<number | null>;
+        viewport: { height: number; width: number };
+      }>(
+        cdp,
+        `(() => {
+          const selectors = [
+            '.lobby-primary-action',
+            '[data-lobby-section-toggle="friends"]',
+            '.room-lobby',
+            '.lobby-secondary-actions'
+          ];
+          const criticalTargets = Array.from(document.querySelectorAll('[data-lobby-action="quick-match"], [data-lobby-section-toggle="friends"]'));
+          return {
+            criticalTargetsLargeEnough: criticalTargets.length === 2 && criticalTargets.every((target) => {
+              const rect = target.getBoundingClientRect();
+              return rect.width >= 44 && rect.height >= 44;
+            }),
+            direction: document.documentElement.dir,
+            noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+            order: selectors.map((selector) => document.querySelector(selector)?.getBoundingClientRect().top ?? null),
+            viewport: { height: window.innerHeight, width: window.innerWidth }
+          };
+        })()`
+      );
+
+      return current.viewport.width === 390 && current.viewport.height === 844 ? current : null;
+    }, STEP_TIMEOUT_MS);
+    const numericOrder = layout.order.filter((value): value is number => value !== null);
+    const ordered = numericOrder.length === 4 && numericOrder.every((value, index) => index === 0 || numericOrder[index - 1] < value);
+
+    if (layout.direction !== "rtl" || !layout.noHorizontalOverflow || !layout.criticalTargetsLargeEnough || !ordered) {
+      throw new Error(`RTL mobile lobby layout failed: ${JSON.stringify(layout)}`);
+    }
+
+    const captureDir = process.env.GOMOKU_SMOKE_CAPTURE_DIR;
+
+    if (captureDir) {
+      await mkdir(captureDir, { recursive: true });
+      const screenshot = (await cdp.send("Page.captureScreenshot", {
+        format: "png",
+        fromSurface: true
+      })) as { data?: string };
+
+      if (screenshot.data) {
+        await writeFile(path.join(captureDir, "lobby-rtl-390x844.png"), Buffer.from(screenshot.data, "base64"));
+      }
+    }
+  } finally {
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
+  }
+}
+
 class CdpClient {
   private commandId = 1;
   private readonly pending = new Map<number, PendingCommand>();
@@ -740,6 +870,62 @@ async function clickButton(cdp: CdpClient, text: string): Promise<void> {
   }
 }
 
+async function clickLobbySection(cdp: CdpClient, section: string): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const button = document.querySelector('[data-lobby-section-toggle="${section}"]');
+      if (!button) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      button.click();
+      return { ok: true, detail: (button.textContent || '').trim() };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not toggle lobby section ${section}: ${result.detail}`);
+  }
+}
+
+async function clickTableAction(cdp: CdpClient, action: string): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const button = document.querySelector('[data-table-action="${action}"]');
+      if (!button) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      button.click();
+      return { ok: true, detail: (button.textContent || '').trim() };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not click table action ${action}: ${result.detail}`);
+  }
+}
+
+async function setFriendRoomCode(cdp: CdpClient, roomCode: string): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const input = document.querySelector('[data-lobby-section="friends"] input');
+      if (!input) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, ${JSON.stringify(roomCode)});
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return { ok: true, detail: input.value };
+    })()`
+  );
+
+  if (!result.ok || result.detail !== roomCode) {
+    throw new Error(`Could not set friend room code: ${result.detail}`);
+  }
+}
+
 async function clickLobbyRoomButton(cdp: CdpClient, roomCode: string): Promise<void> {
   const result = await waitForValue(
     async () =>
@@ -772,6 +958,19 @@ async function assertLobbyRowContains(cdp: CdpClient, roomCode: string, text: st
         const content = row.textContent || "";
         return content.includes(${JSON.stringify(roomCode)}) && content.includes(${JSON.stringify(text)});
       })`
+    );
+
+    return contains ? true : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function assertLobbyRoomGroup(cdp: CdpClient, roomCode: string, group: "joinable" | "watchable"): Promise<void> {
+  await waitForValue(async () => {
+    const contains = await evaluate<boolean>(
+      cdp,
+      `Array.from(document.querySelectorAll('[data-room-group="${group}"] .room-lobby-item')).some((row) =>
+        (row.textContent || '').includes(${JSON.stringify(roomCode)})
+      )`
     );
 
     return contains ? true : null;

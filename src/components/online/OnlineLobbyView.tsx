@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
+  Bot,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -13,8 +15,7 @@ import {
   Trophy,
   UserRound,
   Users,
-  Wifi,
-  X
+  Wifi
 } from "lucide-react";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
@@ -27,7 +28,7 @@ import type {
   PlayerGameRecordResult,
   PlayerGameRecordSummary
 } from "@/server/game-records";
-import type { PresenceStatus, RoomSnapshot, UserPresenceSnapshot } from "@/server/rooms";
+import type { PresenceStatus, RoomListItem, RoomSnapshot, UserPresenceSnapshot } from "@/server/rooms";
 import { getProfileUrl } from "../profile/profile-url";
 import type { FriendRoomController } from "../useFriendRoom";
 
@@ -40,6 +41,12 @@ type OnlineViewProps = {
   room: FriendRoomController;
 };
 
+type OnlineLobbyViewProps = OnlineViewProps & {
+  onPlayAi: () => void;
+};
+
+type LobbySection = "community" | "friends" | "identity" | "progress";
+
 export function OnlineJoiningView({ dictionary, room }: OnlineViewProps) {
   return (
     <section aria-label={dictionary.room.panelLabel} className="room-panel" data-online-view="joining">
@@ -51,90 +58,183 @@ export function OnlineJoiningView({ dictionary, room }: OnlineViewProps) {
   );
 }
 
-export function OnlineLobbyView({ dictionary, locale, room }: OnlineViewProps) {
+export function OnlineLobbyView({ dictionary, locale, onPlayAi, room }: OnlineLobbyViewProps) {
   const labels = dictionary.room;
+  const [activeSection, setActiveSection] = useState<LobbySection | null>(null);
+
+  function toggleSection(section: LobbySection) {
+    setActiveSection((current) => (current === section ? null : section));
+  }
 
   return (
     <section aria-label={labels.panelLabel} className="room-panel" data-online-view="lobby">
-      <div className="room-fields">
-        <label className="room-field">
-          <span>{labels.playerName}</span>
-          <input
-            maxLength={24}
-            onChange={(event) => room.setPlayerName(event.target.value)}
-            placeholder={labels.playerNamePlaceholder}
-            type="text"
-            value={room.playerName}
-          />
-        </label>
-        <label className="room-field">
-          <span>{labels.roomCode}</span>
-          <input
-            maxLength={8}
-            onChange={(event) => room.setJoinCode(event.target.value)}
-            placeholder={labels.roomCodePlaceholder}
-            type="text"
-            value={room.joinCode}
-          />
-        </label>
-      </div>
-
-      <div className="room-account">
+      <div className="lobby-heading">
         <div>
-          <p className="metric-label">{labels.account}</p>
-          <strong>{room.account ? room.account.displayName : labels.guestAccount}</strong>
+          <p className="metric-label">{labels.panelLabel}</p>
+          <strong>{room.account?.displayName ?? room.playerName}</strong>
         </div>
-        {room.account ? (
-          <div className="room-account-actions">
-            <a className="mode-pill" href={getProfileUrl(locale, room.account.playerId, room.account.displayName)}>
-              <UserRound aria-hidden="true" focusable={false} />
-              {labels.profile}
-            </a>
-            <button className="mode-pill" onClick={room.signOutAccount} type="button">
-              <LogOut aria-hidden="true" focusable={false} />
-              {labels.signOutAccount}
-            </button>
+        <button
+          aria-expanded={activeSection === "identity"}
+          className="mode-pill lobby-identity-button"
+          data-lobby-section-toggle="identity"
+          onClick={() => toggleSection("identity")}
+          type="button"
+        >
+          <UserRound aria-hidden="true" focusable={false} />
+          {labels.editIdentity}
+        </button>
+      </div>
+
+      {activeSection === "identity" ? (
+        <section className="lobby-disclosure-panel" data-lobby-section="identity">
+          <div className="room-fields lobby-identity-fields">
+            <label className="room-field">
+              <span>{labels.playerName}</span>
+              <input
+                maxLength={24}
+                onChange={(event) => room.setPlayerName(event.target.value)}
+                placeholder={labels.playerNamePlaceholder}
+                type="text"
+                value={room.playerName}
+              />
+            </label>
           </div>
-        ) : (
-          <button
-            className="mode-pill"
-            disabled={room.accountStatus === "loading"}
-            onClick={room.registerAccount}
-            type="button"
-          >
-            <UserRound aria-hidden="true" focusable={false} />
-            {room.accountStatus === "loading" ? labels.accountLoading : labels.registerAccount}
-          </button>
-        )}
+          <div className="room-account">
+            <div>
+              <p className="metric-label">{labels.account}</p>
+              <strong>{room.account ? room.account.displayName : labels.guestAccount}</strong>
+            </div>
+            {room.account ? (
+              <div className="room-account-actions">
+                <a className="mode-pill" href={getProfileUrl(locale, room.account.playerId, room.account.displayName)}>
+                  <UserRound aria-hidden="true" focusable={false} />
+                  {labels.profile}
+                </a>
+                <button className="mode-pill" onClick={room.signOutAccount} type="button">
+                  <LogOut aria-hidden="true" focusable={false} />
+                  {labels.signOutAccount}
+                </button>
+              </div>
+            ) : (
+              <button
+                className="mode-pill"
+                disabled={room.accountStatus === "loading"}
+                onClick={room.registerAccount}
+                type="button"
+              >
+                <UserRound aria-hidden="true" focusable={false} />
+                {room.accountStatus === "loading" ? labels.accountLoading : labels.registerAccount}
+              </button>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="lobby-primary-action">
+        <button
+          className="mode-pill success"
+          data-lobby-action="quick-match"
+          disabled={!room.canFindMatch}
+          onClick={room.findMatch}
+          type="button"
+        >
+          <Search aria-hidden="true" focusable={false} />
+          {room.matchmakingStatus === "searching" ? labels.matchmakingSearching : labels.findMatch}
+        </button>
       </div>
 
-      <div className="room-actions">
-        {room.canCancelMatch ? (
-          <button className="mode-pill danger" onClick={room.cancelMatch} type="button">
-            <X aria-hidden="true" focusable={false} />
-            {labels.cancelMatch}
-          </button>
-        ) : (
-          <button className="mode-pill" disabled={!room.canFindMatch} onClick={room.findMatch} type="button">
-            <Search aria-hidden="true" focusable={false} />
-            {room.matchmakingStatus === "searching" ? labels.matchmakingSearching : labels.findMatch}
-          </button>
-        )}
-        <button className="mode-pill" disabled={!room.canCreateRoom} onClick={room.createRoom} type="button">
-          <Wifi aria-hidden="true" focusable={false} />
-          {labels.createRoom}
+      <button
+        aria-expanded={activeSection === "friends"}
+        className="lobby-disclosure-toggle"
+        data-lobby-section-toggle="friends"
+        onClick={() => toggleSection("friends")}
+        type="button"
+      >
+        <Users aria-hidden="true" focusable={false} />
+        <span>
+          <strong>{labels.playWithFriends}</strong>
+          <small>{labels.createOrJoin}</small>
+        </span>
+        <ChevronDown aria-hidden="true" className={activeSection === "friends" ? "expanded" : ""} focusable={false} />
+      </button>
+
+      {activeSection === "friends" ? (
+        <section className="lobby-disclosure-panel" data-lobby-section="friends">
+          <p className="room-message">{labels.publicRoomNotice}</p>
+          <div className="lobby-friend-actions">
+            <button
+              className="mode-pill"
+              disabled={!room.canCreateRoom}
+              onClick={room.createRoom}
+              type="button"
+            >
+              <Wifi aria-hidden="true" focusable={false} />
+              {labels.createRoom}
+            </button>
+            <form
+              className="lobby-join-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                room.joinRoom();
+              }}
+            >
+              <label className="room-field">
+                <span>{labels.roomCode}</span>
+                <input
+                  maxLength={8}
+                  onChange={(event) => room.setJoinCode(event.target.value)}
+                  placeholder={labels.roomCodePlaceholder}
+                  type="text"
+                  value={room.joinCode}
+                />
+              </label>
+              <button className="mode-pill" disabled={!room.canJoinRoom} type="submit">
+                <LogIn aria-hidden="true" focusable={false} />
+                {labels.joinRoom}
+              </button>
+            </form>
+          </div>
+        </section>
+      ) : null}
+
+      <RoomLobbyList dictionary={dictionary} onPlayAi={onPlayAi} room={room} />
+
+      <div className="lobby-secondary-actions">
+        <button
+          aria-expanded={activeSection === "community"}
+          className="mode-pill"
+          data-lobby-section-toggle="community"
+          onClick={() => toggleSection("community")}
+          type="button"
+        >
+          <Users aria-hidden="true" focusable={false} />
+          {labels.publicChat} / {labels.onlineUsers}
         </button>
-        <button className="mode-pill" disabled={!room.canJoinRoom} onClick={room.joinRoom} type="button">
-          <LogOut aria-hidden="true" focusable={false} />
-          {labels.joinRoom}
+        <button
+          aria-expanded={activeSection === "progress"}
+          className="mode-pill"
+          data-lobby-section-toggle="progress"
+          onClick={() => toggleSection("progress")}
+          type="button"
+        >
+          <Trophy aria-hidden="true" focusable={false} />
+          {labels.profile} / {labels.leaderboard}
         </button>
       </div>
 
-      <PublicChatPanel dictionary={dictionary} room={room} />
-      <OnlineUsersPanel dictionary={dictionary} room={room} />
-      <RoomProfilePanel dictionary={dictionary} room={room} />
-      <LeaderboardPanel dictionary={dictionary} locale={locale} room={room} />
-      <RoomLobbyList dictionary={dictionary} room={room} />
+      {activeSection === "community" ? (
+        <section className="lobby-disclosure-panel" data-lobby-section="community">
+          <PublicChatPanel dictionary={dictionary} room={room} />
+          <OnlineUsersPanel dictionary={dictionary} room={room} />
+        </section>
+      ) : null}
+
+      {activeSection === "progress" ? (
+        <section className="lobby-disclosure-panel" data-lobby-section="progress">
+          <RoomProfilePanel dictionary={dictionary} room={room} />
+          <LeaderboardPanel dictionary={dictionary} locale={locale} room={room} />
+        </section>
+      ) : null}
       {room.error ? <p className="room-error">{room.error}</p> : null}
     </section>
   );
@@ -490,9 +590,20 @@ function PublicChatPanel({ dictionary, room }: { dictionary: GameDictionary; roo
   );
 }
 
-function RoomLobbyList({ dictionary, room }: { dictionary: GameDictionary; room: FriendRoomController }) {
+function RoomLobbyList({
+  dictionary,
+  onPlayAi,
+  room
+}: {
+  dictionary: GameDictionary;
+  onPlayAi: () => void;
+  room: FriendRoomController;
+}) {
   const labels = dictionary.room;
   const { refreshLobby } = room;
+  const joinableRooms = room.lobbyRooms.filter((lobbyRoom) => lobbyRoom.canJoin);
+  const watchableRooms = room.lobbyRooms.filter((lobbyRoom) => !lobbyRoom.canJoin && lobbyRoom.canWatch);
+  const hasActionableRooms = joinableRooms.length > 0 || watchableRooms.length > 0;
 
   useEffect(() => {
     refreshLobby();
@@ -508,46 +619,108 @@ function RoomLobbyList({ dictionary, room }: { dictionary: GameDictionary; room:
       </div>
       {room.lobbyStatus === "loading" && room.lobbyRooms.length === 0 ? (
         <p className="room-message">{labels.loadingRooms}</p>
-      ) : room.lobbyRooms.length > 0 ? (
-        <div className="room-lobby-list">
-          {room.lobbyRooms.map((lobbyRoom) => {
-            const actionLabel = lobbyRoom.canJoin ? labels.joinRoom : labels.watchRoom;
-
-            return (
-              <div className="room-lobby-item" key={lobbyRoom.code}>
-                <div>
-                  <strong>{lobbyRoom.hostName}</strong>
-                  <p>
-                    {lobbyRoom.code}
-                    {" · "}
-                    {getLobbyStatusLabel(lobbyRoom.status, labels)}
-                  </p>
-                </div>
-                <div className="room-lobby-metrics">
-                  <span>{labels.playersCount.replace("{count}", String(lobbyRoom.playerCount))}</span>
-                  <span>{`${labels.spectators}: ${lobbyRoom.spectatorCount}`}</span>
-                </div>
-                <button
-                  className="mode-pill"
-                  disabled={room.accountStatus === "loading" || (!lobbyRoom.canJoin && !lobbyRoom.canWatch)}
-                  onClick={() => room.joinListedRoom(lobbyRoom.code)}
-                  type="button"
-                >
-                  {lobbyRoom.canJoin ? (
-                    <LogIn aria-hidden="true" focusable={false} />
-                  ) : (
-                    <Eye aria-hidden="true" focusable={false} />
-                  )}
-                  {actionLabel}
-                </button>
-              </div>
-            );
-          })}
+      ) : hasActionableRooms ? (
+        <div className="room-lobby-groups">
+          {joinableRooms.length > 0 ? (
+            <RoomLobbyGroup
+              action="join"
+              label={labels.joinableRooms}
+              labels={labels}
+              room={room}
+              rooms={joinableRooms}
+            />
+          ) : null}
+          {watchableRooms.length > 0 ? (
+            <RoomLobbyGroup
+              action="watch"
+              label={labels.watchableRooms}
+              labels={labels}
+              room={room}
+              rooms={watchableRooms}
+            />
+          ) : null}
         </div>
       ) : (
-        <p className="room-message">{labels.noRooms}</p>
+        <div className="room-lobby-empty" data-lobby-empty-state>
+          <strong>{labels.noRooms}</strong>
+          <p className="room-message">{labels.publicRoomNotice}</p>
+          <div className="room-lobby-empty-actions">
+            <button
+              className="mode-pill success"
+              data-lobby-action="empty-quick-match"
+              disabled={!room.canFindMatch}
+              onClick={room.findMatch}
+              type="button"
+            >
+              <Search aria-hidden="true" focusable={false} />
+              {labels.findMatch}
+            </button>
+            <button className="mode-pill" disabled={!room.canCreateRoom} onClick={room.createRoom} type="button">
+              <Wifi aria-hidden="true" focusable={false} />
+              {labels.createRoom}
+            </button>
+            <button className="mode-pill" onClick={onPlayAi} type="button">
+              <Bot aria-hidden="true" focusable={false} />
+              {dictionary.modes.ai}
+            </button>
+          </div>
+        </div>
       )}
     </div>
+  );
+}
+
+function RoomLobbyGroup({
+  action,
+  label,
+  labels,
+  room,
+  rooms
+}: {
+  action: "join" | "watch";
+  label: string;
+  labels: GameDictionary["room"];
+  room: FriendRoomController;
+  rooms: RoomListItem[];
+}) {
+  return (
+    <section className="room-lobby-group" data-room-group={action === "join" ? "joinable" : "watchable"}>
+      <div className="room-lobby-group-heading">
+        <strong>{label}</strong>
+        <span>{rooms.length}</span>
+      </div>
+      <div className="room-lobby-list">
+        {rooms.map((lobbyRoom) => (
+          <div className="room-lobby-item" key={lobbyRoom.code}>
+            <div>
+              <strong>{lobbyRoom.hostName}</strong>
+              <p>
+                {lobbyRoom.code}
+                {" · "}
+                {getLobbyStatusLabel(lobbyRoom.status, labels)}
+              </p>
+            </div>
+            <div className="room-lobby-metrics">
+              <span>{labels.playersCount.replace("{count}", String(lobbyRoom.playerCount))}</span>
+              <span>{`${labels.spectators}: ${lobbyRoom.spectatorCount}`}</span>
+            </div>
+            <button
+              className="mode-pill"
+              disabled={room.accountStatus === "loading"}
+              onClick={() => room.joinListedRoom(lobbyRoom.code)}
+              type="button"
+            >
+              {action === "join" ? (
+                <LogIn aria-hidden="true" focusable={false} />
+              ) : (
+                <Eye aria-hidden="true" focusable={false} />
+              )}
+              {action === "join" ? labels.joinRoom : labels.watchRoom}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

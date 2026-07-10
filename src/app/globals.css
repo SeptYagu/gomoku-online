@@ -311,6 +311,125 @@ h1 {
   padding: 14px;
 }
 
+.lobby-heading,
+.room-lobby-group-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.lobby-heading strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.lobby-identity-button {
+  flex: 0 0 auto;
+}
+
+.lobby-primary-action {
+  display: grid;
+}
+
+.lobby-primary-action .mode-pill {
+  font-size: 1.05rem;
+  min-height: 60px;
+  width: 100%;
+}
+
+.lobby-disclosure-toggle {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 56px;
+  padding: 10px 14px;
+  text-align: start;
+  touch-action: manipulation;
+  width: 100%;
+}
+
+.lobby-disclosure-toggle:hover,
+.lobby-disclosure-toggle[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+.lobby-disclosure-toggle > svg {
+  height: 20px;
+  width: 20px;
+}
+
+.lobby-disclosure-toggle > svg:last-child {
+  color: var(--muted);
+  transition: transform 140ms ease;
+}
+
+.lobby-disclosure-toggle > svg:last-child.expanded {
+  transform: rotate(180deg);
+}
+
+.lobby-disclosure-toggle span,
+.lobby-disclosure-toggle strong,
+.lobby-disclosure-toggle small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lobby-disclosure-toggle small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
+.lobby-disclosure-panel {
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.lobby-identity-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.lobby-friend-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.lobby-join-form {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.lobby-secondary-actions,
+.room-lobby-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lobby-secondary-actions {
+  border-top: 1px solid var(--line-strong);
+  padding-top: 12px;
+}
+
 .room-fields {
   display: grid;
   gap: 10px;
@@ -383,6 +502,37 @@ h1 {
 .room-lobby-list {
   display: grid;
   gap: 8px;
+}
+
+.room-lobby-groups,
+.room-lobby-group,
+.room-lobby-empty {
+  display: grid;
+  gap: 10px;
+}
+
+.room-lobby-group + .room-lobby-group {
+  border-top: 1px solid var(--line-strong);
+  padding-top: 10px;
+}
+
+.room-lobby-group-heading > span {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  min-width: 28px;
+  padding: 4px 8px;
+  text-align: center;
+}
+
+.room-lobby-empty {
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  padding: 14px;
 }
 
 .room-lobby-item {
@@ -1875,6 +2025,8 @@ h1 {
 
   .room-fields,
   .room-account,
+  .lobby-friend-actions,
+  .lobby-join-form,
   .profile-page-summary,
   .profile-record-card,
   .room-lobby-item,
@@ -1884,6 +2036,18 @@ h1 {
   .room-summary,
   .room-players {
     grid-template-columns: 1fr;
+  }
+
+  .lobby-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lobby-identity-button,
+  .lobby-secondary-actions .mode-pill,
+  .room-lobby-empty-actions .mode-pill {
+    min-height: 44px;
+    width: 100%;
   }
 
   .profile-page-stats,

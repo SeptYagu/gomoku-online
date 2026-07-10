@@ -2,7 +2,7 @@
 
 更新日期：2026-07-10
 
-状态：实施中；`IX-00 + IX-01 + IX-02 + IX-03` 已完成本地验证，下一步为 `IX-04`
+状态：实施中；`IX-00 + IX-01 + IX-02 + IX-03 + IX-04` 已完成本地验证，下一步为 `IX-04B`
 
 文档性质：竞品研究、现有代码对照、实施顺序与当前进度的统一计划
 
@@ -14,6 +14,8 @@
 
 牌桌布局验证：`docs/INTERACTION_REDESIGN_IX03_VERIFICATION.md`
 
+在线大厅入口验证：`docs/INTERACTION_REDESIGN_IX04_VERIFICATION.md`
+
 ## 当前实施进度
 
 | 任务 | 状态 | 2026-07-10 结果 |
@@ -22,9 +24,10 @@
 | `IX-01` | 完成 | `GameShell` 拆为 Local、AI、OnlineLobby、OnlineJoining、GameTable 互斥工作区；在线模式外不自动 rejoin；邀请/恢复加入期间显示 joining gate；URL、session 和 socket 事件保持不变 |
 | `IX-02` | 完成 | 新增纯 `getTableActions`、`TableTaskBar`、`TableActionBar`、`TablePlayers`；当前任务最多 2 个决策、总动作最多 3 个；旧 disabled 动作排和阻塞式悔棋 modal 已删除；三目标视口的悔棋/棋盘同屏验证通过 |
 | `IX-03` | 完成 | 在线牌桌接管 280–320px 右栏；玩家优先，聊天/当前局步骤/房间信息页签化；移动端 task→board→actions→players→tabs；1280×720 可落子、390×844 RTL 和三视口截图通过 |
-| `IX-04` | 下一步 | 简化在线大厅入口：快速匹配主动作、朋友流程渐进展开、房间列表 Join/Watch 分层、空大厅真实降级和 Profile/排行榜下沉 |
+| `IX-04` | 完成 | 快速匹配成为一次点击主动作；朋友/身份/社区/战绩渐进展开；房间按 Join/Watch 分组；空大厅提供匹配/创建/AI；单人等待可直接取消；390×844 RTL 大厅通过 |
+| `IX-04B` | 下一步 | 新增服务端执行的 public/unlisted 可见性与邀请边界；不把前端隐藏或短房间码冒充受邀请授权保护 |
 
-当前实施没有新增 public handle、unlisted、双方再战、activity summary、`matchConfig`、挑战或赛事协议。在线牌桌的工作区、状态动作和桌面/移动布局已经收敛；下一阶段只整理在线大厅入口，不把 IX-04A/04B 的新服务端身份或可见性能力提前混入。
+当前实施没有新增 public handle、unlisted、双方再战、activity summary、`matchConfig`、挑战或赛事协议。工作区、牌桌状态/布局和大厅入口已经收敛；下一阶段按既定顺序独立实施 IX-04B 的可见性协议，不把 IX-04A 的身份别名混入同一提交。
 
 ## 结论先行
 
@@ -38,7 +41,7 @@
 6. 当前 `acct_...` 注册玩家 ID 具备稳定身份用途，但同样是随机串；它可以作为加入房间的备用查找值，不能替代规范 `roomCode`。面向传播应新增唯一、可读的 `@publicHandle`，并让同一输入框同时解析邀请 URL、房间码、handle 和原始账户 ID。
 7. 再次与 PlayOK/BGA 等竞品逻辑对照后，牌桌不应机械限制为“只能有一个按钮”：应保持一个明确主任务，允许 1–2 个当前决策动作，总动作不超过 4；终局还应把当前房主单方面重开升级为双方表达再战意愿。
 
-P0 的“工作区分离 + 牌桌状态机”已经完成，下一步进入桌面/移动端布局。`matchConfig`、点名挑战和赛事属于后续能力，不能阻塞当前交互主线。
+P0 的工作区、牌桌状态机与响应式布局以及 IX-04 大厅入口已经完成。下一步进入独立全栈 IX-04B；`matchConfig`、点名挑战和赛事属于后续能力，不能阻塞当前交互主线。
 
 ## 研究与代码依据
 

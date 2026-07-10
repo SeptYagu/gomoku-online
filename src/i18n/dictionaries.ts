@@ -40,12 +40,14 @@ export type GameDictionary = {
     connected: string;
     connection: string;
     cancelMatch: string;
+    cancelWaiting: string;
     copied: string;
     copyInvite: string;
     createOrJoin: string;
     createRoom: string;
     disconnected: string;
     downloadSgf: string;
+    editIdentity: string;
     findMatch: string;
     finishAbandoned: string;
     finishDisconnect: string;
@@ -56,6 +58,7 @@ export type GameDictionary = {
     gamesCount: string;
     guestAccount: string;
     joinRoom: string;
+    joinableRooms: string;
     joiningRoom: string;
     leaderboard: string;
     leaderboardAll: string;
@@ -92,12 +95,14 @@ export type GameDictionary = {
     playerName: string;
     playerNamePlaceholder: string;
     playersCount: string;
+    playWithFriends: string;
     profile: string;
     profileDraws: string;
     profileLosses: string;
     profileWins: string;
     publicChat: string;
     publicChatPlaceholder: string;
+    publicRoomNotice: string;
     ready: string;
     readyAction: string;
     readyToStart: string;
@@ -147,6 +152,7 @@ export type GameDictionary = {
     waitingForReady: string;
     waitingForRestart: string;
     waitingForUndoResponse: string;
+    watchableRooms: string;
     watchRoom: string;
     whiteSeat: string;
     you: string;
@@ -224,12 +230,14 @@ const en = {
       connected: "Connected",
       connection: "Connection",
       cancelMatch: "Cancel match",
+      cancelWaiting: "Cancel waiting",
       copied: "Copied",
       copyInvite: "Copy invite",
       createOrJoin: "Create a room or enter a code.",
       createRoom: "Create room",
       disconnected: "Disconnected",
       downloadSgf: "Download SGF",
+      editIdentity: "Edit identity",
       findMatch: "Find match",
       finishAbandoned: "Abandoned",
       finishDisconnect: "Disconnect",
@@ -240,6 +248,7 @@ const en = {
       gamesCount: "Games {count}",
       guestAccount: "Guest",
       joinRoom: "Join room",
+      joinableRooms: "Rooms to join",
       joiningRoom: "Joining room",
       leaderboard: "Rankings",
       leaderboardAll: "All",
@@ -276,12 +285,14 @@ const en = {
       playerName: "Name",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Players {count}/2",
+      playWithFriends: "Play with friends",
       profile: "Profile",
       profileDraws: "Draws {count}",
       profileLosses: "Losses {count}",
       profileWins: "Wins {count}",
       publicChat: "Public chat",
       publicChatPlaceholder: "Message everyone",
+      publicRoomNotice: "Rooms created here are public and appear in the lobby. Share the invite after creating one.",
       ready: "Ready",
       readyAction: "Ready",
       readyToStart: "Both players ready",
@@ -331,6 +342,7 @@ const en = {
       waitingForReady: "Waiting for ready",
       waitingForRestart: "Waiting for the host to restart",
       waitingForUndoResponse: "Waiting for the opponent to answer the undo request",
+      watchableRooms: "Rooms to watch",
       watchRoom: "Watch",
       whiteSeat: "White",
       you: "(you)",
@@ -404,12 +416,14 @@ const zh = {
       connected: "已连接",
       connection: "连接",
       cancelMatch: "取消匹配",
+      cancelWaiting: "取消等待",
       copied: "已复制",
       copyInvite: "复制邀请",
       createOrJoin: "创建房间或输入房间码。",
       createRoom: "创建房间",
       disconnected: "已断开",
       downloadSgf: "下载 SGF",
+      editIdentity: "编辑身份",
       findMatch: "随机匹配",
       finishAbandoned: "中止",
       finishDisconnect: "断线",
@@ -420,6 +434,7 @@ const zh = {
       gamesCount: "对局 {count}",
       guestAccount: "游客",
       joinRoom: "加入房间",
+      joinableRooms: "可加入",
       joiningRoom: "正在进入房间",
       leaderboard: "排行榜",
       leaderboardAll: "全部",
@@ -456,12 +471,14 @@ const zh = {
       playerName: "昵称",
       playerNamePlaceholder: "Player 1234",
       playersCount: "玩家 {count}/2",
+      playWithFriends: "和朋友玩",
       profile: "资料",
       profileDraws: "和棋 {count}",
       profileLosses: "负 {count}",
       profileWins: "胜 {count}",
       publicChat: "公共聊天",
       publicChatPlaceholder: "发送公共消息",
+      publicRoomNotice: "当前创建的房间会显示在公开大厅。创建后可复制邀请链接分享。",
       ready: "已准备",
       readyAction: "准备",
       readyToStart: "双方已准备",
@@ -511,6 +528,7 @@ const zh = {
       waitingForReady: "等待准备",
       waitingForRestart: "等待房主重开",
       waitingForUndoResponse: "等待对手回应悔棋请求",
+      watchableRooms: "可观战",
       watchRoom: "观战",
       whiteSeat: "白棋",
       you: "（你）",
@@ -584,12 +602,14 @@ const fr = {
       connected: "Connecté",
       connection: "Connexion",
       cancelMatch: "Annuler la recherche",
+      cancelWaiting: "Annuler l'attente",
       copied: "Copié",
       copyInvite: "Copier l'invitation",
       createOrJoin: "Créez un salon ou entrez un code.",
       createRoom: "Créer un salon",
       disconnected: "Déconnecté",
       downloadSgf: "Télécharger SGF",
+      editIdentity: "Modifier l'identité",
       findMatch: "Trouver une partie",
       finishAbandoned: "Abandon",
       finishDisconnect: "Déconnexion",
@@ -600,6 +620,7 @@ const fr = {
       gamesCount: "Parties {count}",
       guestAccount: "Invité",
       joinRoom: "Rejoindre",
+      joinableRooms: "Salons à rejoindre",
       joiningRoom: "Connexion au salon",
       leaderboard: "Classement",
       leaderboardAll: "Tous",
@@ -636,12 +657,14 @@ const fr = {
       playerName: "Nom",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Joueurs {count}/2",
+      playWithFriends: "Jouer avec des amis",
       profile: "Profil",
       profileDraws: "Nulles {count}",
       profileLosses: "Défaites {count}",
       profileWins: "Victoires {count}",
       publicChat: "Chat public",
       publicChatPlaceholder: "Message public",
+      publicRoomNotice: "Les salons créés ici sont publics et apparaissent dans le hall. Partagez l'invitation après création.",
       ready: "Prêt",
       readyAction: "Prêt",
       readyToStart: "Deux joueurs prêts",
@@ -691,6 +714,7 @@ const fr = {
       waitingForReady: "En attente des joueurs",
       waitingForRestart: "En attente du redémarrage par l'hôte",
       waitingForUndoResponse: "En attente de la réponse adverse à l'annulation",
+      watchableRooms: "Salons à regarder",
       watchRoom: "Regarder",
       whiteSeat: "Blancs",
       you: "(vous)",
@@ -764,12 +788,14 @@ const es = {
       connected: "Conectado",
       connection: "Conexión",
       cancelMatch: "Cancelar búsqueda",
+      cancelWaiting: "Cancelar espera",
       copied: "Copiado",
       copyInvite: "Copiar invitación",
       createOrJoin: "Crea una sala o introduce un código.",
       createRoom: "Crear sala",
       disconnected: "Desconectado",
       downloadSgf: "Descargar SGF",
+      editIdentity: "Editar identidad",
       findMatch: "Buscar partida",
       finishAbandoned: "Abandonada",
       finishDisconnect: "Desconexión",
@@ -780,6 +806,7 @@ const es = {
       gamesCount: "Partidas {count}",
       guestAccount: "Invitado",
       joinRoom: "Unirse",
+      joinableRooms: "Salas disponibles",
       joiningRoom: "Entrando en la sala",
       leaderboard: "Ranking",
       leaderboardAll: "Todos",
@@ -816,12 +843,14 @@ const es = {
       playerName: "Nombre",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Jugadores {count}/2",
+      playWithFriends: "Jugar con amigos",
       profile: "Perfil",
       profileDraws: "Empates {count}",
       profileLosses: "Derrotas {count}",
       profileWins: "Victorias {count}",
       publicChat: "Chat público",
       publicChatPlaceholder: "Mensaje público",
+      publicRoomNotice: "Las salas creadas aquí son públicas y aparecen en el vestíbulo. Comparte la invitación después de crearla.",
       ready: "Listo",
       readyAction: "Listo",
       readyToStart: "Ambos listos",
@@ -871,6 +900,7 @@ const es = {
       waitingForReady: "Esperando listos",
       waitingForRestart: "Esperando que el anfitrión reinicie",
       waitingForUndoResponse: "Esperando la respuesta del rival a deshacer",
+      watchableRooms: "Salas para mirar",
       watchRoom: "Mirar",
       whiteSeat: "Blancas",
       you: "(tú)",
@@ -944,12 +974,14 @@ const ru = {
       connected: "Подключен",
       connection: "Связь",
       cancelMatch: "Отменить поиск",
+      cancelWaiting: "Отменить ожидание",
       copied: "Скопировано",
       copyInvite: "Копировать ссылку",
       createOrJoin: "Создайте комнату или введите код.",
       createRoom: "Создать комнату",
       disconnected: "Отключен",
       downloadSgf: "Скачать SGF",
+      editIdentity: "Изменить имя",
       findMatch: "Найти игру",
       finishAbandoned: "Прервана",
       finishDisconnect: "Отключение",
@@ -960,6 +992,7 @@ const ru = {
       gamesCount: "Партии {count}",
       guestAccount: "Гость",
       joinRoom: "Войти",
+      joinableRooms: "Комнаты для входа",
       joiningRoom: "Вход в комнату",
       leaderboard: "Рейтинг",
       leaderboardAll: "Все",
@@ -996,12 +1029,14 @@ const ru = {
       playerName: "Имя",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Игроки {count}/2",
+      playWithFriends: "Играть с друзьями",
       profile: "Профиль",
       profileDraws: "Ничьи {count}",
       profileLosses: "Поражения {count}",
       profileWins: "Победы {count}",
       publicChat: "Общий чат",
       publicChatPlaceholder: "Сообщение всем",
+      publicRoomNotice: "Созданные здесь комнаты публичны и видны в лобби. После создания поделитесь ссылкой.",
       ready: "Готов",
       readyAction: "Готов",
       readyToStart: "Оба готовы",
@@ -1051,6 +1086,7 @@ const ru = {
       waitingForReady: "Ожидание готовности",
       waitingForRestart: "Ожидание перезапуска от хозяина",
       waitingForUndoResponse: "Ожидание ответа соперника на отмену хода",
+      watchableRooms: "Комнаты для просмотра",
       watchRoom: "Смотреть",
       whiteSeat: "Белые",
       you: "(вы)",
@@ -1124,12 +1160,14 @@ const ar = {
       connected: "متصل",
       connection: "الاتصال",
       cancelMatch: "إلغاء البحث",
+      cancelWaiting: "إلغاء الانتظار",
       copied: "تم النسخ",
       copyInvite: "نسخ الدعوة",
       createOrJoin: "أنشئ غرفة أو أدخل رمزا.",
       createRoom: "إنشاء غرفة",
       disconnected: "غير متصل",
       downloadSgf: "تنزيل SGF",
+      editIdentity: "تعديل الهوية",
       findMatch: "بحث عن مباراة",
       finishAbandoned: "متروكة",
       finishDisconnect: "انقطاع",
@@ -1140,6 +1178,7 @@ const ar = {
       gamesCount: "الألعاب {count}",
       guestAccount: "ضيف",
       joinRoom: "انضمام",
+      joinableRooms: "غرف للانضمام",
       joiningRoom: "جارٍ الانضمام إلى الغرفة",
       leaderboard: "الترتيب",
       leaderboardAll: "الكل",
@@ -1176,12 +1215,14 @@ const ar = {
       playerName: "الاسم",
       playerNamePlaceholder: "Player 1234",
       playersCount: "اللاعبون {count}/2",
+      playWithFriends: "اللعب مع الأصدقاء",
       profile: "الملف",
       profileDraws: "تعادل {count}",
       profileLosses: "خسائر {count}",
       profileWins: "انتصارات {count}",
       publicChat: "الدردشة العامة",
       publicChatPlaceholder: "رسالة للجميع",
+      publicRoomNotice: "الغرف المنشأة هنا عامة وتظهر في الردهة. شارك رابط الدعوة بعد الإنشاء.",
       ready: "جاهز",
       readyAction: "جاهز",
       readyToStart: "اللاعبان جاهزان",
@@ -1231,6 +1272,7 @@ const ar = {
       waitingForReady: "بانتظار الجاهزية",
       waitingForRestart: "بانتظار إعادة التشغيل من المضيف",
       waitingForUndoResponse: "بانتظار رد الخصم على طلب التراجع",
+      watchableRooms: "غرف للمشاهدة",
       watchRoom: "مشاهدة",
       whiteSeat: "الأبيض",
       you: "(أنت)",

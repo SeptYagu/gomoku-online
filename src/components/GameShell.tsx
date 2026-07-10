@@ -482,7 +482,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         ) : null}
 
         {workspace === "online-lobby" ? (
-          <OnlineLobbyView dictionary={dictionary} locale={locale} room={friendRoom} />
+          <OnlineLobbyView
+            dictionary={dictionary}
+            locale={locale}
+            onPlayAi={() => handleModeChange("ai")}
+            room={friendRoom}
+          />
         ) : null}
 
         {workspace === "online-joining" ? (

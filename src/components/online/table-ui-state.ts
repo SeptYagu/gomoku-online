@@ -22,6 +22,7 @@ export type TableUiStateInput = {
 
 export type TableActionId =
   | "allow-undo"
+  | "cancel-wait"
   | "copy-invite"
   | "leave"
   | "ready"
@@ -40,6 +41,7 @@ export type TableAction = {
 };
 
 export type TableActionCapabilities = {
+  canCancelMatch: boolean;
   canReady: boolean;
   canResign: boolean;
   canRestart: boolean;
@@ -111,7 +113,11 @@ export function getTableActions(
         action("leave", "toolbar")
       ];
     case "seated-waiting-opponent":
-      return [action("copy-invite", "task"), action("leave", "toolbar")];
+      return [
+        ...(capabilities.canCancelMatch ? [action("cancel-wait", "task")] : []),
+        action("copy-invite", "toolbar"),
+        ...(!capabilities.canCancelMatch ? [action("leave", "toolbar")] : [])
+      ];
     case "seated-not-ready":
       return [
         ...(capabilities.canReady && !capabilities.ready ? [action("ready", "task")] : []),

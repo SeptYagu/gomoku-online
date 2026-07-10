@@ -98,6 +98,7 @@ describe("deriveTableUiState", () => {
 
 describe("getTableActions", () => {
   const enabledCapabilities: TableActionCapabilities = {
+    canCancelMatch: true,
     canReady: true,
     canResign: true,
     canRestart: true,
@@ -112,7 +113,7 @@ describe("getTableActions", () => {
   }> = [
     { expected: ["leave"], state: "spectating" },
     { expected: ["sit", "leave"], state: "spectating-can-sit" },
-    { expected: ["copy-invite", "leave"], state: "seated-waiting-opponent" },
+    { expected: ["cancel-wait", "copy-invite"], state: "seated-waiting-opponent" },
     { expected: ["ready", "leave"], state: "seated-not-ready" },
     { expected: ["unready", "leave"], state: "seated-ready", capabilities: { ready: true } },
     { expected: ["leave"], state: "ready-compat" },
@@ -142,6 +143,7 @@ describe("getTableActions", () => {
 
   it("hides actions when their controller capability is false", () => {
     const capabilities: TableActionCapabilities = {
+      canCancelMatch: false,
       canReady: false,
       canResign: false,
       canRestart: false,
@@ -151,6 +153,10 @@ describe("getTableActions", () => {
     };
 
     expect(getTableActions("spectating-can-sit", capabilities).map((action) => action.id)).toEqual(["leave"]);
+    expect(getTableActions("seated-waiting-opponent", capabilities).map((action) => action.id)).toEqual([
+      "copy-invite",
+      "leave"
+    ]);
     expect(getTableActions("seated-not-ready", capabilities).map((action) => action.id)).toEqual(["leave"]);
     expect(getTableActions("playing-my-turn", capabilities).map((action) => action.id)).toEqual(["leave"]);
     expect(getTableActions("finished-host", capabilities).map((action) => action.id)).toEqual(["leave"]);

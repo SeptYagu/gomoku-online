@@ -65,7 +65,9 @@ async function main(): Promise<void> {
         .catch(() => undefined);
       await waitForRuntime(cdp);
       await clickButton(cdp, "Friend room");
+      await clickLobbySection(cdp, "identity");
       await setPlayerName(cdp, hostName);
+      await clickLobbySection(cdp, "friends");
       await clickButton(cdp, "Create room");
 
       const roomUrl = await waitForValue(async () => {
@@ -129,7 +131,7 @@ async function main(): Promise<void> {
         throw new Error(`Copy invite did not report clipboard success; state=${copyState}`);
       }
 
-      await clickButton(cdp, "Leave");
+      await clickTableExit(cdp);
       const clearedUrl = await waitForValue(async () => {
         const href = await evaluate<string>(cdp, "window.location.href");
         const hasRoom = new URL(href).searchParams.has("room");
@@ -141,6 +143,7 @@ async function main(): Promise<void> {
 
       const registeredName = `Invite ${Date.now().toString(36)}`;
 
+      await clickLobbySection(cdp, "friends");
       await clickButton(cdp, "Create room");
       const registeredInviteRoomUrl = await waitForValue(async () => {
         const href = await evaluate<string>(cdp, "window.location.href");
@@ -183,7 +186,7 @@ async function main(): Promise<void> {
 
       await sleep(750);
       await cdp.send("Page.bringToFront").catch(() => undefined);
-      await clickButton(cdp, "Leave");
+      await clickTableExit(cdp);
       await waitForRoomAbsent(baseUrl, registeredInviteRoomCode);
 
       console.log(`Share URL smoke: ${baseUrl}`);
@@ -321,6 +324,28 @@ async function clickButton(cdp: CdpClient, text: string): Promise<void> {
   }
 }
 
+async function clickLobbySection(cdp: CdpClient, section: "friends" | "identity"): Promise<void> {
+  const result = await waitForValue(
+    async () =>
+      evaluate<ClickResult>(
+        cdp,
+        `(() => {
+          const button = document.querySelector('[data-lobby-section-toggle="${section}"]');
+          if (!button) {
+            return { ok: false, detail: document.body.innerText };
+          }
+          button.click();
+          return { ok: true, detail: (button.textContent || '').trim() };
+        })()`
+      ),
+    STEP_TIMEOUT_MS
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not toggle lobby section ${section}: ${result.detail}`);
+  }
+}
+
 async function clickTableSidebarInfo(cdp: CdpClient): Promise<void> {
   const result = await waitForValue(
     async () =>
@@ -340,6 +365,28 @@ async function clickTableSidebarInfo(cdp: CdpClient): Promise<void> {
 
   if (!result.ok) {
     throw new Error(`Could not open room info tab: ${result.detail}`);
+  }
+}
+
+async function clickTableExit(cdp: CdpClient): Promise<void> {
+  const result = await waitForValue(
+    async () =>
+      evaluate<ClickResult>(
+        cdp,
+        `(() => {
+          const button = document.querySelector('[data-table-action="cancel-wait"], [data-table-action="leave"]');
+          if (!button) {
+            return { ok: false, detail: document.body.innerText };
+          }
+          button.click();
+          return { ok: true, detail: (button.textContent || '').trim() };
+        })()`
+      ),
+    STEP_TIMEOUT_MS
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not exit the waiting table: ${result.detail}`);
   }
 }
 

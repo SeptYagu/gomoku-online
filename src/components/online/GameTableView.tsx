@@ -47,6 +47,7 @@ export function GameTableView({
   }
 
   const actions = getTableActions(tableUiState, {
+    canCancelMatch: room.canCancelMatch,
     canReady: room.canReady,
     canResign: room.canResign,
     canRestart: room.canRestart,
@@ -70,6 +71,9 @@ export function GameTableView({
         return;
       case "copy-invite":
         room.copyInvite();
+        return;
+      case "cancel-wait":
+        room.cancelMatch();
         return;
       case "leave":
         room.leaveRoom();
