@@ -4926,3 +4926,47 @@ b6faf9e
 - 提交范围：20 个文件，1168 行新增、65 行删除；包含账户 handle/迁移、显式房主目标、统一 join-target、unlisted 别名边界、来源地址限流、六语种 UI、156 项全量测试与 Chrome smoke、验证报告及计划/逻辑文档。
 - `git push origin main`：成功，`0ea827d..1233bdd`。
 - 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-06A。
+
+## 2026-07-10 IX-06A 双方再战意愿与自动续局
+
+### 步骤 1：重读终局协议与状态边界
+
+1. 重读 IX-06A、RoomSnapshot/RoomState、host-only `restartGame`、socket `game:restart`、断线/离房/重连、13 类 TableUiState、controller 权限、任务栏/动作栏、RoomStore/socket 测试和 lobby UI smoke；Git 与远端同步，仅 `.codex/` 未跟踪证据。
+2. 规范固定为新增权威 `rematch` snapshot 和 `game:rematch-ready { roomCode, ready }`：finished seated player 均可表达/取消；spectator 不可投票；双方 ready 且在线时服务端原子清棋盘、递增 gameNumber/gameId、轮换先手并直接进入 playing，不再第三次 Ready。
+3. `game:restart` 继续作为旧客户端兼容事件，仍仅 host 可用并回到 waiting；新 UI 完全移除 restart 动作，两种事件竞争时依靠 finished 状态检查保证只创建一次新局。
+4. 当前 finished 玩家断开会被立即 remove，无法满足“刷新重连保留意愿”。IX-06A 需要让 finished player 进入与 playing 相同的断线宽限保留，但宽限到期只移除对应 seat/ready，不改写已经完成的胜负；显式 Leave 仍立即清理。
+5. rematch readiness 以 seat 为键；seat 离开、到期或被 spectator 补位时必须先清除该 seat 意愿，防止新玩家继承旧玩家投票。短暂断线保留意愿，但自动开局等待双方重新在线；reconnect/restore 后再次原子检查。
+6. 终局前端状态由 `finished-host/finished-guest` 替换为 `finished-rematch-open/finished-rematch-ready`；open 显示 Play again + Leave，ready 显示 Cancel rematch + Leave，总动作仍不超过 4。
+7. 真实 Chrome lobby UI smoke 可复用现有双身份对局：悔棋流程后让 socket 房主认输 -> 浏览器玩家点 Play again -> 显示等待/可取消 -> 房主表达意愿 -> 验证直接进入轮换先手的新局。
+
+### 步骤 2：权威 rematch 状态、终局任务栏与定向测试
+
+1. `RoomSnapshot/RoomState` 新增 `rematch { readySeats, requestedAt }`；`setRematchReady` 只接受 finished seated player。单方选择/取消只更新时间和意愿，不改终局棋盘；双方均在线且同意时用单一 reset helper 递增 gameId、轮换先手、清棋盘/undo/rematch 并直接进入 playing。
+2. finished 玩家断开现在保留到断线宽限期；reconnect/restore 会在双方意愿已齐时重新检查并启动。显式 Leave、宽限到期和 spectator 补入断线 seat 都清除该 seat 投票；双方同时短断不会在 grace 前被 `shouldDeleteRoom` 立即删除。
+3. 旧 `restartGame` 复用同一 reset helper，但仍保持 host-only、返回 waiting、双方重新 Ready 的兼容语义；restart 与 rematch 任一先完成后，另一事件都会因不再是 finished 而失败，不会创建两局。
+4. 新 socket 事件 `game:rematch-ready` 复用当前成员鉴权和权威广播；RoomStore/socket 测试覆盖选择、取消、双方原子开局、spectator 拒绝、旧 restart 竞争、短断恢复、seat 替换、断线到期、显式离开和上一局 record 保留。
+5. 前端终局状态替换为 `finished-rematch-open/finished-rematch-ready`；新动作 Play again / Cancel rematch 均位于任务栏，Leave 保持工具栏，host/guest 不再分裂。controller 不再向新 UI 暴露 canRestart/restartGame，但服务端兼容事件保留。
+6. 六语种新增 rematch/cancel/prompt/waiting 文案并移除旧 UI 的 host restart 文案。online-room smoke 改为首局后双方 rematch 直接开始第二局，第二局后仍用旧 restart 验证兼容；lobby UI smoke 增加真实浏览器 open -> ready -> 双方同意 -> 下一局链路和两张可选证据截图。
+7. 首次 build 在 `markDisconnected` 的 `role` 与 `participant` 两个独立变量上无法自动收窄联合类型；使用 `"seat" in participant` 结构判定修正，没有类型断言。随后 build 的编译、TypeScript 和 11 个页面生成通过。
+8. 当前三份定向测试 91 项、lint 和 `git diff --check` 通过。
+
+### 步骤 3：真实浏览器、刷新重连与协议回归
+
+1. 最终生产构建上的 online-room smoke 通过：spectator 再战被拒；单方 ready 保留终局 moves；取消后清空；双方同意直接创建 game 2 且白棋先手；game 2 后旧 host restart 仍回 waiting，再次 Ready 后 game 3 黑棋先手。
+2. lobby UI smoke 在真实 Chrome 中完成：浏览器玩家看到 `finished-rematch-open` 和 Play again -> 点击后进入 `finished-rematch-ready` 并可 Cancel rematch -> socket 对手同意后直接进入 `playing-my-turn`。大厅/牌桌互斥、动作上限、三视口、RTL 和原悔棋链路继续通过。
+3. 首轮两张截图中 ready 图受默认窄视口/滚动和 GPU 绘制时机影响只拍到任务条，没有把它计为合格完整证据。取证固定为 1280×720、牌桌顶端、前台标签并等待两帧加 300ms 后重拍；人工确认 `rematch-open.png` 与 `rematch-ready.png` 均同时显示终局棋盘、任务文案、再战/取消和 Leave。
+4. socket 测试进一步改为真实刷新顺序：guest 先 ready 后断开，host ready 时 snapshot 仍 finished；新 socket 携服务器 guest token `room:rejoin` 后才进入 game 2。该用例 21 项通过，证明离线意愿与重连门控不是只在 RoomStore 单测中成立。
+5. 最终构建上的 share-url、lobby、matchmaking、room-lifecycle、Presence、game-records、account 和 leaderboard smoke 全部通过；RoomSnapshot 新增 rematch 与 finished 断线保留没有破坏邀请、发现、清理、身份、记录或排名。
+
+### 步骤 4：文档同步与最终门禁
+
+1. 新增 `INTERACTION_REDESIGN_IX06A_VERIFICATION.md`，更新计划为 IX-06A 完成、下一步 IX-05；同步 README、实时房间逻辑以及 IX-04A/04B 后续状态。
+2. 全量 `npm test` 为 15 个文件、160 个测试通过；新增量是 3 个 RoomStore 用例和 1 个 socket 用例，不把预估值写成结果。`npm run lint`、`npm audit --omit=dev`（0 漏洞）和 `git diff --check` 全部通过。
+3. 停止本轮单一 3050 服务并确认无监听后执行最终 `npm run build`；编译、TypeScript 和 11 个页面生成成功，没有使用运行中的旧 `.next` 作为验证依据。
+
+### IX-06A 提交与推送
+
+- 提交：`7856c6f feat: add mutual rematch flow`。
+- 提交范围：19 个文件，666 行新增、84 行删除；包含权威 rematch 状态与事件、finished 断线/重连/补位边界、旧 restart 兼容、新终局任务栏、六语种文案、160 项测试、Chrome/协议 smoke、验证报告和计划/逻辑文档。
+- `git push origin main`：成功，`de0943a..7856c6f`。
+- 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-05。
