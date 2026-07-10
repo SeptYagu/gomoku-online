@@ -4576,3 +4576,11 @@ b6faf9e
 5. `git diff --check`：通过；只有 Windows 工作区 LF/CRLF 转换提示。
 6. `npm test`：通过，13 个测试文件、109 个测试用例；本轮没有修改产品源码、协议、依赖或运行配置。
 7. 最终差异复核仅包含计划、真实性核验和本 handoff 三个文档，共 77 行新增、19 行删除；疑似密钥模式扫描无匹配，`.codex/` 继续排除。
+
+### 完善提交与推送
+
+- 提交：`5fbc2ee docs: align interaction plan dependencies`。
+- 提交范围：计划、真实性核验和本 handoff，共 77 行新增、19 行删除；没有产品代码变更。
+- `git diff --cached --check`：通过；仅有 Windows 工作区 LF/CRLF 转换提示。
+- `git push origin main`：成功，`819cd84..5fbc2ee`。
+- 本段提交结果将作为单独 handoff 记录提交并再次推送。
