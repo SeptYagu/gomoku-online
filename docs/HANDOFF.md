@@ -4414,3 +4414,66 @@ b6faf9e
 - 提交包含 `docs/INTERACTION_REDESIGN_PLAN.md` 和上述 handoff 工作记录，共 569 行新增。
 - staged `git diff --check`：通过；仅出现 Windows 工作区 LF/CRLF 转换提示。
 - 本次追加提交结果后只再提交本 handoff，不修改计划内容或产品代码。
+
+## 2026-07-10 交互重构计划真实性逐条核验
+
+### 用户目标
+
+- 逐条验证 `docs/INTERACTION_REDESIGN_PLAN.md` 的真实性，避免把推测、设计偏好或旧记录误写成当前事实。
+- 发现幻觉、错误行号、过度概括或未实现前提时，直接更正计划并保留独立核验报告。
+
+### 核验步骤记录
+
+1. 把计划拆成当前能力、交互问题、牌桌状态、Phase 前提、测试可执行性和竞品依据六类语义原子。
+2. 逐段读取当前 `GameShell.tsx`、`useFriendRoom.ts`、`rooms.ts`、`globals.css`、回放/SGF/Profile 代码和对应测试，不用 handoff 代替源码证据。
+3. 检查 `smoke-share-url`、`smoke-lobby-ui`、`smoke-matchmaking`、`smoke-online-room`、`smoke-room-lifecycle` 等脚本实际断言，区分“已有覆盖”和“计划新增覆盖”。
+4. 搜索整个 `src`，确认 `matchConfig`、series、challenge、busy、tournament、pairing 等能力当前不存在。
+5. 检查 `.research` 中四个本地参考仓库的锁定 commit 和关键代码锚点。
+6. 重新查询 PlayOK、BGA、FlyOrDie、PaperGames、Vint.ee 官方页面，抽查计划真正依赖的产品模式；对无法从本轮官方文本独立确认的控件明确降级为“外部证据有限”。
+7. 实际运行 `npm test`，确认当前核心行为仍通过。
+8. 新建 `docs/INTERACTION_REDESIGN_PLAN_VERIFICATION.md`，逐条记录判定、源码/测试证据和更正结果。
+9. 同步修改 `docs/INTERACTION_REDESIGN_PLAN.md`，不在聊天里只做口头解释。
+
+### 发现并修正的主要问题
+
+- `useFriendRoom.ts` 的四组证据行号有三处不准确，已改为 controller 55、权限 172、创建/加入/匹配 323、auto rejoin 889。
+- “9 个竞品形成同一共识”是过度概括；在线平台是直接证据，AI/本地项目只能提供独立棋盘工作区的补充证据。
+- “状态只控制 disabled”不真实：Ready 和 Sit 已条件渲染；真正问题是悔棋、认输、重开仍长期渲染并主要依靠 disabled。
+- 右栏不是固定 320px，而是随桌面宽度为 280–320px。
+- 原状态表漏了悔棋请求方等待对方回应的状态，已新增 `undo-request-pending`。
+- 当前 controller 不记录房间来源，无法可靠区分“取消匹配”和朋友桌离开；计划改为“取消等待/退出”。
+- restart 只回到 waiting，双方仍需重新 ready，不是立即开始下一局。
+- `useFriendRoom` 始终挂载，残留 stored room session 可能让本地模式也自动 rejoin；IX-01 已增加在线启用门控。
+- 棋盘已有 78vh/76vh 高度约束，后续任务是保留并校准，而不是从零增加。
+- restart 会清空当前 snapshot 的 moves；跨局历史必须从已保存 game record 读回。
+- 服务端 lobby 事件有 version，但客户端没有版本缺口检测/full resync；计划已改为明确新增任务。
+- 单进程 store 可以给出实例精确活跃度，多实例全站精确值仍需共享状态；`onlineUsers` 口径也已限定为 presence 去重身份。
+
+### 核验结论
+
+- 大厅/牌桌混排、巨型 `FriendRoomControls`、入口同权、局中切换无确认和移动端顺序堆叠均由当前源码直接证实。
+- 邀请/重连、随机匹配、观战补位、ready 自动开局、权威落子、悔棋、认输、房主重开、聊天、Presence、Profile、回放、SGF 和排行榜均有当前实现及测试证据。
+- 优先级、组件名、四工作区和后续 `matchConfig` 模型属于设计决策；核验报告不把它们表述成源码证明的唯一答案。
+- 第一批仍建议 `IX-00 + IX-01`，但必须采用更正后的悔棋状态、socket 启用门控和测试边界。
+
+### 验证结果
+
+- `npm test`：通过，13 个测试文件、109 个测试用例。
+- 计划与核验报告中的 `file:line` 引用自动检查：全部路径存在且行号未越界。
+- 本轮只修改计划/核验/handoff 文档，没有修改产品源码、依赖或运行配置。
+- `.codex/` 继续作为既有未跟踪本地元数据排除在提交之外。
+
+### 二次穷举补充
+
+- 再次按 `RoomStatus` 全枚举时发现计划遗漏兼容类型 `ready`；已增加 `ready-compat` fallback，并明确当前服务端会从双方 ready 直接进入 playing，不新增 Start。
+- 再次按 `RoomListItem.canWatch` 条件核对时发现满员 waiting 房也可观战；大厅分组已从“进行中可观战”改为“可观战”，并要求保留 waiting/playing 真实状态。
+- 最终更正项由 14 组增加为 16 组，核验报告已同步。
+
+### 第三轮分支与协议补充
+
+- Profile 已有正式独立路由；计划已改成保留该路由、移除房间面板里的重复摘要并下沉排行榜，不再暗示需要重新创建 Profile 页面。
+- 在线启用门控不能在 `room:leave` ack 前断开 socket；计划已补充离房时序，避免修后台 rejoin 时制造新的席位清理竞态。
+- activity summary 同时受 room 和 presence 变化影响，不能只复用 lobby room version；候选协议已增加独立 version。
+- 当前创建房没有 visibility/private/inviteCode，都会进入公开大厅；“朋友桌”已更正为公开链接房，真正私密房拆为服务端可见性/授权全栈任务。
+- 当前 Cancel Match 按钮实际不可达：`canCancelMatch=true` 要求已有 snapshot，但按钮只在无 snapshot 分支渲染。计划已把可达的“取消等待/退出”列为 IX-04 明确任务。
+- 最终更正项由 16 组增加为 22 组，核验报告已同步。

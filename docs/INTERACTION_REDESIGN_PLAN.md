@@ -2,9 +2,11 @@
 
 更新日期：2026-07-10
 
-状态：待实施
+状态：待实施；事实性断言已于 2026-07-10 逐条核验
 
 文档性质：竞品研究与现有代码对照后的实施计划，不包含本轮产品代码修改
+
+真实性核验报告：`docs/INTERACTION_REDESIGN_PLAN_VERIFICATION.md`
 
 ## 结论先行
 
@@ -14,13 +16,13 @@
 2. 牌桌必须由明确的前端状态机决定任务提示和动作，隐藏无关操作，不长期陈列一排禁用按钮。
 3. 当前棋盘右侧已经预留 280–320px 栏位，但联机核心信息仍堆在棋盘上方；应把右栏改成真正的桌边区。
 4. 快速匹配、朋友邀请和按房间码加入应按使用频率分层，房间码不应是普通用户开始在线对局前必须理解的概念。
-5. 绝大多数第一阶段改动只是重组现有前端能力，不应顺手重写已经稳定的房间协议、服务端权威落子或身份系统。
+5. 绝大多数第一阶段改动只是重组已有且有测试覆盖的前端/服务端能力，不应顺手重写房间协议、服务端权威落子或身份系统。
 
 建议先完成 P0 的“工作区分离 + 牌桌状态机”，再做桌面/移动端布局。`matchConfig`、点名挑战和赛事属于后续能力，不能阻塞本轮交互主线。
 
 ## 研究与代码依据
 
-本计划已完整通读：
+本计划完整通读了竞品研究，并核对了下列项目文档中与当前能力、完成状态和流程边界直接相关的章节：
 
 - `docs/COMPETITOR_INTERACTION_RESEARCH.md`：PlayOK、scheng20、minh100、sen、gkoos、BGA、FlyOrDie、PaperGames、Vint.ee 共 9 个产品的交互逻辑、横向结论和验收清单。
 - `docs/logic/lobby-matchmaking-module.md`：当前大厅、匹配、观战、公共聊天和房间列表的设计与落地状态。
@@ -35,33 +37,33 @@
 - `src/components/GameShell.tsx:427`：当前模式栏、控制条、联机面板、棋盘和右栏的渲染顺序。
 - `src/components/GameShell.tsx:721`：当前巨型 `FriendRoomControls`。
 - `src/components/GameShell.tsx:1386`：当前大厅房间列表。
-- `src/components/useFriendRoom.ts:40`：联机控制器公开状态和动作。
-- `src/components/useFriendRoom.ts:164`：当前权限布尔值推导。
-- `src/components/useFriendRoom.ts:341`：创建、加入和快速匹配流程。
-- `src/components/useFriendRoom.ts:891`：邀请链接自动进入和 session 恢复。
+- `src/components/useFriendRoom.ts:55`：联机控制器公开状态和动作。
+- `src/components/useFriendRoom.ts:172`：当前权限布尔值推导。
+- `src/components/useFriendRoom.ts:323`：创建、加入和快速匹配流程。
+- `src/components/useFriendRoom.ts:889`：邀请链接自动进入和 session 恢复。
 - `src/server/rooms.ts:16`：服务端房间状态、角色和快照类型。
 - `src/server/rooms.ts:341`：创建、匹配、加入与观战语义。
 - `src/server/rooms.ts:808`：终局重开并交换下一局先手。
 - `src/app/globals.css:102`：当前主区 + 固定右栏布局。
 - `src/app/globals.css:304`：当前房间面板样式。
-- `src/app/globals.css:1453`：当前右侧状态栏及响应式降级。
+- `src/app/globals.css:1453`、`src/app/globals.css:1545`：当前右侧状态栏及响应式降级。
 
 ## 当前项目的真实能力
 
-当前项目不是“缺少联机功能”，而是“成熟能力没有被正确组织”。
+当前项目已经实现了主要联机闭环；本计划所针对的核心缺口是这些能力的页面组织，而不是从零补齐联机协议。
 
 | 能力 | 当前状态 | 结论 |
 | --- | --- | --- |
 | 本地双人、AI、在线房间 | 已有三种模式 | 保留能力，重构为互斥工作区 |
 | 游客随机昵称与免注册第一局 | 已有 | 保留，不新增注册前置门槛 |
 | 快速匹配 | 已有服务端原子单进程基础版 | 提升为在线大厅主动作 |
-| 创建房间、房间码加入、邀请 URL | 已有，URL 可自动加入并恢复身份 | 保留协议，重新分层入口 |
+| 创建房间、房间码加入、邀请 URL | 已有，URL 可自动加入并恢复身份；当前没有 visibility/private 字段，创建房会进入公开大厅 | 保留协议并重新分层入口，但不能把当前链接房宣传成私密朋友桌 |
 | 公开房间列表 | 已有 waiting/playing、Join/Watch 和增量更新 | 改成大厅主体，不再嵌在牌桌上方 |
 | 观战、空座补位 | 已有 `spectator` / `room:sit` | 显式纳入牌桌状态机 |
 | 准备、落子、悔棋、认输、重开 | 已有服务端权限约束 | 用状态替换动作，不改协议 |
 | 房间聊天、公共聊天 | 已有 | 分别归属牌桌侧栏和大厅页签 |
 | 在线用户与状态 | 已有 online/in_room/playing/spectating | 归入大厅；精确汇总需补充统计口径 |
-| Profile、棋谱、回放、SGF、排行榜 | 已有基础版 | 从大厅主流程中下沉为独立入口或次级页签 |
+| Profile、棋谱、回放、SGF、排行榜 | 已有基础版；Profile 已有独立路由，但 Profile 摘要和排行榜仍内嵌在巨型房间面板 | 保留 Profile 独立页，移除首屏重复摘要；排行榜改为大厅次级入口或独立视图 |
 | 多局、计时、规则、是否计分 | 未建模 | 后续新增 `matchConfig`，不混入 P0 |
 | 点名挑战、忙碌/拒绝挑战 | 未实现 | 后续新增事件和状态，不混入 P0 |
 | 完整赛事 | 未实现 | 明确延期，只预留数据关系 |
@@ -78,17 +80,17 @@
 - 公共聊天、在线用户、排行榜、房间列表；
 - 进入房间后的房间摘要、玩家、观战者、房间聊天和所有牌桌动作。
 
-因此用户进入房间后，大厅没有退出；棋盘反而被推到整组控制之后。这直接违背 9 个竞品研究中最稳定的共识：大厅负责找桌，牌桌负责当前对局。
+因此用户进入房间后，大厅没有退出；棋盘反而被推到整组控制之后。这与竞品研究文档总结的“大厅负责找桌、牌桌负责当前对局”原则冲突。直接支持这一原则的主要是 PlayOK、BGA、FlyOrDie、Vint.ee 等在线平台；AI/本地类项目提供的是独立棋盘工作区的补充证据，不能表述成 9 个产品逐一达成同一结论。
 
-### 2. 已有状态只控制 disabled，没有控制界面结构
+### 2. 权限推导已经存在，但状态驱动不完整
 
-`useFriendRoom` 已经推导 `canReady`、`canPlay`、`canResign`、`canRestart`、`canSit`、`canUndo` 等权限，但 UI 仍长期渲染悔棋、认输、重开、离开等按钮，再用 disabled 表达不可用。
+`useFriendRoom` 已经推导 `canReady`、`canPlay`、`canResign`、`canRestart`、`canSit`、`canUndo` 等权限。当前 UI 已经对准备和坐下做了条件渲染，但仍长期渲染悔棋、认输、重开、离开等按钮，并主要用 disabled 表达前三者不可用。
 
 权限布尔值应继续作为安全边界，但需要再向上推导一个语义化 `TableUiState`，由它决定当前任务、主动作和次动作。禁用状态只用于“动作暂时等待”，不用于承载整个状态机。
 
 ### 3. 页面已有侧栏，联机信息却没有进入侧栏
 
-桌面布局已经是主区 + 320px 右栏，右栏目前只有状态、步数和广告。与此同时，玩家、观战者、房间聊天和房间摘要全部放在棋盘上方。
+桌面布局已经是主区 + 280–320px 右栏，右栏目前只有状态、步数和广告。与此同时，玩家、观战者、房间聊天和房间摘要全部放在棋盘上方。
 
 这不是缺少布局基础，而是内容归属错误。首轮不需要重新发明网格系统，只需让在线牌桌接管现有右栏。
 
@@ -118,9 +120,9 @@
 | 在线大厅与牌桌互斥 | 极高 | P0 | 无 | 立即做 |
 | 语义化牌桌状态机与动作替换 | 极高 | P0 | 无 | 立即做 |
 | 固定任务栏、桌边栏、移动端紧凑布局 | 极高 | P0 | 无 | 紧随状态机完成 |
-| 快速匹配/朋友桌/按码加入分层 | 高 | P1 | 无 | 视图分离后做 |
+| 快速匹配/链接房/按码加入分层 | 高 | P1 | 仅入口分层无影响；真正私密朋友桌需要协议扩展 | 视图分离后先做真实入口 |
 | 离房和 AI 设置切换保护 | 高 | P1 | 无 | 与工作区切换同时做 |
-| 空大厅降级与真实活跃度摘要 | 高 | P1 | 精确总数需小幅扩展 | 分两步做，不伪造热度 |
+| 空大厅降级与真实活跃度摘要 | 高 | P1 | 单进程精确总数是小幅扩展；多实例全站总数需要共享状态 | 分两步做，不伪造热度 |
 | 房内棋谱/事件历史与终局复盘入口 | 中高 | P1 | 可先复用现有 moves/records | 牌桌稳定后做 |
 | 排行榜/Profile 从大厅主流程下沉 | 中 | P1 | 无 | 配合大厅整理做 |
 | `matchConfig`（规则/计时/多局/计分） | 中 | P2 | 需要协议和存储扩展 | 另立后端任务 |
@@ -137,7 +139,7 @@
 └─ 在线工作区
    ├─ 在线大厅 OnlineLobbyView（room === null）
    │  ├─ 快速匹配
-   │  ├─ 和朋友玩（创建 / 邀请 / 按码加入）
+   │  ├─ 和朋友玩（创建当前公开链接房 / 邀请 / 按码加入）
    │  ├─ 可加入 / 可观战牌桌
    │  └─ 在线用户 / 公共聊天 / 排行榜入口
    └─ 在线牌桌 GameTableView（room !== null）
@@ -160,14 +162,16 @@
 | `TableUiState` | 判定要点 | 主提示 | 主动作 | 可见次动作 |
 | --- | --- | --- | --- | --- |
 | `spectating` | role=spectator，无空座或 playing | 正在观战 | 无 | 退出；聊天/历史 |
-| `spectating-can-sit` | role=spectator，非 playing 且有空座 | 有空座可加入 | 坐下 | 退出 |
-| `seated-waiting-opponent` | player，只有一名玩家 | 等待对手 | 复制邀请 | 取消匹配或退出 |
+| `spectating-can-sit` | `canSit=true` | 有空座可加入 | 坐下 | 退出 |
+| `seated-waiting-opponent` | player，只有一名玩家 | 等待对手 | 复制邀请 | 取消等待或退出 |
 | `seated-not-ready` | 两名玩家，自己未准备 | 准备后开始 | 准备 | 退出 |
 | `seated-ready` | 自己已准备，对手未准备 | 等待对手准备 | 取消准备 | 退出 |
-| `playing-my-turn` | playing 且 currentTurn=seat | 轮到你落子 | 棋盘落子 | 悔棋、认输 |
-| `playing-opponent-turn` | playing 且非自己回合 | 等待对手 | 无 | 悔棋（满足规则时）、认输 |
+| `ready-compat` | status=ready | 双方已准备，等待服务端进入对局 | 无 | 退出；不显示 Start |
+| `playing-my-turn` | playing、无待处理悔棋且 currentTurn=seat | 轮到你落子 | 棋盘落子 | 悔棋（仅 `canUndo` 时）、认输 |
+| `playing-opponent-turn` | playing、无待处理悔棋且非自己回合 | 等待对手 | 无 | 悔棋（仅 `canUndo` 时）、认输 |
+| `undo-request-pending` | undoRequest.requesterSeat=seat | 等待对手回应悔棋 | 无 | 认输可下沉，不允许继续落子/再次请求 |
 | `undo-response-required` | undoRequest.targetSeat=seat | 对手请求悔棋 | 接受 / 拒绝 | 暂停其他协商动作 |
-| `finished-host` | finished 且 seat=hostSeat | 本局结束 | 再来一局 | 复盘、退出 |
+| `finished-host` | finished 且 seat=hostSeat | 本局结束 | 重置为下一局等待 | 复盘、退出 |
 | `finished-guest` | finished 且非 host | 本局结束 | 等待房主重开 | 复盘、退出 |
 | `abandoned` | status=abandoned | 对局已关闭 | 返回大厅 | 复盘（若有记录） |
 
@@ -178,6 +182,10 @@
 - `can*` 权限仍由 controller/server 决定；`TableUiState` 只负责组织显示，不能绕过权限。
 - “断线重连中”作为连接覆盖状态，不新增第二套房间状态。
 - 双方准备后服务端自动开局，UI 不重新引入 Start 按钮。
+- 当前 controller 没有记录房间来自“快速匹配”还是“朋友桌”；在新增可恢复的 entry intent 之前，单人等待房统一使用“取消等待/退出”，不能武断显示“取消匹配”。
+- 当前 `canCancelMatch` 虽然能在单人 waiting 房为 true，但按钮位于 `snapshot ? copyInvite : ...` 的无房分支，因此实际不可达；新任务栏必须显式提供可达的“取消等待/退出”，不能把现有按钮当成已工作的 UI。
+- 当前 `game:restart` 由房主触发后只把房间重置到 waiting，双方仍需重新 ready；它不是立即开始下一局。
+- `RoomStatus="ready"` 目前只是兼容类型，当前 `updateRoomStatus` 会在双方 ready 时直接进入 playing；派生函数仍必须提供安全 fallback，但不能因此重新引入 Start。
 
 ## 实施阶段
 
@@ -201,7 +209,7 @@
 
 验收：
 
-- 状态矩阵覆盖 player/spectator、waiting/playing/finished/abandoned、我的回合/对手回合、悔棋请求。
+- 状态矩阵覆盖 player/spectator、waiting/ready/playing/finished/abandoned、我的回合/对手回合、悔棋请求方与响应方。
 - 现有 socket 和 server 测试不因 UI 重构而修改业务期望。
 
 ### Phase 1：拆分互斥工作区（P0）
@@ -226,6 +234,7 @@
 2. 本地、AI、在线大厅、在线牌桌各自拥有自己的控制区；棋盘不再由一个页面同时承载所有模式控制。
 3. 保持现有 URL、local/session storage 和 socket 事件名不变。
 4. 邀请 URL 自动加入时直接落到牌桌；加入失败才回到大厅并显示错误。
+5. 为 `useFriendRoom` 增加在线工作区启用门控，或把自动 rejoin/socket 建连约束在在线工作区；当前 hook 即使页面处于本地模式，只要仍有 stored room session，也可能自动 rejoin 并创建 socket。门控只能阻止新的后台 rejoin/订阅，不能在 `room:leave` ack 返回前提前断开活跃 socket；模式切换需要等待 leave 完成，或让 `leaveRoom` 返回可等待的结果。
 
 验收：
 
@@ -251,8 +260,8 @@
 
 1. 用纯函数 `deriveTableUiState(room)` 生成语义状态。
 2. 用纯函数 `getTableActions(state, capabilities)` 返回有序动作，不在 JSX 中散落复杂条件。
-3. 当前任务栏固定在棋盘附近，显示房间状态、轮次/回合和一个主动作。
-4. 悔棋请求进入任务栏或明确 modal，响应前暂停其他冲突动作。
+3. 当前任务栏固定在棋盘附近，显示房间状态、当前回合和一个主动作；在 `matchConfig` 落地前不虚构系列赛轮次。
+4. 悔棋请求复用现有明确 modal 或进入任务栏；响应方可接受/拒绝，请求方显示等待，对请求未解决前暂停落子和冲突动作。
 5. 终局保留棋盘、最后一步、玩家和聊天；房主可重开，其他人明确等待或退出。
 
 验收：
@@ -283,7 +292,7 @@
 1. 桌面端复用现有 280–320px 右栏，优先放双方玩家和连接/准备状态。
 2. 聊天、历史、房间信息改为侧栏页签或折叠层；广告不插入棋盘和主动作之间。
 3. 移动端顺序固定为：任务条 → 棋盘 → 主动作 → 玩家紧凑条 → 折叠次要信息。
-4. 棋盘同时受可用宽度和可用高度约束，不能只按宽度缩放。
+4. 保留现有 `width: min(100%, 820px, 78vh)` / `76vh` 高度约束，并根据新增任务栏占用进一步校准；该能力不是从零新增。
 5. RTL 语言保持信息优先级和可触达性，不用绝对 left/right 假设排列。
 
 验收：
@@ -302,22 +311,28 @@
 动作：
 
 1. 在线大厅首屏把快速匹配设为主动作。
-2. “和朋友玩”作为第二入口，进入后才显示创建朋友桌、复制邀请说明和按码加入。
+2. “和朋友玩”作为第二入口，进入后才显示创建链接房、复制邀请说明和按码加入；第一版必须说明该房仍会出现在公开大厅，不能使用“私密房”文案。
 3. 昵称沿用随机游客身份；只有用户主动编辑身份时才展开账号区域。
-4. 房间列表分“可加入”和“进行中可观战”，每行只显示一个上下文动作。
+4. 房间列表分“可加入”和“可观战”，每行只显示一个上下文动作；可观战组同时容纳满员 waiting 房和 playing 房，并明确显示真实状态，不能把满员等待桌误标成进行中。
 5. 空列表时显示快速匹配、创建朋友桌、转到 AI 三个真实出口，不展示孤立的“暂无房间”。
 6. Profile 和排行榜改为全局/大厅次级入口，不与开局动作争夺首屏。
+7. 快速匹配创建单人 waiting 房后进入牌桌等待态，并提供可达的“取消等待”；第一版可复用非对局 `leaveRoom`，不要继续依赖当前不可达的 Cancel Match 分支。
 
 活跃度口径分两步：
 
 - 第一步可显示“当前已加载列表”的开放桌/进行中桌数量，并明确不是全站总数。
-- 第二步由服务端返回 `onlineUsers`、`openTables`、`playingTables` 的无分页汇总；在此之前不把 20 条房间列表或 30 名 presence 样本伪装成全站数字。
+- 第二步由服务端返回 `onlineUsers`、`openTables`、`playingTables` 的无分页汇总；在此之前不把 20 条房间列表或 30 名 presence 样本伪装成全站数字。当前单进程 store 只能给出该进程的精确值，多实例部署前不能宣称为跨实例全站总数。
+
+私密朋友桌边界：
+
+- 当前 `CreateRoomInput`、`RoomSnapshot`、`RoomListItem` 都没有 visibility/private/inviteCode。
+- 如果产品要求“只有拿到邀请链接的人才能发现或加入”，必须另立全栈任务，新增服务端可见性和授权语义；不能在 IX-04 里只通过隐藏前端列表伪装私密。
 
 验收：
 
 - 已恢复游客身份时，从进入在线大厅到开始快速匹配只需 1 次点击。
 - 新用户无需理解房间码即可开始普通在线对局。
-- 朋友可继续通过现有一个 URL 进入正确牌桌。
+- 朋友可继续通过现有一个 URL 进入正确牌桌；本阶段不把该 URL 承诺为私密邀请。
 - 没有开放桌时仍有明确下一步，且不使用虚假在线人数或静态热度。
 
 ### Phase 5：保护模式切换和局中设置（P1）
@@ -334,7 +349,7 @@
 验收：
 
 - 模式切换不会无提示丢弃在线或 AI 对局上下文。
-- 用户确认退出后 URL、session 和服务器房间状态仍按现有契约清理。
+- 用户确认退出后 URL 和本地 session 按现有回调清理；非对局玩家/观战者立即离房，对局中玩家在服务端被标记断线并进入默认 60 秒重连宽限，而不是立即删除席位。
 - 键盘、触摸和 RTL 下确认界面均可操作。
 
 ### Phase 6：终局历史与回放入口（P1）
@@ -345,10 +360,10 @@
 
 动作：
 
-1. 先用现有 `RoomSnapshot.moves` 生成当前牌桌结构化步骤列表，不另建客户端文本日志。
+1. 先用现有 `RoomSnapshot.moves` 生成重开前的当前局结构化步骤列表，不另建客户端文本日志。
 2. 终局提供“复盘”入口，优先复用现有 record replay 逻辑。
 3. 已保存 game record 时链接到 Profile/Game records；记录尚未可读回时仍可查看本局 moves。
-4. 重开只重置新局棋盘，牌桌聊天和桌内上下文继续保留；历史按 gameId 分局。
+4. 当前服务端重开会清空 `RoomSnapshot.moves`、更新 gameId，但不会清空房间聊天和玩家。因此跨局历史不能只依赖当前 snapshot，必须从已保存 game record 读回上一局，再按 gameId 分局。
 
 验收：
 
@@ -372,20 +387,23 @@ type LobbyActivitySummary = {
   openTables: number;
   playingTables: number;
   spectators: number;
+  version: number;
 };
 ```
 
 动作：
 
-1. 服务端从权威 room/presence store 计算无分页汇总。
-2. lobby 初始 ack 和后续变更携带版本；客户端发现版本缺口仍全量 resync。
-3. 文案明确区分“在线用户”“开放桌”“进行中桌”，不合并成含糊总数。
+1. 服务端从当前单进程的 room/presence store 计算无分页汇总；`onlineUsers` 定义为已加入 presence 且 connectionCount > 0 的去重身份数，`openTables` 定义为 waiting 且可加入的桌，`playingTables` 定义为 playing 桌，`spectators` 定义为当前连接中的观战席总数。这些值不等同于全部网站访客或跨实例全站统计。
+2. room list 的 lobby 初始 ack 和后续变更当前已经携带版本，但客户端只做 upsert/delete、没有保存或检查版本；本阶段需要新增房间列表版本缺口检测，检测到缺口后调用 full resync。
+3. activity summary 需要自己的单调 `version`（或明确的 room/presence 双版本），因为在线人数会随 presence 变化，不能只复用 lobby room version。summary 更新使用整份替换；发现版本缺口时重新拉取。
+4. 文案明确区分“在线用户”“开放桌”“进行中桌”，不合并成含糊总数。
 
 验收：
 
 - 汇总不受客户端 `limit=20/30` 影响。
 - 创建、开局、结束、观战、离线和清理后数字同步更新。
 - 汇总异常时隐藏或标记暂不可用，不回退到伪造数字。
+- 多实例部署但尚无 Redis/PostgreSQL 等共享状态时，指标必须标明实例范围，不能宣称全站精确。
 
 ### Phase 8：比赛配置 `matchConfig`（P2，独立后端任务）
 
@@ -395,7 +413,7 @@ type LobbyActivitySummary = {
 
 ```ts
 type MatchConfig = {
-  rules: "freestyle"; // 后续才能扩展 renju 等规则
+  rules: "freestyle"; // 候选命名；对应当前“连续不少于五子即胜”的语义
   clock: null | { initialSeconds: number; incrementSeconds: number };
   seriesLength: 1 | 3 | 5;
   rated: boolean;
@@ -404,7 +422,7 @@ type MatchConfig = {
 
 边界：
 
-- 第一版只能暴露已经真实实现的规则；不能先显示 Renju/Swap2 再用 freestyle 执行。
+- 当前规则引擎只有“连续不少于五子即胜、长连也获胜”的固定语义，没有规则配置。第一版只能暴露这套已实现规则；不能先显示 Renju/Swap2 再用当前规则执行。
 - 配置在首局开始后锁定，重开沿用同一 match 配置。
 - `rated` 必须依赖可信身份、权威结算和反刷规则，不能只是 UI 开关。
 - 多局需要独立 matchId、gameId、局分和先手轮换，不复用单个 `winner` 冒充系列赛结果。
@@ -465,7 +483,7 @@ type MatchConfig = {
 
 - `deriveTableUiState` 的全状态表。
 - `getTableActions` 的动作数量、顺序、主次与隐藏规则。
-- room 为 null/非 null 时大厅与牌桌互斥。
+- 用纯函数覆盖 room 为 null/非 null 时大厅与牌桌互斥；当前 Vitest 是 node 环境，没有现成的 Testing Library/jsdom 组件测试栈。
 - AI 设置在空局/进行中局的应用策略。
 
 ### 现有回归
