@@ -4806,3 +4806,58 @@ b6faf9e
 - 提交范围：14 个文件，869 行新增、129 行删除；包含大厅分层、Join/Watch 分组、空状态、取消等待动作、六语种文案、两份 Chrome smoke、IX-04 验证报告及计划/逻辑文档同步。
 - `git push origin main`：成功，`3f43cb8..a5989d9`。
 - 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-04B。
+
+## 2026-07-10 IX-04B 非公开列出房与邀请边界
+
+### 步骤 1：重读计划和服务端发现面
+
+1. 重读 IX-04B、当前 RoomStore 类型/创建/匹配/加入/列表、socket 创建和 lobby 广播、Presence、客户端 controller、朋友入口和桌边 Room info；当前 Git 与远端同步，只有 `.codex/` 未跟踪证据。
+2. 目标边界固定为 `visibility: public | unlisted`：public 继续进入大厅；unlisted 不公开列出但可用规范房间码或当前邀请 URL 直接加入。unlisted 不等于授权保护，不能称 private，也不在本阶段加入 handle/account-ID 别名。
+3. 当前 `listRooms()` 是公开 REST/socket 初始列表的主过滤点，但只过滤这里不足以成立：`broadcastLobbyRoomChange()` 会把每次房间变化增量广播；`broadcastRoomClosed()` 会把删除 code 广播给 lobby；公共 Presence snapshot 还包含参与者的 `roomCode`。IX-04B 必须同时封住这四条发现面，不能只改前端。
+4. `getRoomListItem()` 同时被 lobby 广播和“房间是否仍存在”的 room-state 广播复用，不能简单让 unlisted 返回 null，否则会把有效 unlisted 房误报 closed。实现将保留内部 item/存在判断，并依据 visibility 决定是否向 lobby 发事件。
+5. 房间删除后 store 已无法查询原 visibility；清理/生命周期结果必须携带删除前 snapshot（或等价 visibility），由 socket 层只为 public 房发 lobby deletion。否则 unlisted code 会在关闭时泄漏。
+6. 随机匹配只能搜索/创建 public 房；朋友入口改为显式创建 unlisted。旧 socket/API 调用省略 visibility 时继续默认 public，保持协议兼容。
+7. public lobby version 不应因 unlisted 房活动持续跳号；创建、更新和删除的版本推进也要按 visibility 隔离，而不只是隐藏明细。
+
+### 步骤 2：实现权威 visibility 与四条发现面隔离
+
+1. 新增 `RoomVisibility = public | unlisted`，写入 `CreateRoomInput`、内部 `RoomState`、权威 `RoomSnapshot` 和 `RoomListItem`；省略 visibility 继续默认 public，未知值返回 `invalid-room-visibility`。
+2. `RoomStore.findMatch()` 只搜索 public waiting 房，缺房时显式创建 public；unlisted 房仍可通过规范 roomCode 的现有 `joinRoom` 加入。
+3. `listRooms()` 首先在服务端过滤 unlisted；`broadcastLobbyRoomChange()` 对 unlisted 不发 update/delete；房间关闭广播使用删除前 snapshot 的 visibility，仅 public 向 lobby 发 deletion。
+4. 为避免删除后丢失 visibility，`RoomCleanupResult` / `RoomLifecycleSweep` 在保留原 `deletedRoomCodes` 兼容字段的同时新增 `deletedSnapshots`；socket 清理和生命周期广播据此决策。
+5. public lobby version 仅在 public 创建、更新或删除时推进；unlisted 的创建、加入、离开和清理不制造公共版本缺口。
+6. Presence 对 unlisted 参与者继续显示真实在线/房内状态，但公开 `roomCode` 置 null，避免 Presence REST/socket 成为旁路房间发现接口。
+7. socket `room:create` 兼容新增可选 visibility；重复创建只有在当前 disposable waiting 房 visibility 相同时才复用，否则释放旧房再创建目标类型，避免 public/unlisted 意图串线。
+
+### 步骤 3：接入朋友入口、真实边界文案与验证
+
+1. 朋友区和空大厅的创建出口现在显式调用 `createRoom("unlisted")`，按钮文案为 Create unlisted room；快速匹配继续创建 public。
+2. 六语种新增 create-unlisted、Visibility、Public、Unlisted 和诚实边界说明：unlisted 不出现在大厅，但任何知道房间码/链接的人仍能加入，这不是访问保护。
+3. Room info 新增 Visibility 行，直接显示权威 snapshot 的 Public/Unlisted；没有依据入口猜测房间类型。
+4. RoomStore 新增测试覆盖：默认 public、unlisted 不进列表、lobby version 不变、Presence roomCode 不泄漏、直接按码可加入、随机匹配忽略 unlisted、非法 visibility 拒绝。
+5. socket 新增测试覆盖 unlisted create/join/leave/delete 全流程不产生 lobby update/delete，最终 list 为空且公共 version 不变。三份定向测试共 81 个用例通过，lint、diff check 和 TypeScript 构建通过。
+6. Chrome share smoke 已通过：UI 创建 unlisted、REST 公共列表查不到、Room info 显示 Unlisted、邀请 URL 自动进入、复制邀请、取消等待清 URL、注册身份恢复；lobby UI smoke 的快速匹配、手动按码、Join/Watch、三视口和 RTL 回归同时通过。
+7. 首次证据截图取景截断朋友说明且未拍到移动到棋盘下方的 Room info；加入精确 `scrollIntoView` 后重拍。人工检查最终 `unlisted-friend-entry.png` 清楚显示“非访问保护”说明，`unlisted-room-info.png` 清楚显示 Visibility = Unlisted。
+
+### 步骤 4：补查结束后记录旁路
+
+1. 文档同步前再次检查公开 Profile/棋谱接口，确认 `PlayerGameRecordSummary` 会返回 `roomCode` 和包含 code 的 `gameId`；unlisted 对局结束后若继续进入公开 Profile/排行榜，会形成事后发现旁路。
+2. 权威 `AuthoritativeGameRecord` / `SavedGameRecord` 新增 visibility；RoomStore 捕获终局时随房间 snapshot 写入。旧 JSONL 记录缺字段时迁移为 public，保持历史兼容。
+3. unlisted 记录仍在服务端内部保存，用于权威一致性、客户端提交审计和管理员导出；公开 Profile recent records 与排行榜计算只读取 public 记录，因此不返回 unlisted roomCode/gameId，也不让朋友局影响公开排名。
+4. 新增记录测试证明内部 `listRecords/getRecord` 可读取 unlisted，而公开 profile/ranking 只包含 public。记录、房间、socket 三份定向测试共 62 个通过，lint 和 diff check 通过。
+5. 最终服务端 diff 复核发现 public 房在 `getSnapshot/getRoomListItem` 懒过期路径删除时，旧代码未统一推进 lobby version；把 public 过期版本推进集中到 `deleteIfExpired()`，list/sweep 不再分别处理。unlisted 仍不推进版本，避免调用路径差异破坏可见性口径。
+
+### 步骤 5：IX-04B 文档与最终门禁
+
+1. 更新交互计划为 IX-04B 完成、下一步 IX-04A；新增 `INTERACTION_REDESIGN_IX04B_VERIFICATION.md`，同步大厅/匹配、实时房间、IX-04 后续说明和 README。
+2. 全量 `npm run lint`、15 文件/149 测试、`npm audit --omit=dev`、`git diff --check` 全部通过。
+3. 停止本轮服务并确认 3050 无监听后最终 `npm run build` 通过：编译、TypeScript 和 11 个页面生成成功。
+4. 用最终构建再次执行 game-records、leaderboard 和 share-url smoke：public 权威记录/排名保持工作；unlisted UI 创建、公开列表不可见、邀请直达和注册身份恢复继续通过。
+5. 此前已用同批代码通过 lobby、matchmaking、online-room、room-lifecycle、Presence、公共/房间聊天、账户和 lobby UI/三视口/RTL 回归；`.codex/validation/ix04b` 七张证据继续不进 Git。
+
+### IX-04B 提交与推送
+
+- 提交：`d3ff516 feat: add unlisted friend rooms`。
+- 提交范围：21 个文件，528 行新增、72 行删除；包含权威 visibility、列表/事件/Presence/记录发现面隔离、朋友入口和 Room info、六语种文案、149 测试与 Chrome smoke、验证报告和计划/逻辑文档。
+- `git push origin main`：成功，`832edcc..d3ff516`。
+- 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-04A。
