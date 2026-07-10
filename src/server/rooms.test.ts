@@ -1044,6 +1044,8 @@ describe("RoomStore", () => {
 
     expectOk(store.resignGame(room.code, "player-2"));
 
+    expectOk(store.setRematchReady(room.code, "player-2", true));
+
     expect(store.restartGame(room.code, "player-2")).toMatchObject({
       ok: false,
       error: { code: "not-room-host" }
@@ -1055,9 +1057,14 @@ describe("RoomStore", () => {
     expect(restarted.moveSeq).toBe(0);
     expect(restarted.winner).toBeNull();
     expect(restarted.moves).toEqual([]);
+    expect(restarted.rematch).toEqual({ readySeats: [], requestedAt: {} });
     expect(restarted.currentTurn).toBe("white");
     expect(restarted.players.every((player) => player.ready === false)).toBe(true);
     expect(restarted.players.every((player) => player.undoRequestsRemaining === 3)).toBe(true);
+    expect(store.setRematchReady(room.code, "player-2", true)).toMatchObject({
+      ok: false,
+      error: { code: "game-not-playing" }
+    });
     expect(store.startGame(room.code, "player-1")).toMatchObject({
       ok: false,
       error: { code: "room-not-ready" }
@@ -1073,6 +1080,110 @@ describe("RoomStore", () => {
     const thirdReset = expectOk(store.restartGame(room.code, "player-1"));
 
     expect(thirdReset.currentTurn).toBe("black");
+  });
+
+  it("starts exactly one next game when both seated players request a rematch", () => {
+    let now = 1_780_000_000_000;
+    const store = createTimedRoomStore({ codeGenerator: () => "ROOM01", now: () => now });
+    const room = createStartedRoomWithStore(store);
+
+    expectOk(store.applyMove(room.code, { playerId: "player-1", point: { col: 7, row: 7 } }));
+    const finished = expectOk(store.resignGame(room.code, "player-2"));
+    const finishedRecord = store.listGameRecords().find((record) => record.gameId === finished.gameId);
+
+    now += 10;
+    const firstReady = expectOk(store.setRematchReady(room.code, "player-2", true));
+
+    expect(firstReady.status).toBe("finished");
+    expect(firstReady.moveSeq).toBe(1);
+    expect(firstReady.rematch).toEqual({ readySeats: ["white"], requestedAt: { white: now } });
+
+    now += 10;
+    expectOk(store.setRematchReady(room.code, "player-2", false));
+    const cancelled = expectOk(store.getSnapshot(room.code));
+
+    expect(cancelled.status).toBe("finished");
+    expect(cancelled.rematch).toEqual({ readySeats: [], requestedAt: {} });
+
+    expectOk(store.setRematchReady(room.code, "player-2", true));
+    now += 10;
+    const rematched = expectOk(store.setRematchReady(room.code, "player-1", true));
+
+    expect(rematched).toMatchObject({
+      currentTurn: "white",
+      gameId: `${room.code}-2`,
+      moveSeq: 0,
+      rematch: { readySeats: [], requestedAt: {} },
+      status: "playing",
+      winner: null
+    });
+    expect(rematched.board.flat().every((cell) => cell === null)).toBe(true);
+    expect(rematched.players.every((player) => player.ready)).toBe(true);
+    expect(store.listGameRecords().filter((record) => record.gameId === finished.gameId)).toEqual([finishedRecord]);
+    expect(store.setRematchReady(room.code, "player-2", true)).toMatchObject({
+      ok: false,
+      error: { code: "game-not-playing" }
+    });
+    expect(expectOk(store.getSnapshot(room.code)).gameId).toBe(`${room.code}-2`);
+  });
+
+  it("preserves rematch intent across a short disconnect and clears it on seat replacement or timeout", () => {
+    let now = 1_780_000_000_000;
+    const store = createTimedRoomStore({
+      codeGenerator: () => "ROOM01",
+      disconnectGraceMs: 1_000,
+      now: () => now
+    });
+    const room = createStartedRoomWithStore(store);
+
+    expectOk(store.resignGame(room.code, "player-2"));
+    expectOk(store.setRematchReady(room.code, "player-1", true));
+    const disconnected = expectOk(store.markDisconnected(room.code, "player-1"));
+
+    expect(disconnected.status).toBe("finished");
+    expect(disconnected.players).toHaveLength(2);
+    expect(disconnected.rematch.readySeats).toEqual(["black"]);
+    expectOk(store.setRematchReady(room.code, "player-2", true));
+    expect(expectOk(store.getSnapshot(room.code)).status).toBe("finished");
+
+    const restored = expectOk(store.restoreConnection(room.code, "player-1"));
+
+    expect(restored.status).toBe("playing");
+    expect(restored.gameId).toBe(`${room.code}-2`);
+
+    expectOk(store.resignGame(room.code, "player-2"));
+    expectOk(store.joinRoom(room.code, { playerId: "watcher", playerName: "Watcher" }));
+    expectOk(store.setRematchReady(room.code, "player-1", true));
+    expectOk(store.markDisconnected(room.code, "player-1"));
+    const replaced = expectOk(store.sitPlayer(room.code, "watcher", "black"));
+
+    expect(replaced.rematch.readySeats).toEqual([]);
+    expect(replaced.players.find((player) => player.seat === "black")?.name).toBe("Watcher");
+
+    expectOk(store.setRematchReady(room.code, "watcher", true));
+    expectOk(store.markDisconnected(room.code, "watcher"));
+    now += 1_001;
+    const sweep = store.sweepExpiredRooms();
+    const expired = sweep.updatedSnapshots.find((snapshot) => snapshot.code === room.code);
+
+    expect(expired?.rematch.readySeats).toEqual([]);
+    expect(expired?.players.some((player) => player.seat === "black")).toBe(false);
+  });
+
+  it("rejects spectator rematch choices and clears a seated player's choice on explicit leave", () => {
+    const { room, store } = createStartedRoom();
+
+    expectOk(store.resignGame(room.code, "player-2"));
+    expectOk(store.joinRoom(room.code, { playerId: "watcher", playerName: "Watcher" }));
+    expect(store.setRematchReady(room.code, "watcher", true)).toMatchObject({
+      ok: false,
+      error: { code: "not-room-player" }
+    });
+    expectOk(store.setRematchReady(room.code, "player-2", true));
+    const left = expectOk(store.leaveRoom(room.code, "player-2"));
+
+    expect(left.rematch.readySeats).toEqual([]);
+    expect(left.players.some((player) => player.seat === "white")).toBe(false);
   });
 
   it("retries room code collisions and exposes a compact default generator", () => {

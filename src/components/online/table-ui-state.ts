@@ -11,8 +11,8 @@ export type TableUiState =
   | "playing-opponent-turn"
   | "undo-request-pending"
   | "undo-response-required"
-  | "finished-host"
-  | "finished-guest"
+  | "finished-rematch-open"
+  | "finished-rematch-ready"
   | "abandoned";
 
 export type TableUiStateInput = {
@@ -27,8 +27,9 @@ export type TableActionId =
   | "leave"
   | "ready"
   | "reject-undo"
+  | "rematch-cancel"
+  | "rematch-ready"
   | "resign"
-  | "restart"
   | "sit"
   | "undo"
   | "unready";
@@ -43,8 +44,8 @@ export type TableAction = {
 export type TableActionCapabilities = {
   canCancelMatch: boolean;
   canReady: boolean;
+  canRematch: boolean;
   canResign: boolean;
-  canRestart: boolean;
   canSit: boolean;
   canUndo: boolean;
   ready: boolean;
@@ -94,7 +95,9 @@ export function deriveTableUiState({ canSit, room }: TableUiStateInput): TableUi
   }
 
   if (snapshot.status === "finished") {
-    return room.seat === snapshot.hostSeat ? "finished-host" : "finished-guest";
+    return snapshot.rematch.readySeats.includes(room.seat)
+      ? "finished-rematch-ready"
+      : "finished-rematch-open";
   }
 
   return snapshot.currentTurn === room.seat ? "playing-my-turn" : "playing-opponent-turn";
@@ -144,13 +147,16 @@ export function getTableActions(
       ];
     case "undo-response-required":
       return [action("reject-undo", "task"), action("allow-undo", "task")];
-    case "finished-host":
+    case "finished-rematch-open":
       return [
-        ...(capabilities.canRestart ? [action("restart", "task")] : []),
+        ...(capabilities.canRematch ? [action("rematch-ready", "task")] : []),
         action("leave", "toolbar")
       ];
-    case "finished-guest":
-      return [action("leave", "toolbar")];
+    case "finished-rematch-ready":
+      return [
+        ...(capabilities.canRematch ? [action("rematch-cancel", "task")] : []),
+        action("leave", "toolbar")
+      ];
     case "abandoned":
       return [action("leave", "task")];
   }

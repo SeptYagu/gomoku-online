@@ -299,6 +299,7 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/INTERACTION_REDESIGN_IX04_VERIFICATION.md`：在线大厅主次入口、低活跃降级、取消等待和 RTL 验证。
 - `docs/INTERACTION_REDESIGN_IX04B_VERIFICATION.md`：public/unlisted 权威可见性、邀请边界和发现面隔离验证。
 - `docs/INTERACTION_REDESIGN_IX04A_VERIFICATION.md`：公开 handle、显式房主索引和四种统一加入目标验证。
+- `docs/INTERACTION_REDESIGN_IX06A_VERIFICATION.md`：双方再战意愿、断线重连门控和旧 restart 兼容验证。
 - `docs/HANDOFF.md`：当前任务交接文档，方便新窗口接手。
 - `docs/logic/`：按模块记录从参考项目提取出的实现逻辑。
 

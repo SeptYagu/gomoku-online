@@ -41,6 +41,10 @@ export type ClientToServerEvents = {
     ack: (response: RoomAck) => void
   ) => void;
   "game:resign": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
+  "game:rematch-ready": (
+    payload: { ready: boolean; roomCode: string },
+    ack: (response: RoomAck) => void
+  ) => void;
   "game:restart": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
   "game:start": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
   "game:undo-request": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
@@ -458,6 +462,18 @@ export function registerRoomSocketHandlers(
         roomStore,
         runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
           roomStore.restartGame(payload.roomCode, playerId)
+        ),
+        ack
+      );
+    });
+
+    socket.on("game:rematch-ready", (payload, ack) => {
+      acknowledgeAndBroadcast(
+        io,
+        socket,
+        roomStore,
+        runForCurrentPlayer(socket, roomStore, payload.roomCode, (playerId) =>
+          roomStore.setRematchReady(payload.roomCode, playerId, payload.ready === true)
         ),
         ack
       );

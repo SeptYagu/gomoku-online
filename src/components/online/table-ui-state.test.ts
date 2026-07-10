@@ -69,14 +69,14 @@ describe("deriveTableUiState", () => {
       name: "undo target required to respond"
     },
     {
-      expected: "finished-host",
-      input: createInput({ hostSeat: "black", status: "finished" }),
-      name: "finished room host"
+      expected: "finished-rematch-open",
+      input: createInput({ status: "finished" }),
+      name: "finished player who has not requested a rematch"
     },
     {
-      expected: "finished-guest",
-      input: createInput({ hostSeat: "white", status: "finished" }),
-      name: "finished room guest"
+      expected: "finished-rematch-ready",
+      input: createInput({ rematchReadySeats: ["black"], status: "finished" }),
+      name: "finished player waiting for the opponent's rematch choice"
     },
     {
       expected: "abandoned",
@@ -100,8 +100,8 @@ describe("getTableActions", () => {
   const enabledCapabilities: TableActionCapabilities = {
     canCancelMatch: true,
     canReady: true,
+    canRematch: true,
     canResign: true,
-    canRestart: true,
     canSit: true,
     canUndo: true,
     ready: false
@@ -121,8 +121,8 @@ describe("getTableActions", () => {
     { expected: ["undo", "resign", "leave"], state: "playing-opponent-turn" },
     { expected: ["resign", "leave"], state: "undo-request-pending" },
     { expected: ["reject-undo", "allow-undo"], state: "undo-response-required" },
-    { expected: ["restart", "leave"], state: "finished-host" },
-    { expected: ["leave"], state: "finished-guest" },
+    { expected: ["rematch-ready", "leave"], state: "finished-rematch-open" },
+    { expected: ["rematch-cancel", "leave"], state: "finished-rematch-ready" },
     { expected: ["leave"], state: "abandoned" }
   ];
 
@@ -145,8 +145,8 @@ describe("getTableActions", () => {
     const capabilities: TableActionCapabilities = {
       canCancelMatch: false,
       canReady: false,
+      canRematch: false,
       canResign: false,
-      canRestart: false,
       canSit: false,
       canUndo: false,
       ready: false
@@ -159,7 +159,7 @@ describe("getTableActions", () => {
     ]);
     expect(getTableActions("seated-not-ready", capabilities).map((action) => action.id)).toEqual(["leave"]);
     expect(getTableActions("playing-my-turn", capabilities).map((action) => action.id)).toEqual(["leave"]);
-    expect(getTableActions("finished-host", capabilities).map((action) => action.id)).toEqual(["leave"]);
+    expect(getTableActions("finished-rematch-open", capabilities).map((action) => action.id)).toEqual(["leave"]);
   });
 });
 
@@ -168,6 +168,7 @@ function createInput({
   currentTurn = "black",
   hostSeat = "black",
   players = [createPlayer("black"), createPlayer("white")],
+  rematchReadySeats = [],
   role = "player",
   seat = "black",
   status = "waiting",
@@ -177,6 +178,7 @@ function createInput({
   currentTurn?: Stone;
   hostSeat?: Stone;
   players?: RoomPlayerSnapshot[];
+  rematchReadySeats?: Stone[];
   role?: RoomClientState["role"];
   seat?: Stone | null;
   status?: RoomStatus;
@@ -196,6 +198,7 @@ function createInput({
     moveSeq: 0,
     moves: [],
     players,
+    rematch: { readySeats: rematchReadySeats, requestedAt: {} },
     spectators: [],
     status,
     undoRequest,

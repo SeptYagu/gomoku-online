@@ -41,6 +41,7 @@ export type GameDictionary = {
     connection: string;
     cancelMatch: string;
     cancelWaiting: string;
+    cancelRematch: string;
     copied: string;
     copyInvite: string;
     createOrJoin: string;
@@ -113,6 +114,8 @@ export type GameDictionary = {
     ready: string;
     readyAction: string;
     readyToStart: string;
+    rematch: string;
+    rematchPrompt: string;
     registerAccount: string;
     recordConflicted: string;
     recordMoves: string;
@@ -131,7 +134,6 @@ export type GameDictionary = {
     resultDraw: string;
     resultLoss: string;
     resultWin: string;
-    restartRoom: string;
     roomChat: string;
     roomClosed: string;
     roomCode: string;
@@ -160,7 +162,7 @@ export type GameDictionary = {
     rejectUndo: string;
     waitingForOpponent: string;
     waitingForReady: string;
-    waitingForRestart: string;
+    waitingForRematch: string;
     waitingForUndoResponse: string;
     watchableRooms: string;
     watchRoom: string;
@@ -241,6 +243,7 @@ const en = {
       connection: "Connection",
       cancelMatch: "Cancel match",
       cancelWaiting: "Cancel waiting",
+      cancelRematch: "Cancel rematch",
       copied: "Copied",
       copyInvite: "Copy invite",
       createOrJoin: "Create an unlisted room or enter a link, code, or @handle.",
@@ -313,6 +316,8 @@ const en = {
       ready: "Ready",
       readyAction: "Ready",
       readyToStart: "Both players ready",
+      rematch: "Play again",
+      rematchPrompt: "Play again?",
       registerAccount: "Register",
       recordConflicted: "Conflicted",
       recordMoves: "Moves {count}",
@@ -331,7 +336,6 @@ const en = {
       resultDraw: "Draw",
       resultLoss: "Loss",
       resultWin: "Win",
-      restartRoom: "Restart",
       roomChat: "Room chat",
       roomClosed: "Room closed",
       roomCode: "Room code",
@@ -360,7 +364,7 @@ const en = {
       rejectUndo: "Reject ({seconds})",
       waitingForOpponent: "Waiting for opponent",
       waitingForReady: "Waiting for ready",
-      waitingForRestart: "Waiting for the host to restart",
+      waitingForRematch: "Waiting for the opponent to play again",
       waitingForUndoResponse: "Waiting for the opponent to answer the undo request",
       watchableRooms: "Rooms to watch",
       watchRoom: "Watch",
@@ -437,6 +441,7 @@ const zh = {
       connection: "连接",
       cancelMatch: "取消匹配",
       cancelWaiting: "取消等待",
+      cancelRematch: "取消再战",
       copied: "已复制",
       copyInvite: "复制邀请",
       createOrJoin: "创建不公开列出房间，或输入链接、房间码、@标识。",
@@ -509,6 +514,8 @@ const zh = {
       ready: "已准备",
       readyAction: "准备",
       readyToStart: "双方已准备",
+      rematch: "再来一局",
+      rematchPrompt: "要再来一局吗？",
       registerAccount: "注册",
       recordConflicted: "冲突",
       recordMoves: "手数 {count}",
@@ -527,7 +534,6 @@ const zh = {
       resultDraw: "和棋",
       resultLoss: "负",
       resultWin: "胜",
-      restartRoom: "重开",
       roomChat: "房间聊天",
       roomClosed: "房间已关闭",
       roomCode: "房间码",
@@ -556,7 +562,7 @@ const zh = {
       rejectUndo: "拒绝（{seconds}）",
       waitingForOpponent: "等待对手加入",
       waitingForReady: "等待准备",
-      waitingForRestart: "等待房主重开",
+      waitingForRematch: "等待对手选择再战",
       waitingForUndoResponse: "等待对手回应悔棋请求",
       watchableRooms: "可观战",
       watchRoom: "观战",
@@ -633,6 +639,7 @@ const fr = {
       connection: "Connexion",
       cancelMatch: "Annuler la recherche",
       cancelWaiting: "Annuler l'attente",
+      cancelRematch: "Annuler la revanche",
       copied: "Copié",
       copyInvite: "Copier l'invitation",
       createOrJoin: "Créez un salon non répertorié ou entrez un lien, un code ou un @identifiant.",
@@ -705,6 +712,8 @@ const fr = {
       ready: "Prêt",
       readyAction: "Prêt",
       readyToStart: "Deux joueurs prêts",
+      rematch: "Rejouer",
+      rematchPrompt: "Rejouer ?",
       registerAccount: "S'inscrire",
       recordConflicted: "Conflit",
       recordMoves: "Coups {count}",
@@ -723,7 +732,6 @@ const fr = {
       resultDraw: "Nulle",
       resultLoss: "Défaite",
       resultWin: "Victoire",
-      restartRoom: "Recommencer",
       roomChat: "Chat du salon",
       roomClosed: "Salon fermé",
       roomCode: "Code du salon",
@@ -752,7 +760,7 @@ const fr = {
       rejectUndo: "Refuser ({seconds})",
       waitingForOpponent: "En attente d'un adversaire",
       waitingForReady: "En attente des joueurs",
-      waitingForRestart: "En attente du redémarrage par l'hôte",
+      waitingForRematch: "En attente de la revanche de l'adversaire",
       waitingForUndoResponse: "En attente de la réponse adverse à l'annulation",
       watchableRooms: "Salons à regarder",
       watchRoom: "Regarder",
@@ -829,6 +837,7 @@ const es = {
       connection: "Conexión",
       cancelMatch: "Cancelar búsqueda",
       cancelWaiting: "Cancelar espera",
+      cancelRematch: "Cancelar revancha",
       copied: "Copiado",
       copyInvite: "Copiar invitación",
       createOrJoin: "Crea una sala no listada o introduce un enlace, código o @identificador.",
@@ -901,6 +910,8 @@ const es = {
       ready: "Listo",
       readyAction: "Listo",
       readyToStart: "Ambos listos",
+      rematch: "Jugar de nuevo",
+      rematchPrompt: "¿Jugar de nuevo?",
       registerAccount: "Registrarse",
       recordConflicted: "Conflicto",
       recordMoves: "Movimientos {count}",
@@ -919,7 +930,6 @@ const es = {
       resultDraw: "Empate",
       resultLoss: "Derrota",
       resultWin: "Victoria",
-      restartRoom: "Reiniciar",
       roomChat: "Chat de sala",
       roomClosed: "Sala cerrada",
       roomCode: "Código",
@@ -948,7 +958,7 @@ const es = {
       rejectUndo: "Rechazar ({seconds})",
       waitingForOpponent: "Esperando rival",
       waitingForReady: "Esperando listos",
-      waitingForRestart: "Esperando que el anfitrión reinicie",
+      waitingForRematch: "Esperando la revancha del oponente",
       waitingForUndoResponse: "Esperando la respuesta del rival a deshacer",
       watchableRooms: "Salas para mirar",
       watchRoom: "Mirar",
@@ -1025,6 +1035,7 @@ const ru = {
       connection: "Связь",
       cancelMatch: "Отменить поиск",
       cancelWaiting: "Отменить ожидание",
+      cancelRematch: "Отменить реванш",
       copied: "Скопировано",
       copyInvite: "Копировать ссылку",
       createOrJoin: "Создайте комнату не из списка или введите ссылку, код либо @идентификатор.",
@@ -1097,6 +1108,8 @@ const ru = {
       ready: "Готов",
       readyAction: "Готов",
       readyToStart: "Оба готовы",
+      rematch: "Сыграть ещё раз",
+      rematchPrompt: "Сыграть ещё раз?",
       registerAccount: "Регистрация",
       recordConflicted: "Конфликт",
       recordMoves: "Ходы {count}",
@@ -1115,7 +1128,6 @@ const ru = {
       resultDraw: "Ничья",
       resultLoss: "Поражение",
       resultWin: "Победа",
-      restartRoom: "Заново",
       roomChat: "Чат комнаты",
       roomClosed: "Комната закрыта",
       roomCode: "Код комнаты",
@@ -1144,7 +1156,7 @@ const ru = {
       rejectUndo: "Отклонить ({seconds})",
       waitingForOpponent: "Ожидание соперника",
       waitingForReady: "Ожидание готовности",
-      waitingForRestart: "Ожидание перезапуска от хозяина",
+      waitingForRematch: "Ожидание решения соперника о реванше",
       waitingForUndoResponse: "Ожидание ответа соперника на отмену хода",
       watchableRooms: "Комнаты для просмотра",
       watchRoom: "Смотреть",
@@ -1221,6 +1233,7 @@ const ar = {
       connection: "الاتصال",
       cancelMatch: "إلغاء البحث",
       cancelWaiting: "إلغاء الانتظار",
+      cancelRematch: "إلغاء إعادة اللعب",
       copied: "تم النسخ",
       copyInvite: "نسخ الدعوة",
       createOrJoin: "أنشئ غرفة غير مدرجة أو أدخل رابطا أو رمزا أو @معرّفا.",
@@ -1293,6 +1306,8 @@ const ar = {
       ready: "جاهز",
       readyAction: "جاهز",
       readyToStart: "اللاعبان جاهزان",
+      rematch: "العب مرة أخرى",
+      rematchPrompt: "هل تريد اللعب مرة أخرى؟",
       registerAccount: "تسجيل",
       recordConflicted: "تعارض",
       recordMoves: "النقلات {count}",
@@ -1311,7 +1326,6 @@ const ar = {
       resultDraw: "تعادل",
       resultLoss: "خسارة",
       resultWin: "فوز",
-      restartRoom: "إعادة",
       roomChat: "دردشة الغرفة",
       roomClosed: "الغرفة مغلقة",
       roomCode: "رمز الغرفة",
@@ -1340,7 +1354,7 @@ const ar = {
       rejectUndo: "رفض ({seconds})",
       waitingForOpponent: "بانتظار الخصم",
       waitingForReady: "بانتظار الجاهزية",
-      waitingForRestart: "بانتظار إعادة التشغيل من المضيف",
+      waitingForRematch: "بانتظار اختيار الخصم لإعادة اللعب",
       waitingForUndoResponse: "بانتظار رد الخصم على طلب التراجع",
       watchableRooms: "غرف للمشاهدة",
       watchRoom: "مشاهدة",

@@ -42,6 +42,11 @@ export type UndoRequestSnapshot = {
   targetSeat: RoomPlayerSeat;
 };
 
+export type RematchStateSnapshot = {
+  readySeats: RoomPlayerSeat[];
+  requestedAt: Partial<Record<RoomPlayerSeat, number>>;
+};
+
 export type RoomChatMessage = {
   id: string;
   name: string;
@@ -102,6 +107,7 @@ export type RoomSnapshot = {
   moveSeq: number;
   moves: Move[];
   players: RoomPlayerSnapshot[];
+  rematch: RematchStateSnapshot;
   spectators: RoomSpectatorSnapshot[];
   status: RoomStatus;
   undoRequest: UndoRequestSnapshot | null;
@@ -281,6 +287,7 @@ type RoomState = {
   nextUndoRequestId: number;
   listVersion: number;
   players: RoomPlayer[];
+  rematch: RematchStateSnapshot;
   spectators: RoomSpectator[];
   status: RoomStatus;
   undoRequest: UndoRequestSnapshot | null;
@@ -406,6 +413,7 @@ export class RoomStore {
           seat: "black"
         }
       ],
+      rematch: createEmptyRematchState(),
       listVersion: visibility === "public" ? this.nextLobbyVersion() : this.lobbyVersion,
       nextChatMessageId: 1,
       nextUndoRequestId: 1,
@@ -540,6 +548,7 @@ export class RoomStore {
 
     const now = this.now();
 
+    clearRematchSeat(room, seat);
     room.spectators.splice(spectatorIndex, 1);
     room.players = room.players.filter((candidate) => candidate.seat !== seat);
     room.players.push({
@@ -604,6 +613,7 @@ export class RoomStore {
     }
 
     room.updatedAt = this.now();
+    maybeStartRematch(room, room.updatedAt);
     this.markRoomListed(room);
     this.syncHostTarget(room);
 
@@ -857,27 +867,37 @@ export class RoomStore {
       return failure("game-not-playing", "Only finished games can be restarted.");
     }
 
-    room.board = createBoard();
-    room.gameNumber += 1;
-    room.gameId = `${room.code}-${room.gameNumber}`;
-    room.finishReason = null;
-    room.nextStartingSeat = getOpponent(room.nextStartingSeat);
-    room.currentTurn = room.nextStartingSeat;
-    room.moveSeq = 0;
-    room.moves = [];
-    room.nextUndoRequestId = 1;
-    room.status = "waiting";
-    room.undoRequest = null;
-    room.winner = null;
-    room.winLine = [];
+    resetForNextGame(room, "waiting", this.now());
+    this.markRoomListed(room);
 
-    for (const roomPlayer of room.players) {
-      roomPlayer.ready = false;
-      roomPlayer.rejectedUndoMoveSeq = null;
-      roomPlayer.undoRequestsRemaining = UNDO_REQUEST_LIMIT;
+    return success(getRoomSnapshot(room));
+  }
+
+  setRematchReady(roomCode: string, playerId: string, ready: boolean): RoomResult<RoomSnapshot> {
+    const found = this.getRoomAndPlayer(roomCode, playerId);
+
+    if (!found.ok) {
+      return found;
     }
 
-    updateRoomStatus(room, this.now());
+    const { player, room } = found.value;
+
+    if (room.status !== "finished") {
+      return failure("game-not-playing", "Rematch choices are only available after a finished game.");
+    }
+
+    const now = this.now();
+    const wasReady = room.rematch.readySeats.includes(player.seat);
+
+    if (ready && !wasReady) {
+      room.rematch.readySeats = sortSeats([...room.rematch.readySeats, player.seat]);
+      room.rematch.requestedAt[player.seat] = now;
+    } else if (!ready && wasReady) {
+      clearRematchSeat(room, player.seat);
+    }
+
+    room.updatedAt = now;
+    maybeStartRematch(room, now);
     this.markRoomListed(room);
 
     return success(getRoomSnapshot(room));
@@ -902,7 +922,10 @@ export class RoomStore {
       return success(this.deleteIfEmpty(room) ?? getRoomSnapshot(room));
     }
 
-    if (role === "player" && room.status !== "playing") {
+    if (role === "player" && room.status !== "playing" && room.status !== "finished") {
+      if ("seat" in participant) {
+        clearRematchSeat(room, participant.seat);
+      }
       removePlayer(room, playerId);
       room.undoRequest = null;
       room.updatedAt = now;
@@ -925,7 +948,7 @@ export class RoomStore {
     room.updatedAt = now;
     this.syncHostTarget(room);
 
-    if (!hasConnectedParticipant(room)) {
+    if (!hasConnectedParticipant(room) && room.status !== "finished") {
       abandonRoom(room, now);
       this.captureFinishedGame(room);
       this.clearHostTarget(room.code);
@@ -968,6 +991,7 @@ export class RoomStore {
     }
 
     removePlayer(room, playerId);
+    clearRematchSeat(room, player.seat);
     room.undoRequest = null;
     room.updatedAt = this.now();
 
@@ -1040,6 +1064,7 @@ export class RoomStore {
     }
 
     found.value.room.updatedAt = this.now();
+    maybeStartRematch(found.value.room, found.value.room.updatedAt);
     this.markRoomListed(found.value.room);
     this.syncHostTarget(found.value.room);
 
@@ -1947,6 +1972,22 @@ function clampPresenceListLimit(limit: number | undefined): number {
 function advanceRoomLifecycle(room: RoomState, now: number, limits: RoomLifecycleLimits): boolean {
   let changed = expireUndoRequest(room, now);
 
+  if (room.status === "finished") {
+    const expiredDisconnectedPlayers = room.players.filter(
+      (player) => !player.connected && player.disconnectDeadline !== null && now >= player.disconnectDeadline
+    );
+
+    for (const player of expiredDisconnectedPlayers) {
+      clearRematchSeat(room, player.seat);
+      removePlayer(room, player.id);
+      changed = true;
+    }
+
+    if (expiredDisconnectedPlayers.length > 0) {
+      room.updatedAt = now;
+    }
+  }
+
   if (room.status === "playing") {
     const expiredDisconnectedPlayers = room.players.filter(
       (player) => !player.connected && player.disconnectDeadline !== null && now >= player.disconnectDeadline
@@ -1986,6 +2027,12 @@ function shouldDeleteRoom(room: RoomState, now: number, limits: RoomLifecycleLim
   }
 
   if (participants.every((participant) => !participant.connected)) {
+    if (room.status === "finished") {
+      return room.players.every(
+        (player) => player.disconnectDeadline !== null && now >= player.disconnectDeadline
+      );
+    }
+
     return true;
   }
 
@@ -2019,6 +2066,58 @@ function abandonRoom(room: RoomState, now: number) {
   room.undoRequest = null;
   room.winner = null;
   room.winLine = [];
+  room.rematch = createEmptyRematchState();
+  room.updatedAt = now;
+}
+
+function createEmptyRematchState(): RematchStateSnapshot {
+  return { readySeats: [], requestedAt: {} };
+}
+
+function clearRematchSeat(room: RoomState, seat: RoomPlayerSeat) {
+  room.rematch.readySeats = room.rematch.readySeats.filter((candidate) => candidate !== seat);
+  delete room.rematch.requestedAt[seat];
+}
+
+function sortSeats(seats: RoomPlayerSeat[]): RoomPlayerSeat[] {
+  return [...new Set(seats)].sort((left, right) => (left === right ? 0 : left === "black" ? -1 : 1));
+}
+
+function maybeStartRematch(room: RoomState, now: number): boolean {
+  if (
+    room.status !== "finished" ||
+    room.players.length !== 2 ||
+    !room.players.every((player) => player.connected && room.rematch.readySeats.includes(player.seat))
+  ) {
+    return false;
+  }
+
+  resetForNextGame(room, "playing", now);
+  return true;
+}
+
+function resetForNextGame(room: RoomState, status: Extract<RoomStatus, "playing" | "waiting">, now: number) {
+  room.board = createBoard();
+  room.gameNumber += 1;
+  room.gameId = `${room.code}-${room.gameNumber}`;
+  room.finishReason = null;
+  room.nextStartingSeat = getOpponent(room.nextStartingSeat);
+  room.currentTurn = room.nextStartingSeat;
+  room.moveSeq = 0;
+  room.moves = [];
+  room.nextUndoRequestId = 1;
+  room.rematch = createEmptyRematchState();
+  room.status = status;
+  room.undoRequest = null;
+  room.winner = null;
+  room.winLine = [];
+
+  for (const roomPlayer of room.players) {
+    roomPlayer.ready = status === "playing";
+    roomPlayer.rejectedUndoMoveSeq = null;
+    roomPlayer.undoRequestsRemaining = UNDO_REQUEST_LIMIT;
+  }
+
   room.updatedAt = now;
 }
 
@@ -2160,6 +2259,10 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
       seat,
       undoRequestsRemaining
     })),
+    rematch: {
+      readySeats: [...room.rematch.readySeats],
+      requestedAt: { ...room.rematch.requestedAt }
+    },
     spectators: room.spectators.map(({ connected, joinedAt, name }) => ({
       connected,
       joinedAt,

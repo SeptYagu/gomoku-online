@@ -134,6 +134,26 @@ async function main(): Promise<void> {
       await assertUndoLayoutAtTargetViewports(cdp);
       await clickButton(cdp, "Allow");
       await waitForTableState(cdp, "playing-opponent-turn");
+      requireOk(
+        await emitAck(preparedRooms.waitingHost, "game:resign", { roomCode: preparedRooms.waitingCode }),
+        "waiting host resign before rematch"
+      );
+      await waitForTableState(cdp, "finished-rematch-open");
+      await assertTableTaskModel(cdp, "finished-rematch-open", ["Play again"]);
+      await captureEvidence(cdp, "rematch-open.png");
+      await clickButton(cdp, "Play again");
+      await waitForTableState(cdp, "finished-rematch-ready");
+      await assertTableTaskModel(cdp, "finished-rematch-ready", ["Cancel rematch"]);
+      await captureEvidence(cdp, "rematch-ready.png");
+      requireOk(
+        await emitAck(preparedRooms.waitingHost, "game:rematch-ready", {
+          ready: true,
+          roomCode: preparedRooms.waitingCode
+        }),
+        "waiting host rematch ready"
+      );
+      await waitForTableState(cdp, "playing-my-turn");
+      await assertTableTaskModel(cdp, "playing-my-turn", []);
       await clickButton(cdp, "Leave");
       await waitForNoRoomUrl(cdp);
       await waitForOnlineView(cdp, "lobby");
@@ -166,6 +186,7 @@ async function main(): Promise<void> {
       console.log(`PASS lobby playing row is watchable - ${preparedRooms.playingCode}`);
       console.log("PASS online lobby and table are mutually exclusive");
       console.log("PASS table tasks are state-driven, non-blocking, and limited to four actions");
+      console.log("PASS both players choose rematch before one immediate next game starts");
       console.log("PASS undo decisions and board remain visible at 1440x900, 1280x720, and 390x844");
       console.log("PASS 1280x720 can play without scrolling and 390x844 Arabic preserves table and lobby order");
     } finally {
@@ -176,6 +197,53 @@ async function main(): Promise<void> {
     chrome.kill();
     await waitForProcessExit(chrome);
     await rm(userDataDir, { force: true, maxRetries: 10, recursive: true, retryDelay: 250 });
+  }
+}
+
+async function captureEvidence(cdp: CdpClient, fileName: string): Promise<void> {
+  const captureDir = process.env.GOMOKU_SMOKE_CAPTURE_DIR;
+
+  if (!captureDir) {
+    return;
+  }
+
+  try {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 720,
+      mobile: false,
+      width: 1280
+    });
+    await waitForValue(async () => {
+      const viewport = await evaluate<{ height: number; width: number }>(
+        cdp,
+        `(() => {
+          document.querySelector('[data-online-view="table"]')?.scrollIntoView({ block: 'start' });
+          return { height: window.innerHeight, width: window.innerWidth };
+        })()`
+      );
+
+      return viewport.width === 1280 && viewport.height === 720 ? viewport : null;
+    }, STEP_TIMEOUT_MS);
+    await cdp.send("Page.bringToFront");
+    await cdp.send("Runtime.evaluate", {
+      awaitPromise: true,
+      expression: "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 300))))",
+      returnByValue: true
+    });
+    await mkdir(captureDir, { recursive: true });
+    const screenshot = (await cdp.send("Page.captureScreenshot", {
+      format: "png",
+      fromSurface: true
+    })) as { data?: string };
+
+    if (!screenshot.data) {
+      throw new Error(`Chrome did not return screenshot ${fileName}`);
+    }
+
+    await writeFile(path.join(captureDir, fileName), Buffer.from(screenshot.data, "base64"));
+  } finally {
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
   }
 }
 

@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     const roomCode = await createAndJoinRoom(host, guest, spectator, suffix);
 
     await playGameOne(host, guest, spectator, roomCode);
-    await restartRoom(host, guest, roomCode, "white", 2);
+    await rematchRoom(host, guest, spectator, roomCode, "white", 2);
     await playGameTwo(host, guest, roomCode);
     await restartRoom(host, guest, roomCode, "black", 3);
     await playGameThree(host, guest, roomCode);
@@ -148,7 +148,6 @@ async function playGameOne(
 }
 
 async function playGameTwo(host: SmokeSocket, guest: SmokeSocket, roomCode: string): Promise<void> {
-  await readyGame(host, guest, roomCode, "white", 2);
   await playMove(guest, host, roomCode, { row: 7, col: 8 }, "white", 0, "game 2 white first move");
   await expectAckError(host, "game:undo-request", { roomCode }, "not-last-move-player", "game 2 black undo denied");
 
@@ -164,6 +163,70 @@ async function playGameTwo(host: SmokeSocket, guest: SmokeSocket, roomCode: stri
   assert(finished.status === "finished", "game 2 should finish after guest resigns");
   assert(finished.winner === "black", "game 2 black should win after white resigns");
   console.log("PASS game 2 resign - white resigned, black won");
+}
+
+async function rematchRoom(
+  host: SmokeSocket,
+  guest: SmokeSocket,
+  spectator: SmokeSocket,
+  roomCode: string,
+  expectedStarter: Stone,
+  nextGameNumber: number
+): Promise<void> {
+  await expectAckError(
+    spectator,
+    "game:rematch-ready",
+    { ready: true, roomCode },
+    "not-room-player",
+    "spectator rematch denied"
+  );
+
+  const hostSawGuestReady = waitForState(
+    host,
+    (snapshot) => snapshot.code === roomCode && snapshot.rematch.readySeats.includes("white")
+  );
+  const guestReady = requireOk(
+    await emitAck(guest, "game:rematch-ready", { ready: true, roomCode }),
+    `game ${nextGameNumber} guest rematch ready`
+  ).snapshot;
+
+  assert(guestReady.status === "finished", "one rematch choice must preserve the finished board");
+  assert(guestReady.moveSeq > 0, "one rematch choice must preserve the finished moves");
+  await hostSawGuestReady;
+
+  const hostSawCancel = waitForState(
+    host,
+    (snapshot) => snapshot.code === roomCode && snapshot.rematch.readySeats.length === 0
+  );
+  requireOk(
+    await emitAck(guest, "game:rematch-ready", { ready: false, roomCode }),
+    `game ${nextGameNumber} guest rematch cancel`
+  );
+  await hostSawCancel;
+
+  requireOk(
+    await emitAck(guest, "game:rematch-ready", { ready: true, roomCode }),
+    `game ${nextGameNumber} guest rematch ready again`
+  );
+  const guestSawPlaying = waitForState(
+    guest,
+    (snapshot) =>
+      snapshot.code === roomCode &&
+      snapshot.status === "playing" &&
+      snapshot.currentTurn === expectedStarter &&
+      snapshot.gameId === `${roomCode}-${nextGameNumber}`
+  );
+  const rematched = requireOk(
+    await emitAck(host, "game:rematch-ready", { ready: true, roomCode }),
+    `rematch for game ${nextGameNumber}`
+  ).snapshot;
+
+  assert(rematched.status === "playing", `rematch for game ${nextGameNumber} should start immediately`);
+  assert(rematched.currentTurn === expectedStarter, `game ${nextGameNumber} should start with ${expectedStarter}`);
+  assert(rematched.moveSeq === 0, `game ${nextGameNumber} should start with an empty move list`);
+  assert(rematched.rematch.readySeats.length === 0, `game ${nextGameNumber} should clear rematch choices`);
+  await guestSawPlaying;
+  console.log(`PASS mutual rematch - game ${nextGameNumber} started with ${expectedStarter}`);
 }
 
 async function playGameThree(host: SmokeSocket, guest: SmokeSocket, roomCode: string): Promise<void> {

@@ -71,7 +71,9 @@ export function TableActionButton({
       {action.id === "unready" || action.id === "reject-undo" ? <X aria-hidden="true" focusable={false} /> : null}
       {action.id === "undo" ? <Undo2 aria-hidden="true" focusable={false} /> : null}
       {action.id === "resign" ? <Flag aria-hidden="true" focusable={false} /> : null}
-      {action.id === "restart" ? <RotateCcw aria-hidden="true" focusable={false} /> : null}
+      {action.id === "rematch-ready" || action.id === "rematch-cancel" ? (
+        <RotateCcw aria-hidden="true" focusable={false} />
+      ) : null}
       {action.id === "sit" ? <UserRound aria-hidden="true" focusable={false} /> : null}
       {action.id === "leave" ? <LogOut aria-hidden="true" focusable={false} /> : null}
       <span>{label || labels.leaveRoom}</span>
@@ -103,8 +105,10 @@ function getActionLabel(
       return labels.rejectUndo.replace("{seconds}", String(secondsLeft));
     case "resign":
       return labels.resign;
-    case "restart":
-      return labels.restartRoom;
+    case "rematch-cancel":
+      return labels.cancelRematch;
+    case "rematch-ready":
+      return labels.rematch;
     case "sit":
       return labels.sitDown;
     case "undo":
@@ -115,7 +119,7 @@ function getActionLabel(
 }
 
 function getActionTone(action: TableActionId): "danger" | "success" | null {
-  if (action === "allow-undo" || action === "ready" || action === "sit") {
+  if (action === "allow-undo" || action === "ready" || action === "rematch-ready" || action === "sit") {
     return "success";
   }
 

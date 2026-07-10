@@ -210,9 +210,9 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `useFriendRoom({ enabled })` 在 local/AI 模式禁止新的自动 rejoin；从活跃房切换模式时仍先发既有 `room:leave`，没有为了门控提前断开 socket 或改变 leave ack 语义。
 - 邀请 URL 和 stored session 恢复期间进入 `OnlineJoiningView`；ack 成功仍以服务端 `snapshot.code` 同步 URL/session，失败仍走原错误与重新加入路径。
 - `getTableActions(state, capabilities)` 现在把 controller 权限转换为有序可见动作；无权限动作直接隐藏，task 区最多 2 个决策，task + toolbar 总数最多 3 个。
-- `GameTableView` 通过 `TableTaskBar` / `TableActionBar` 承载 ready、undo、resign、restart、sit、leave；悔棋 Reject/Allow 和倒计时已从棋盘中央 modal 移到非阻塞任务栏，超时自动拒绝语义保持不变。
+- `GameTableView` 通过 `TableTaskBar` / `TableActionBar` 承载 ready、undo、resign、rematch、sit、leave；悔棋 Reject/Allow 和倒计时已从棋盘中央 modal 移到非阻塞任务栏，超时自动拒绝语义保持不变。
 - 新增状态与真实 Chrome smoke 覆盖视图互斥、local/AI 不建立 Socket.IO、Ready、Host 落子/发起悔棋、Guest Allow 和 spectator 状态；本批没有修改本节列出的任何房间/对局事件。
-- 终局仍沿用 host restart 兼容语义，双方再战属于后续 `IX-06A`；局中离桌确认属于 `IX-05`。
+- 终局已由 IX-06A 改为双方 rematch readiness；host restart 只保留旧客户端兼容语义。局中离桌确认仍属于 `IX-05`。
 - `IX-03` 后，`GameTableView` 只保留 task/board/actions；`TableSidebar` 接管既有 280–320px 右栏，玩家和连接状态优先，聊天、当前局最近步骤和房间信息进入页签。
 - 900px 以下 sidebar 排在 game-stage 后，移动顺序为任务、棋盘、动作、玩家、次要页签；390×844 阿拉伯语 RTL 已验证无根级横向溢出。当前步骤页签只读取 `RoomSnapshot.moves`，不替代 IX-06 的完整复盘。
 
@@ -236,6 +236,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `game:undo-request`
 - `game:undo-respond`
 - `game:resign`
+- `game:rematch-ready`
 - `game:restart`
 
 连接：
@@ -298,7 +299,8 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `game:move` 的核心状态操作已实现：服务端按成员、回合、坐标、占位和 moveSeq 校验，复用 `src/game/board.ts` 判定胜负。
 - `game:undo-request` / `game:undo-respond` 已实现：只允许最后一手落子者请求悔棋；对手确认后回退，拒绝或 10 秒超时后保留局面；每人每局 3 次请求机会，同一局面被拒后不能连续重发。
 - `game:resign` 的核心状态操作已实现：对局中认输后直接 finished，胜方为对手。
-- `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready；每次重开都会切换下一局先手，房主权限不随先手变化。
+- `game:rematch-ready` 已实现：finished seated player 可选择/取消；双方意愿齐全且在线后只创建一个新 gameId、轮换先手并直接 playing。短断保留意愿，rejoin 后再检查；leave、超时和 seat replacement 清对应意愿。
+- `game:restart` 继续兼容旧客户端：只允许房主在 finished 后重置到 waiting，双方需重新 ready；新 UI 不再显示该动作。
 - 断线/重连的核心连接状态标记已实现；刷新恢复通过 sessionStorage `playerId` + `roomCode` + 服务器签发的 `guestToken` 完成，并兼容读取旧 localStorage 记录。
 - 显式 `room:leave`、同一 socket 创建新房、同一 socket 加入其他房间都会释放非 `playing` 旧座位；房间没有玩家和观战者时立即关闭。
 - `room:create` 前端增加同步 in-flight 锁，防止创建 ack 返回前连点发出多个创建请求。
@@ -308,6 +310,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - unlisted 只改变公开发现：不会进入 lobby 列表/增量/删除事件或 Presence roomCode，但 `room:join`、`room:rejoin`、邀请 URL 和 stored session 仍使用同一规范 roomCode；当前没有邀请 token 授权。
 - public 注册房主可通过显式 accountId -> roomCode 索引被 handle/account ID 解析；unlisted 默认关闭，房主转移、断线、恢复和房间清理会同步索引。当前索引与限流为单进程边界。
 - unlisted 终局仍写入带 visibility 的内部权威记录以校验客户端提交，但不进入公开 Profile recent records/排行榜；管理员本地导出仍可读取完整记录。
+- rematch 开始新局前上一局已由服务端权威记录保存；新局清当前 snapshot moves，但不删除上一局 record。牌桌内逐手复盘仍留给 IX-06。
 - Guest reconnect token 已完成：公开 playerId 不能直接重连；registered 用户继续使用 account token。Token 当前随单进程房间生命周期存在，多实例共享 session 留给 Redis/正式账号基础设施。
 - 同一已认证玩家可以有多个活动 socket；只有最后一个房间 socket 断开才把座位标记为 disconnected，避免刷新/多标签旧连接误触发判负。
 - 多实例上线前接 Redis Adapter。

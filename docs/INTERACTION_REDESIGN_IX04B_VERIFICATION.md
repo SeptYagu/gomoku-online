@@ -74,4 +74,4 @@
 - 精确大厅汇总、对局中模式保护、双方再战、完整复盘、比赛配置、挑战和赛事仍未实现。
 - 当前执行环境未开放子代理派发，本报告由主控执行，不声称为独立子代理验收。
 
-后续状态（2026-07-10）：`IX-04A` 已完成，public 房可按策略解析房主 handle/account ID；unlisted 默认关闭该策略，仍不能通过别名旁路发现。详见 `docs/INTERACTION_REDESIGN_IX04A_VERIFICATION.md`。下一步进入 `IX-06A`。
+后续状态（2026-07-10）：`IX-04A` 与 `IX-06A` 已完成；public 房可按策略解析房主 handle/account ID，unlisted 默认关闭；双方再战也不改变 visibility 边界。详见对应验证报告。下一步进入 `IX-05`。

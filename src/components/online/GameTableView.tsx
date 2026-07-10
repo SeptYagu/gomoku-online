@@ -49,8 +49,8 @@ export function GameTableView({
   const actions = getTableActions(tableUiState, {
     canCancelMatch: room.canCancelMatch,
     canReady: room.canReady,
+    canRematch: room.canRematch,
     canResign: room.canResign,
-    canRestart: room.canRestart,
     canSit: room.canSit,
     canUndo: room.canUndo,
     ready: room.ready
@@ -88,8 +88,11 @@ export function GameTableView({
       case "resign":
         room.resignGame();
         return;
-      case "restart":
-        room.restartGame();
+      case "rematch-ready":
+        room.setRematchReady(true);
+        return;
+      case "rematch-cancel":
+        room.setRematchReady(false);
         return;
       case "sit":
         room.sitRoom();

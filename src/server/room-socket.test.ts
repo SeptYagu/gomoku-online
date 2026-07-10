@@ -488,6 +488,113 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("broadcasts cancellable rematch choices and starts only after both seated players agree", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+      const spectator = await harness.connectClient();
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "rematch-host",
+        playerName: "Rematch Host"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+
+      const guestJoin = await emitAck(guest, "room:join", {
+          playerId: "rematch-guest",
+          playerName: "Rematch Guest",
+          roomCode
+        });
+
+      expect(guestJoin).toMatchObject({ ok: true, value: { guestToken: expect.any(String) } });
+      expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({
+        ok: true,
+        value: { snapshot: { status: "playing" } }
+      });
+      expect(await emitAck(guest, "game:resign", { roomCode })).toMatchObject({
+        ok: true,
+        value: { snapshot: { gameId: `${roomCode}-1`, status: "finished" } }
+      });
+      expect(
+        await emitAck(spectator, "room:join", {
+          playerId: "rematch-spectator",
+          playerName: "Rematch Spectator",
+          roomCode
+        })
+      ).toMatchObject({ ok: true, value: { role: "spectator" } });
+      expect(await emitAck(spectator, "game:rematch-ready", { ready: true, roomCode })).toMatchObject({
+        ok: false,
+        error: { code: "not-room-player" }
+      });
+
+      expect(await emitAck(guest, "game:rematch-ready", { ready: true, roomCode })).toMatchObject({
+        ok: true,
+        value: { snapshot: { rematch: { readySeats: ["white"] }, status: "finished" } }
+      });
+      expect(await emitAck(guest, "game:rematch-ready", { ready: false, roomCode })).toMatchObject({
+        ok: true,
+        value: { snapshot: { rematch: { readySeats: [] }, status: "finished" } }
+      });
+      expect(await emitAck(guest, "game:rematch-ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+
+      const hostSawDisconnect = waitForEvent<RoomSnapshot>(host, "room:state");
+      guest.disconnect();
+      expect(await hostSawDisconnect).toMatchObject({
+        rematch: { readySeats: ["white"] },
+        status: "finished"
+      });
+      expect(await emitAck(host, "game:rematch-ready", { ready: true, roomCode })).toMatchObject({
+        ok: true,
+        value: { snapshot: { rematch: { readySeats: ["black", "white"] }, status: "finished" } }
+      });
+
+      const rejoinedGuest = await harness.connectClient();
+      const hostSawRematch = waitForEvent<RoomSnapshot>(host, "room:state");
+      const rematched = await emitAck(rejoinedGuest, "room:rejoin", {
+        guestToken: guestJoin.ok ? guestJoin.value.guestToken : "",
+        playerId: "rematch-guest",
+        playerName: "Rematch Guest",
+        roomCode
+      });
+
+      expect(rematched).toMatchObject({
+        ok: true,
+        value: {
+          snapshot: {
+            currentTurn: "white",
+            gameId: `${roomCode}-2`,
+            rematch: { readySeats: [] },
+            status: "playing"
+          }
+        }
+      });
+      expect(await hostSawRematch).toMatchObject({ gameId: `${roomCode}-2`, status: "playing" });
+      expect(await emitAck(rejoinedGuest, "game:rematch-ready", { ready: true, roomCode })).toMatchObject({
+        ok: false,
+        error: { code: "game-not-playing" }
+      });
+
+      expect(await emitAck(rejoinedGuest, "game:resign", { roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(host, "game:restart", { roomCode })).toMatchObject({
+        ok: true,
+        value: { snapshot: { gameId: `${roomCode}-3`, rematch: { readySeats: [] }, status: "waiting" } }
+      });
+      expect(await emitAck(rejoinedGuest, "game:rematch-ready", { ready: true, roomCode })).toMatchObject({
+        ok: false,
+        error: { code: "game-not-playing" }
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("rate limits handle enumeration across reconnects without changing not-found errors", async () => {
     const accountStore = new AccountStore({ filePath: false });
     const hostAccount = expectAccountOk(

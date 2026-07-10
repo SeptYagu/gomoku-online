@@ -62,8 +62,8 @@ export type FriendRoomController = {
   canJoinRoom: boolean;
   canPlay: boolean;
   canReady: boolean;
+  canRematch: boolean;
   canResign: boolean;
-  canRestart: boolean;
   canSit: boolean;
   canUndo: boolean;
   chatText: string;
@@ -98,6 +98,7 @@ export type FriendRoomController = {
   publicChatStatus: "idle" | "loading" | "ready" | "error";
   publicChatText: string;
   registrationHandle: string;
+  rematchReady: boolean;
   ready: boolean;
   nextLeaderboardPage: () => void;
   previousLeaderboardPage: () => void;
@@ -109,7 +110,7 @@ export type FriendRoomController = {
   refreshLobby: () => void;
   resignGame: () => void;
   respondUndoRequest: (accepted: boolean) => void;
-  restartGame: () => void;
+  setRematchReady: (ready: boolean) => void;
   room: RoomClientState | null;
   sendPublicChatMessage: () => void;
   sendChatMessage: () => void;
@@ -188,7 +189,8 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   const canPlay =
     enabled && isPlayer && room?.snapshot.status === "playing" && room.snapshot.currentTurn === room.seat && !hasPendingUndoRequest;
   const canResign = enabled && isPlayer && room?.snapshot.status === "playing";
-  const canRestart = enabled && isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
+  const canRematch = enabled && isPlayer && room?.snapshot.status === "finished";
+  const rematchReady = Boolean(isPlayer && room?.seat && room.snapshot.rematch.readySeats.includes(room.seat));
   const canSit = enabled && room?.role === "spectator" && hasOpenPlayerSeat(room.snapshot);
   const identityReady = isAccountIdentityReady(accountStatus);
   const canCreateRoom = enabled && identityReady && !room && !isCreatingRoom && matchmakingStatus !== "searching";
@@ -706,12 +708,12 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     );
   }, [applyRoomAck, ensureSocket, room]);
 
-  const restartGame = useCallback(() => {
+  const setRematchReady = useCallback((ready: boolean) => {
     if (!room) {
       return;
     }
 
-    ensureSocket().emit("game:restart", { roomCode: room.snapshot.code }, applyRoomAck);
+    ensureSocket().emit("game:rematch-ready", { ready, roomCode: room.snapshot.code }, applyRoomAck);
   }, [applyRoomAck, ensureSocket, room]);
 
   const sitRoom = useCallback(() => {
@@ -1093,8 +1095,8 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     canJoinRoom,
     canPlay,
     canReady,
+    canRematch,
     canResign,
-    canRestart,
     canSit,
     canUndo,
     chatText,
@@ -1129,6 +1131,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     publicChatStatus,
     publicChatText,
     registrationHandle,
+    rematchReady,
     ready,
     nextLeaderboardPage,
     previousLeaderboardPage,
@@ -1140,7 +1143,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     refreshLobby,
     resignGame,
     respondUndoRequest,
-    restartGame,
+    setRematchReady,
     room,
     sendPublicChatMessage,
     sendChatMessage,

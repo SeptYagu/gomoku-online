@@ -123,10 +123,10 @@ function getTaskCopy(
       return labels.waitingForUndoResponse;
     case "undo-response-required":
       return labels.undoRequestCopy.replace("{name}", requesterName ?? labels.opponentTurn);
-    case "finished-host":
-      return resultText ?? labels.restartRoom;
-    case "finished-guest":
-      return `${resultText ?? labels.roomClosed} · ${labels.waitingForRestart}`;
+    case "finished-rematch-open":
+      return `${resultText ?? labels.roomClosed} · ${labels.rematchPrompt}`;
+    case "finished-rematch-ready":
+      return `${resultText ?? labels.roomClosed} · ${labels.waitingForRematch}`;
     case "abandoned":
       return labels.roomClosed;
   }
