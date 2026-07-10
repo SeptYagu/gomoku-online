@@ -4353,3 +4353,10 @@ b6faf9e
 - 本轮只修改竞品研究文档和本 handoff，没有修改产品源码、依赖、测试或运行配置。
 - 文档修改过程中已执行 `git diff --check`，追加本记录前通过。
 - `.codex/` 继续作为已有未跟踪本地元数据排除在提交之外。
+
+### 研究提交与推送
+
+- 提交：`ce5328e docs: add popular gomoku competitor research`。
+- `git push origin main`：成功，`a5f1391..ce5328e`。
+- 推送后 `main` 与 `origin/main` 同步，工作树只剩已有未跟踪 `.codex/`。
+- 下一步可以基于 9 个产品的横向结论，产出本项目的页面状态规格和低保真布局。
