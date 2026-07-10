@@ -4645,3 +4645,10 @@ b6faf9e
 3. 对全部跟踪差异及新增验证报告执行可疑密钥赋值扫描，无匹配。
 4. 已停止本轮 3050 生产服务和截图辅助 socket，重置应用内 Browser 视口能力；验证目录对应的 Chrome 进程为 0，3050 端口已关闭。
 5. `.codex/` 继续作为既有未跟踪本地元数据和截图证据排除在提交之外。
+
+### 首批实现提交与推送
+
+- 提交：`5a8b7ca feat: split online lobby and table workspaces`。
+- 提交范围：18 个文件，1798 行新增、1070 行删除；新增四类视图文件、workspace/table-state 及测试、实施验证报告，并更新 controller、字典、smoke、计划和模块文档。
+- `git push origin main`：成功，`aaf262b..5a8b7ca`。
+- 本段提交结果作为单独 handoff 记录提交，随后再次推送；`.codex/` 仍不进入版本库。
