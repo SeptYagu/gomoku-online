@@ -4406,3 +4406,11 @@ b6faf9e
 - 本轮只新增交互改造计划并追加 handoff，没有修改产品源码、依赖、测试或运行配置。
 - 文档提交前执行 `git diff --check`；纯文档任务不运行无关的 `npm test`、lint 和 build。
 - `.codex/` 继续作为已有未跟踪本地元数据排除在提交之外。
+
+### 计划提交与推送
+
+- 计划提交：`c35a1eb docs: plan interaction workspace redesign`。
+- `git push origin main`：成功，`fba1059..c35a1eb`。
+- 提交包含 `docs/INTERACTION_REDESIGN_PLAN.md` 和上述 handoff 工作记录，共 569 行新增。
+- staged `git diff --check`：通过；仅出现 Windows 工作区 LF/CRLF 转换提示。
+- 本次追加提交结果后只再提交本 handoff，不修改计划内容或产品代码。
