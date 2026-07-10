@@ -4699,3 +4699,10 @@ b6faf9e
 1. 最终 `npm run lint` 通过；`npm test` 为 15 个文件、144 个测试通过；停止生产服务后重新 `npm run build`，编译、TypeScript 和 11 个页面生成通过。
 2. `git diff --check` 通过，仅有 Windows 工作区 LF/CRLF 提示；依赖审计此前已确认 0 个漏洞。
 3. Browser 临时 viewport override 已 reset，3050 本地生产服务已停止；`.codex/validation/ix02` 截图继续排除在 Git 之外。
+
+### IX-02 提交与推送
+
+- 提交：`59d1f8e feat: add state-driven table task bar`。
+- 提交范围：14 个文件，936 行新增、217 行删除；包含任务/动作/玩家组件、动作测试、三视口 Chrome smoke、六语种文案、验证报告与计划同步。
+- `git push origin main`：成功，`136b61a..59d1f8e`。
+- 本段作为单独 handoff 记录提交后再次推送；持续目标不结束，下一阶段进入 IX-03。
