@@ -4,12 +4,18 @@ export type GameDictionary = {
   appName: string;
   heroTitle: string;
   controls: {
+    aiExitDescription: string;
+    aiExitTitle: string;
+    cancel: string;
     reset: string;
     undo: string;
     language: string;
     theme: string;
     lightTheme: string;
     darkTheme: string;
+    onlineExitDescription: string;
+    onlineExitTitle: string;
+    switchMode: string;
   };
   modes: {
     label: string;
@@ -18,6 +24,7 @@ export type GameDictionary = {
     room: string;
   };
   ai: {
+    cancelSettingsChange: string;
     difficultyLabel: string;
     normal: string;
     hard: string;
@@ -29,6 +36,7 @@ export type GameDictionary = {
     playerBlackAiWhite: string;
     playerWhiteAiBlack: string;
     thinking: string;
+    settingsNextGame: string;
   };
   room: {
     account: string;
@@ -206,12 +214,18 @@ const en = {
     appName: "Gomoku Online",
     heroTitle: "Play Gomoku Online",
     controls: {
+      aiExitDescription: "Switching modes ends the current AI position. Pending settings remain for your next AI game.",
+      aiExitTitle: "Leave this AI game?",
+      cancel: "Cancel",
       reset: "New game",
       undo: "Undo",
       language: "Language",
       theme: "Theme",
       lightTheme: "Switch to light mode",
-      darkTheme: "Switch to dark mode"
+      darkTheme: "Switch to dark mode",
+      onlineExitDescription: "Your seat will disconnect and can be recovered for about 60 seconds. After that grace period, you may lose by disconnect.",
+      onlineExitTitle: "Leave the active online game?",
+      switchMode: "Switch mode"
     },
     modes: {
       label: "Game modes",
@@ -220,6 +234,7 @@ const en = {
       room: "Friend room"
     },
     ai: {
+      cancelSettingsChange: "Cancel changes",
       difficultyLabel: "AI difficulty",
       normal: "Normal",
       hard: "Hard",
@@ -230,7 +245,8 @@ const en = {
       aiFirst: "AI first",
       playerBlackAiWhite: "You play black. AI plays white.",
       playerWhiteAiBlack: "You play white. AI plays black.",
-      thinking: "AI thinking"
+      thinking: "AI thinking",
+      settingsNextGame: "Next game: {settings}"
     },
     room: {
       account: "Account",
@@ -404,12 +420,18 @@ const zh = {
     appName: "五子棋在线",
     heroTitle: "在线对弈五子棋",
     controls: {
+      aiExitDescription: "切换模式会结束当前 AI 局面；待生效设置会保留到下一盘 AI 对局。",
+      aiExitTitle: "离开当前 AI 对局？",
+      cancel: "取消",
       reset: "新开一局",
       undo: "悔棋",
       language: "语言",
       theme: "主题",
       lightTheme: "切换到浅色模式",
-      darkTheme: "切换到黑暗模式"
+      darkTheme: "切换到黑暗模式",
+      onlineExitDescription: "你的席位会断开，并可在约 60 秒内恢复；超过宽限期可能因断线判负。",
+      onlineExitTitle: "离开正在进行的在线对局？",
+      switchMode: "切换模式"
     },
     modes: {
       label: "游戏模式",
@@ -418,6 +440,7 @@ const zh = {
       room: "好友房"
     },
     ai: {
+      cancelSettingsChange: "取消更改",
       difficultyLabel: "AI 难度",
       normal: "普通",
       hard: "困难",
@@ -428,7 +451,8 @@ const zh = {
       aiFirst: "AI 先手",
       playerBlackAiWhite: "你执黑，AI 执白。",
       playerWhiteAiBlack: "你执白，AI 执黑。",
-      thinking: "AI 思考中"
+      thinking: "AI 思考中",
+      settingsNextGame: "下一局：{settings}"
     },
     room: {
       account: "账号",
@@ -602,12 +626,18 @@ const fr = {
     appName: "Gomoku en ligne",
     heroTitle: "Jouer au Gomoku en ligne",
     controls: {
+      aiExitDescription: "Changer de mode met fin à la position actuelle contre l'IA. Les réglages en attente restent prévus pour la prochaine partie IA.",
+      aiExitTitle: "Quitter cette partie contre l'IA ?",
+      cancel: "Annuler",
       reset: "Nouvelle partie",
       undo: "Annuler",
       language: "Langue",
       theme: "Thème",
       lightTheme: "Passer au mode clair",
-      darkTheme: "Passer au mode sombre"
+      darkTheme: "Passer au mode sombre",
+      onlineExitDescription: "Votre siège sera déconnecté et récupérable pendant environ 60 secondes. Ensuite, vous risquez de perdre par déconnexion.",
+      onlineExitTitle: "Quitter la partie en ligne en cours ?",
+      switchMode: "Changer de mode"
     },
     modes: {
       label: "Modes de jeu",
@@ -616,6 +646,7 @@ const fr = {
       room: "Salon ami"
     },
     ai: {
+      cancelSettingsChange: "Annuler les changements",
       difficultyLabel: "Difficulté de l'IA",
       normal: "Normal",
       hard: "Difficile",
@@ -626,7 +657,8 @@ const fr = {
       aiFirst: "IA d'abord",
       playerBlackAiWhite: "Vous jouez les noirs. L'IA joue les blancs.",
       playerWhiteAiBlack: "Vous jouez les blancs. L'IA joue les noirs.",
-      thinking: "L'IA réfléchit"
+      thinking: "L'IA réfléchit",
+      settingsNextGame: "Prochaine partie : {settings}"
     },
     room: {
       account: "Compte",
@@ -800,12 +832,18 @@ const es = {
     appName: "Gomoku en línea",
     heroTitle: "Juega Gomoku en línea",
     controls: {
+      aiExitDescription: "Cambiar de modo termina la posición actual contra la IA. Los ajustes pendientes se conservan para la próxima partida con IA.",
+      aiExitTitle: "¿Salir de esta partida contra la IA?",
+      cancel: "Cancelar",
       reset: "Nueva partida",
       undo: "Deshacer",
       language: "Idioma",
       theme: "Tema",
       lightTheme: "Cambiar al modo claro",
-      darkTheme: "Cambiar al modo oscuro"
+      darkTheme: "Cambiar al modo oscuro",
+      onlineExitDescription: "Tu asiento se desconectará y podrá recuperarse durante unos 60 segundos. Después, puedes perder por desconexión.",
+      onlineExitTitle: "¿Salir de la partida en línea activa?",
+      switchMode: "Cambiar modo"
     },
     modes: {
       label: "Modos de juego",
@@ -814,6 +852,7 @@ const es = {
       room: "Sala de amigos"
     },
     ai: {
+      cancelSettingsChange: "Cancelar cambios",
       difficultyLabel: "Dificultad de IA",
       normal: "Normal",
       hard: "Difícil",
@@ -824,7 +863,8 @@ const es = {
       aiFirst: "IA primero",
       playerBlackAiWhite: "Juegas con negras. La IA juega con blancas.",
       playerWhiteAiBlack: "Juegas con blancas. La IA juega con negras.",
-      thinking: "La IA piensa"
+      thinking: "La IA piensa",
+      settingsNextGame: "Próxima partida: {settings}"
     },
     room: {
       account: "Cuenta",
@@ -998,12 +1038,18 @@ const ru = {
     appName: "Гомоку онлайн",
     heroTitle: "Играйте в гомоку онлайн",
     controls: {
+      aiExitDescription: "Смена режима завершит текущую позицию с ИИ. Отложенные настройки сохранятся для следующей игры с ИИ.",
+      aiExitTitle: "Выйти из этой игры с ИИ?",
+      cancel: "Отмена",
       reset: "Новая игра",
       undo: "Отменить",
       language: "Язык",
       theme: "Тема",
       lightTheme: "Включить светлую тему",
-      darkTheme: "Включить темную тему"
+      darkTheme: "Включить темную тему",
+      onlineExitDescription: "Ваше место отключится, но его можно восстановить примерно в течение 60 секунд. После этого возможно поражение из-за отключения.",
+      onlineExitTitle: "Выйти из активной онлайн-игры?",
+      switchMode: "Сменить режим"
     },
     modes: {
       label: "Режимы игры",
@@ -1012,6 +1058,7 @@ const ru = {
       room: "Комната друга"
     },
     ai: {
+      cancelSettingsChange: "Отменить изменения",
       difficultyLabel: "Сложность ИИ",
       normal: "Обычно",
       hard: "Сложно",
@@ -1022,7 +1069,8 @@ const ru = {
       aiFirst: "ИИ первый",
       playerBlackAiWhite: "Вы играете черными. ИИ играет белыми.",
       playerWhiteAiBlack: "Вы играете белыми. ИИ играет черными.",
-      thinking: "ИИ думает"
+      thinking: "ИИ думает",
+      settingsNextGame: "Следующая игра: {settings}"
     },
     room: {
       account: "Аккаунт",
@@ -1196,12 +1244,18 @@ const ar = {
     appName: "غوموكو على الإنترنت",
     heroTitle: "العب غوموكو على الإنترنت",
     controls: {
+      aiExitDescription: "سيؤدي تبديل الوضع إلى إنهاء وضعية اللعب الحالية ضد الذكاء الاصطناعي. تبقى الإعدادات المؤجلة للمباراة التالية.",
+      aiExitTitle: "مغادرة مباراة الذكاء الاصطناعي؟",
+      cancel: "إلغاء",
       reset: "لعبة جديدة",
       undo: "تراجع",
       language: "اللغة",
       theme: "السمة",
       lightTheme: "التبديل إلى الوضع الفاتح",
-      darkTheme: "التبديل إلى الوضع الداكن"
+      darkTheme: "التبديل إلى الوضع الداكن",
+      onlineExitDescription: "سيتم قطع اتصال مقعدك ويمكن استعادته لنحو 60 ثانية. بعد المهلة قد تخسر بسبب انقطاع الاتصال.",
+      onlineExitTitle: "مغادرة المباراة المتصلة الجارية؟",
+      switchMode: "تبديل الوضع"
     },
     modes: {
       label: "أوضاع اللعب",
@@ -1210,6 +1264,7 @@ const ar = {
       room: "غرفة صديق"
     },
     ai: {
+      cancelSettingsChange: "إلغاء التغييرات",
       difficultyLabel: "صعوبة الذكاء الاصطناعي",
       normal: "عادي",
       hard: "صعب",
@@ -1220,7 +1275,8 @@ const ar = {
       aiFirst: "الذكاء أولا",
       playerBlackAiWhite: "أنت تلعب بالأسود. الذكاء الاصطناعي يلعب بالأبيض.",
       playerWhiteAiBlack: "أنت تلعب بالأبيض. الذكاء الاصطناعي يلعب بالأسود.",
-      thinking: "الذكاء الاصطناعي يفكر"
+      thinking: "الذكاء الاصطناعي يفكر",
+      settingsNextGame: "المباراة التالية: {settings}"
     },
     room: {
       account: "الحساب",

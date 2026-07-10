@@ -71,4 +71,4 @@ socket 测试显式覆盖刷新：guest ready 后断线，host ready 仍保持 f
 - rematch 状态随单进程房间存在，不是跨实例共享状态；多实例前仍需 Redis Adapter/共享房间存储。
 - activity summary、matchConfig、点名挑战和赛事没有混入本阶段。
 
-下一步按计划进入 `IX-05`，处理局中离开在线桌和 AI 设置切换的明确确认/下一局生效策略。
+后续状态（2026-07-10）：`IX-05` 已完成在线离桌确认、AI 设置下一局生效和 guest rejoin token 保留。详见 `docs/INTERACTION_REDESIGN_IX05_VERIFICATION.md`。下一步进入 `IX-06`。

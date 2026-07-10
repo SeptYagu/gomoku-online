@@ -212,7 +212,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `getTableActions(state, capabilities)` 现在把 controller 权限转换为有序可见动作；无权限动作直接隐藏，task 区最多 2 个决策，task + toolbar 总数最多 3 个。
 - `GameTableView` 通过 `TableTaskBar` / `TableActionBar` 承载 ready、undo、resign、rematch、sit、leave；悔棋 Reject/Allow 和倒计时已从棋盘中央 modal 移到非阻塞任务栏，超时自动拒绝语义保持不变。
 - 新增状态与真实 Chrome smoke 覆盖视图互斥、local/AI 不建立 Socket.IO、Ready、Host 落子/发起悔棋、Guest Allow 和 spectator 状态；本批没有修改本节列出的任何房间/对局事件。
-- 终局已由 IX-06A 改为双方 rematch readiness；host restart 只保留旧客户端兼容语义。局中离桌确认仍属于 `IX-05`。
+- 终局已由 IX-06A 改为双方 rematch readiness；host restart 只保留旧客户端兼容语义。IX-05 已为 playing player 的顶部模式切换和明确 Leave 增加非阻塞后果确认，并等待 leave ack 后再切工作区。
 - `IX-03` 后，`GameTableView` 只保留 task/board/actions；`TableSidebar` 接管既有 280–320px 右栏，玩家和连接状态优先，聊天、当前局最近步骤和房间信息进入页签。
 - 900px 以下 sidebar 排在 game-stage 后，移动顺序为任务、棋盘、动作、玩家、次要页签；390×844 阿拉伯语 RTL 已验证无根级横向溢出。当前步骤页签只读取 `RoomSnapshot.moves`，不替代 IX-06 的完整复盘。
 
@@ -312,6 +312,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - unlisted 终局仍写入带 visibility 的内部权威记录以校验客户端提交，但不进入公开 Profile recent records/排行榜；管理员本地导出仍可读取完整记录。
 - rematch 开始新局前上一局已由服务端权威记录保存；新局清当前 snapshot moves，但不删除上一局 record。牌桌内逐手复盘仍留给 IX-06。
 - Guest reconnect token 已完成：公开 playerId 不能直接重连；registered 用户继续使用 account token。Token 当前随单进程房间生命周期存在，多实例共享 session 留给 Redis/正式账号基础设施。
+- IX-05 修复动作 ack 擦除 guest rejoin token：`runForCurrentPlayer` 对 guest 回传当前 socket token，客户端对旧服务端缺字段 ack 也保留既有 token；真实 locale refresh 已验证恢复原 seat 而非新 spectator。
 - 同一已认证玩家可以有多个活动 socket；只有最后一个房间 socket 断开才把座位标记为 disconnected，避免刷新/多标签旧连接误触发判负。
 - 多实例上线前接 Redis Adapter。
 

@@ -74,6 +74,7 @@ async function main(): Promise<void> {
       await assertNoRealtimeConnection(cdp, "local");
       await clickButton(cdp, "AI");
       await assertNoRealtimeConnection(cdp, "AI");
+      await exerciseAiSettingsAndModeGuard(cdp);
       await clickButton(cdp, "Friend room");
       await waitForOnlineView(cdp, "lobby");
       await assertOnlineWorkspaceIsolation(cdp, "lobby");
@@ -154,7 +155,21 @@ async function main(): Promise<void> {
       );
       await waitForTableState(cdp, "playing-my-turn");
       await assertTableTaskModel(cdp, "playing-my-turn", []);
-      await clickButton(cdp, "Leave");
+      await navigateToLocaleTable(cdp, baseUrl, "ar", preparedRooms.waitingCode);
+      await waitForPlayingTable(cdp);
+      await clickGameMode(cdp, "ai");
+      await assertRtlMobileConfirmation(cdp);
+      await clickConfirmationButton(cdp, "cancel");
+      await navigateToLocaleTable(cdp, baseUrl, "en", preparedRooms.waitingCode);
+      await waitForPlayingTable(cdp);
+      await clickButton(cdp, "AI");
+      await assertInteractionConfirmation(cdp, "60 seconds", true);
+      await captureEvidence(cdp, "online-mode-switch-confirmation.png");
+      await clickConfirmationButton(cdp, "cancel");
+      await waitForTableState(cdp, "playing-my-turn");
+      await clickTableAction(cdp, "leave");
+      await assertInteractionConfirmation(cdp, "60 seconds", true);
+      await clickConfirmationButton(cdp, "confirm");
       await waitForNoRoomUrl(cdp);
       await waitForOnlineView(cdp, "lobby");
       await assertOnlineWorkspaceIsolation(cdp, "lobby");
@@ -178,6 +193,7 @@ async function main(): Promise<void> {
 
       console.log(`Lobby UI smoke: ${baseUrl}`);
       console.log("PASS local and AI workspaces do not create a realtime connection");
+      console.log("PASS AI settings defer to the next game and active AI mode switches require confirmation");
       console.log("PASS quick match is the one-click primary action and solo waiting can be cancelled");
       console.log("PASS friends, identity, community, and progress use progressive disclosure");
       console.log("PASS manual friend join needs one disclosure, one room code, and one submit");
@@ -187,6 +203,8 @@ async function main(): Promise<void> {
       console.log("PASS online lobby and table are mutually exclusive");
       console.log("PASS table tasks are state-driven, non-blocking, and limited to four actions");
       console.log("PASS both players choose rematch before one immediate next game starts");
+      console.log("PASS active online mode switches and explicit table exit explain the disconnect grace period");
+      console.log("PASS confirmation controls remain operable at 390x844 RTL");
       console.log("PASS undo decisions and board remain visible at 1440x900, 1280x720, and 390x844");
       console.log("PASS 1280x720 can play without scrolling and 390x844 Arabic preserves table and lobby order");
     } finally {
@@ -198,6 +216,276 @@ async function main(): Promise<void> {
     await waitForProcessExit(chrome);
     await rm(userDataDir, { force: true, maxRetries: 10, recursive: true, retryDelay: 250 });
   }
+}
+
+async function exerciseAiSettingsAndModeGuard(cdp: CdpClient): Promise<void> {
+  await waitForPlayView(cdp, "ai");
+  await clickBoardPoint(cdp, "7:7");
+  await waitForStoneCount(cdp, 2);
+  await clickButton(cdp, "Expert");
+  await clickButton(cdp, "AI first");
+  await waitForValue(async () => {
+    const pending = await evaluate<{ stones: number; text: string | null }>(
+      cdp,
+      `({
+        stones: document.querySelectorAll('[data-play-view="ai"] .stone').length,
+        text: document.querySelector('[data-ai-pending-settings]')?.textContent ?? null
+      })`
+    );
+
+    return pending.stones === 2 && pending.text?.includes("Next game: AI first · Expert") ? pending : null;
+  }, STEP_TIMEOUT_MS);
+  await captureEvidence(cdp, "ai-settings-next-game.png");
+  await clickButton(cdp, "New game");
+  await waitForValue(async () => {
+    const state = await evaluate<{ aiFirstActive: boolean; expertActive: boolean; hasPending: boolean; stones: number }>(
+      cdp,
+      `(() => {
+        const buttons = Array.from(document.querySelectorAll('[data-play-view="ai"] button'));
+        const expert = buttons.find((button) => (button.textContent || '').trim() === 'Expert');
+        const aiFirst = buttons.find((button) => (button.textContent || '').trim() === 'AI first');
+        return {
+          aiFirstActive: Boolean(aiFirst?.classList.contains('active')),
+          expertActive: Boolean(expert?.classList.contains('active')),
+          hasPending: Boolean(document.querySelector('[data-ai-pending-settings]')),
+          stones: document.querySelectorAll('[data-play-view="ai"] .stone').length
+        };
+      })()`
+    );
+
+    return state.aiFirstActive && state.expertActive && !state.hasPending && state.stones === 1 ? state : null;
+  }, STEP_TIMEOUT_MS);
+
+  await clickFirstEnabledBoardPoint(cdp);
+  await waitForStoneCount(cdp, 3);
+  await clickButton(cdp, "Local two-player");
+  await assertInteractionConfirmation(cdp, "current AI position", true);
+  await captureEvidence(cdp, "ai-mode-switch-confirmation.png");
+  await pressEnter(cdp);
+  await waitForPlayView(cdp, "ai");
+  await waitForStoneCount(cdp, 3);
+  await clickButton(cdp, "Local two-player");
+  await assertInteractionConfirmation(cdp, "current AI position", true);
+  await clickConfirmationButton(cdp, "confirm");
+  await waitForPlayView(cdp, "local");
+}
+
+async function waitForPlayView(cdp: CdpClient, view: "ai" | "local"): Promise<void> {
+  await waitForValue(async () => {
+    const found = await evaluate<boolean>(cdp, `Boolean(document.querySelector('[data-play-view="${view}"]'))`);
+
+    return found ? true : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function clickBoardPoint(cdp: CdpClient, point: string): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const point = document.querySelector('[data-board-point="${point}"]');
+      if (!(point instanceof HTMLButtonElement) || point.disabled) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      point.click();
+      return { ok: true, detail: point.getAttribute('data-board-point') || '' };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not click board point ${point}: ${result.detail}`);
+  }
+}
+
+async function clickFirstEnabledBoardPoint(cdp: CdpClient): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const point = document.querySelector('[data-play-view="ai"] .board-point:not(:disabled)');
+      if (!(point instanceof HTMLButtonElement)) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      point.click();
+      return { ok: true, detail: point.getAttribute('data-board-point') || '' };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not click an enabled AI board point: ${result.detail}`);
+  }
+}
+
+async function waitForStoneCount(cdp: CdpClient, count: number): Promise<void> {
+  await waitForValue(async () => {
+    const stones = await evaluate<number>(cdp, `document.querySelectorAll('.stone').length`);
+
+    return stones === count ? stones : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function assertInteractionConfirmation(
+  cdp: CdpClient,
+  expectedDescription: string,
+  expectBoard: boolean
+): Promise<void> {
+  const result = await waitForValue(async () => {
+    const current = await evaluate<{
+      activeText: string;
+      boardVisible: boolean;
+      description: string;
+      hasCancel: boolean;
+      hasConfirm: boolean;
+    }>(
+      cdp,
+      `(() => {
+        const panel = document.querySelector('[data-interaction-confirmation]');
+        const buttons = Array.from(panel?.querySelectorAll('button') ?? []);
+        return {
+          activeText: (document.activeElement?.textContent || '').trim(),
+          boardVisible: Boolean(document.querySelector('.play-area .board-wrap')),
+          description: panel?.textContent || '',
+          hasCancel: buttons.length === 2,
+          hasConfirm: buttons.some((button) => button.classList.contains('danger'))
+        };
+      })()`
+    );
+
+    return current.description.includes(expectedDescription) ? current : null;
+  }, STEP_TIMEOUT_MS);
+
+  if (
+    result.activeText !== "Cancel" ||
+    result.boardVisible !== expectBoard ||
+    !result.hasCancel ||
+    !result.hasConfirm
+  ) {
+    throw new Error(`Interaction confirmation failed: ${JSON.stringify(result)}`);
+  }
+}
+
+async function clickConfirmationButton(cdp: CdpClient, action: "cancel" | "confirm"): Promise<void> {
+  const selector = action === "confirm" ? ".mode-pill.danger" : ".mode-pill:not(.danger)";
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const button = document.querySelector('[data-interaction-confirmation] ${selector}');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      button.click();
+      return { ok: true, detail: (button.textContent || '').trim() };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not ${action} interaction confirmation: ${result.detail}`);
+  }
+}
+
+async function clickGameMode(cdp: CdpClient, mode: "ai" | "local" | "room"): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const button = document.querySelector('[data-game-mode="${mode}"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      button.click();
+      return { ok: true, detail: (button.textContent || '').trim() };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not choose ${mode} mode: ${result.detail}`);
+  }
+}
+
+async function assertRtlMobileConfirmation(cdp: CdpClient): Promise<void> {
+  try {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 844,
+      mobile: false,
+      width: 390
+    });
+    const result = await waitForValue(async () => {
+      const current = await evaluate<{
+        boardPresent: boolean;
+        buttonsLargeEnough: boolean;
+        cancelFocused: boolean;
+        direction: string;
+        noHorizontalOverflow: boolean;
+        panelVisible: boolean;
+        viewport: { height: number; width: number };
+      }>(
+        cdp,
+        `(() => {
+          const panel = document.querySelector('[data-interaction-confirmation]');
+          panel?.scrollIntoView({ block: 'start' });
+          const panelRect = panel?.getBoundingClientRect();
+          const buttons = Array.from(panel?.querySelectorAll('button') ?? []);
+          return {
+            boardPresent: Boolean(document.querySelector('.play-area .board-wrap')),
+            buttonsLargeEnough: buttons.length === 2 && buttons.every((button) => {
+              const rect = button.getBoundingClientRect();
+              return rect.width >= 44 && rect.height >= 44;
+            }),
+            cancelFocused: document.activeElement === buttons[0],
+            direction: document.documentElement.dir,
+            noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+            panelVisible: Boolean(panelRect && panelRect.top >= 0 && panelRect.bottom <= window.innerHeight),
+            viewport: { height: window.innerHeight, width: window.innerWidth }
+          };
+        })()`
+      );
+
+      return current.viewport.width === 390 && current.viewport.height === 844 ? current : null;
+    }, STEP_TIMEOUT_MS);
+
+    if (
+      result.direction !== "rtl" ||
+      !result.noHorizontalOverflow ||
+      !result.panelVisible ||
+      !result.buttonsLargeEnough ||
+      !result.cancelFocused ||
+      !result.boardPresent
+    ) {
+      throw new Error(`RTL mobile confirmation failed: ${JSON.stringify(result)}`);
+    }
+
+    await captureCurrentViewport(cdp, "confirmation-rtl-390x844.png");
+  } finally {
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
+  }
+}
+
+async function captureCurrentViewport(cdp: CdpClient, fileName: string): Promise<void> {
+  const captureDir = process.env.GOMOKU_SMOKE_CAPTURE_DIR;
+
+  if (!captureDir) {
+    return;
+  }
+
+  await cdp.send("Page.bringToFront");
+  await cdp.send("Runtime.evaluate", {
+    awaitPromise: true,
+    expression: "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 300))))",
+    returnByValue: true
+  });
+  await mkdir(captureDir, { recursive: true });
+  const screenshot = (await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true })) as {
+    data?: string;
+  };
+
+  if (!screenshot.data) {
+    throw new Error(`Chrome did not return screenshot ${fileName}`);
+  }
+
+  await writeFile(path.join(captureDir, fileName), Buffer.from(screenshot.data, "base64"));
+}
+
+async function pressEnter(cdp: CdpClient): Promise<void> {
+  await cdp.send("Input.dispatchKeyEvent", { code: "Enter", key: "Enter", type: "keyDown", windowsVirtualKeyCode: 13 });
+  await cdp.send("Input.dispatchKeyEvent", { code: "Enter", key: "Enter", type: "keyUp", windowsVirtualKeyCode: 13 });
 }
 
 async function captureEvidence(cdp: CdpClient, fileName: string): Promise<void> {
@@ -218,7 +506,8 @@ async function captureEvidence(cdp: CdpClient, fileName: string): Promise<void> 
       const viewport = await evaluate<{ height: number; width: number }>(
         cdp,
         `(() => {
-          document.querySelector('[data-online-view="table"]')?.scrollIntoView({ block: 'start' });
+          const target = document.querySelector('[data-interaction-confirmation]') ?? document.querySelector('[data-online-view="table"]');
+          target?.scrollIntoView({ block: 'start' });
           return { height: window.innerHeight, width: window.innerWidth };
         })()`
       );
@@ -360,6 +649,29 @@ async function waitForTableState(cdp: CdpClient, state: string): Promise<void> {
 
     return currentState === state ? currentState : null;
   }, STEP_TIMEOUT_MS);
+}
+
+async function waitForPlayingTable(cdp: CdpClient): Promise<void> {
+  try {
+    await waitForValue(async () => {
+      const state = await evaluate<string | null>(
+        cdp,
+        `document.querySelector('[data-online-view="table"]')?.getAttribute('data-table-state') ?? null`
+      );
+
+      return state === "playing-my-turn" || state === "playing-opponent-turn" ? state : null;
+    }, STEP_TIMEOUT_MS);
+  } catch {
+    const detail = await evaluate<{ body: string; state: string | null; url: string }>(
+      cdp,
+      `({
+        body: document.body.innerText,
+        state: document.querySelector('[data-online-view="table"]')?.getAttribute('data-table-state') ?? null,
+        url: window.location.href
+      })`
+    );
+    throw new Error(`Playing table did not restore: ${JSON.stringify(detail)}`);
+  }
 }
 
 async function assertTableTaskModel(cdp: CdpClient, expectedState: string, expectedTaskLabels: string[]): Promise<void> {

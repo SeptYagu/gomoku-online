@@ -507,16 +507,16 @@ describe("room socket handlers", () => {
       const roomCode = createAck.value.snapshot.code;
 
       const guestJoin = await emitAck(guest, "room:join", {
-          playerId: "rematch-guest",
-          playerName: "Rematch Guest",
-          roomCode
-        });
+        playerId: "rematch-guest",
+        playerName: "Rematch Guest",
+        roomCode
+      });
 
       expect(guestJoin).toMatchObject({ ok: true, value: { guestToken: expect.any(String) } });
       expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
       expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({
         ok: true,
-        value: { snapshot: { status: "playing" } }
+        value: { guestToken: guestJoin.ok ? guestJoin.value.guestToken : undefined, snapshot: { status: "playing" } }
       });
       expect(await emitAck(guest, "game:resign", { roomCode })).toMatchObject({
         ok: true,

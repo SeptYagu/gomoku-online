@@ -866,6 +866,7 @@ function runForCurrentPlayer(
   return {
     ok: true,
     value: {
+      guestToken: participant.identity === "guest" ? socket.data.guestToken : undefined,
       playerId,
       identity: participant.identity,
       name: participant.name,

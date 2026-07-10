@@ -14,6 +14,7 @@ type GameTableViewProps = {
   isInteractive: boolean;
   lastMove: Move | null;
   onPointSelect: (point: Point) => void;
+  onLeaveRequest: () => void;
   previewStone: Stone;
   room: FriendRoomController;
   winningKey: Set<string>;
@@ -25,6 +26,7 @@ export function GameTableView({
   isInteractive,
   lastMove,
   onPointSelect,
+  onLeaveRequest,
   previewStone,
   room,
   winningKey
@@ -76,7 +78,7 @@ export function GameTableView({
         room.cancelMatch();
         return;
       case "leave":
-        room.leaveRoom();
+        onLeaveRequest();
         return;
       case "ready":
       case "unready":

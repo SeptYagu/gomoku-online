@@ -263,11 +263,18 @@ type AiWorkerResponse = {
 - undo。
 - reset。
 - mode change。
-- difficulty change。
-- first-player change。
+- 空棋盘立即生效的 difficulty / first-player change。
+- IX-05 后，已有落子时选择设置只写 pending，不取消当前 Worker/局面；New game 或下次进入 AI 时应用 pending 并走 reset 取消路径。
 - component unmount。
 
 这些路径会递增 `aiRequestIdRef`、清空 thinking 状态、终止当前 Worker 池并清理硬超时定时器。正确性依靠 request id 和落子规则校验；终止 Worker 池主要用于及时释放 CPU。
+
+### 2026-07-10 IX-05 局中设置与模式保护
+
+- AI 空棋盘的难度/先手继续立即生效；已有落子时只记录 pending 值并显示“下一局生效”，当前棋盘和 Worker 结果不因设置点击丢失。
+- New game 或下次进入 AI 时一次应用 pending difficulty/firstPlayer，再调用既有 reset/cancel 路径；Cancel changes 清 pending。
+- AI 有落子时切模式先显示非阻塞确认条；Cancel 默认聚焦且键盘 Enter 可操作，确认后才 reset 目标工作区。
+- 设置 pending 当前不持久化到 storage；versioned schema 仍是后续偏好持久化任务。
 
 ### 设置持久化
 

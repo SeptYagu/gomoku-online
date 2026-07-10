@@ -2,7 +2,7 @@
 
 更新日期：2026-07-10
 
-状态：实施中；`IX-00 + IX-01 + IX-02 + IX-03 + IX-04 + IX-04B + IX-04A + IX-06A` 已完成本地验证，下一步为 `IX-05`
+状态：实施中；`IX-00 + IX-01 + IX-02 + IX-03 + IX-04 + IX-04B + IX-04A + IX-06A + IX-05` 已完成本地验证，下一步为 `IX-06`
 
 文档性质：竞品研究、现有代码对照、实施顺序与当前进度的统一计划
 
@@ -22,6 +22,8 @@
 
 双方再战验证：`docs/INTERACTION_REDESIGN_IX06A_VERIFICATION.md`
 
+安全切换验证：`docs/INTERACTION_REDESIGN_IX05_VERIFICATION.md`
+
 ## 当前实施进度
 
 | 任务 | 状态 | 2026-07-10 结果 |
@@ -34,9 +36,10 @@
 | `IX-04B` | 完成 | 权威 snapshot/record 新增 public/unlisted；unlisted 不进入列表、增量、删除、Presence roomCode、公开 Profile/排名，邀请 URL/房间码仍可加入；朋友入口与 Room info 标注非访问保护 |
 | `IX-04A` | 完成 | 同一输入支持邀请 URL、房间码、`@publicHandle` 和原始账户 ID；当前 AccountStore 内唯一 handle 与显式房主目标索引已落地，结果始终收敛为 roomCode |
 | `IX-06A` | 完成 | 任一 seated player 可选择/取消再战；双方在线同意后只创建一次下一局并轮换先手，终局棋盘在此前保持 |
-| `IX-05` | 下一步 | 对局中离开在线桌需明确后果；AI 难度/先手在进行中延迟到下一局或确认应用 |
+| `IX-05` | 完成 | 在线 playing 离桌使用非阻塞后果确认并等待 leave ack；AI 已有落子时设置下一局生效；guest 动作 ack 不再擦除 rejoin token |
+| `IX-06` | 下一步 | 终局可从当前 snapshot/权威 record 逐手复盘，退出复盘回到原桌 |
 
-当前实施已新增服务端执行的 public/unlisted 可见性、当前 AccountStore 内唯一 public handle、显式房主目标索引、统一加入解析和双方再战；仍没有高熵邀请授权 token、activity summary、`matchConfig`、挑战或赛事协议。下一阶段实施 IX-05 的安全切换；unlisted 继续只表示“不公开列出”，不冒充受邀请授权保护。
+当前实施已新增服务端执行的 public/unlisted 可见性、当前 AccountStore 内唯一 public handle、显式房主目标索引、统一加入解析、双方再战和安全模式切换；仍没有高熵邀请授权 token、activity summary、`matchConfig`、挑战或赛事协议。下一阶段实施 IX-06 终局复盘；unlisted 继续只表示“不公开列出”，不冒充受邀请授权保护。
 
 ## 结论先行
 
@@ -50,7 +53,7 @@
 6. 当前 `acct_...` 注册玩家 ID 具备稳定身份用途，但同样是随机串；它可以作为加入房间的备用查找值，不能替代规范 `roomCode`。面向传播已新增唯一、可读的 `@publicHandle`，同一输入框可解析邀请 URL、房间码、handle 和原始账户 ID。
 7. 再次与 PlayOK/BGA 等竞品逻辑对照后，牌桌不应机械限制为“只能有一个按钮”：应保持一个明确主任务，允许 1–2 个当前决策动作，总动作不超过 4；终局还应把当前房主单方面重开升级为双方表达再战意愿。
 
-P0 的工作区、牌桌状态机与响应式布局以及 IX-04/04B/04A 大厅、可见性、统一加入和 IX-06A 双方再战闭环已经完成。下一步进入 IX-05；`matchConfig`、点名挑战和赛事属于后续能力，不能阻塞当前交互主线。
+P0 的工作区、牌桌状态机与响应式布局以及 IX-04/04B/04A 大厅、可见性、统一加入、IX-06A 双方再战和 IX-05 安全切换闭环已经完成。下一步进入 IX-06；`matchConfig`、点名挑战和赛事属于后续能力，不能阻塞当前交互主线。
 
 ## 研究与代码依据
 

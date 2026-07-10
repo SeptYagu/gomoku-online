@@ -78,7 +78,7 @@ export type FriendRoomController = {
   joinTarget: string;
   joinListedRoom: (roomCode: string) => void;
   joinRoom: () => void;
-  leaveRoom: () => void;
+  leaveRoom: (onComplete?: (left: boolean) => void) => void;
   lobbyRooms: RoomListItem[];
   lobbyStatus: "idle" | "loading" | "ready" | "error";
   leaderboard: LeaderboardSnapshot | null;
@@ -321,6 +321,11 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     }
 
     const acknowledgedPlayerName = response.value.name || "Player";
+    const existingSession = readRoomSession();
+    const acknowledgedGuestToken =
+      response.value.identity === "guest"
+        ? response.value.guestToken ?? readGuestToken() ?? existingSession?.guestToken
+        : undefined;
 
     setError(null);
     setRoom(response.value);
@@ -328,13 +333,13 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     syncRoomUrl(response.value.snapshot.code);
     persistRoomSession({
       accountToken: response.value.identity === "registered" ? account?.token ?? readAccountToken() ?? undefined : undefined,
-      guestToken: response.value.guestToken,
+      guestToken: acknowledgedGuestToken,
       playerId: response.value.playerId,
       playerName: acknowledgedPlayerName,
       roomCode: response.value.snapshot.code
     });
-    if (response.value.guestToken) {
-      persistGuestToken(response.value.guestToken);
+    if (acknowledgedGuestToken) {
+      persistGuestToken(acknowledgedGuestToken);
     }
   }, [account]);
 
@@ -776,7 +781,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     );
   }, [ensureSocket, getActivePlayer, identityReady, publicChatText]);
 
-  const leaveRoom = useCallback(() => {
+  const leaveRoom = useCallback((onComplete?: (left: boolean) => void) => {
     if (!room) {
       return;
     }
@@ -784,6 +789,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     ensureSocket().emit("room:leave", { roomCode: room.snapshot.code }, (response: RoomAck) => {
       if (!response.ok) {
         setError(response.error.message);
+        onComplete?.(false);
         return;
       }
 
@@ -794,6 +800,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       setChatText("");
       setMatchmakingStatus("idle");
       setError(null);
+      onComplete?.(true);
     });
   }, [ensureSocket, room]);
 

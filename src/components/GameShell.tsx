@@ -14,6 +14,13 @@ import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import type { RoomSnapshot } from "@/server/rooms";
+import { InteractionConfirmation } from "./InteractionConfirmation";
+import {
+  getModeChangeDecision,
+  requiresOnlineLeaveConfirmation,
+  resolveNextAiSettings,
+  shouldDeferAiSettingChange
+} from "./interaction-guards";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { GameTableView } from "./online/GameTableView";
@@ -53,6 +60,11 @@ type AiWorkerDoneResult = {
   source: AiMoveSource;
 };
 
+type PendingTransition = {
+  kind: "ai" | "online";
+  nextMode: GameMode | null;
+};
+
 const AI_WORKER_TIMEOUT_GRACE_MS = 750;
 const AI_EMERGENCY_TIME_LIMIT_MS = 50;
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
@@ -65,6 +77,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const [mode, setMode] = useState<GameMode>(() => getInitialGameMode());
   const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("normal");
   const [firstPlayer, setFirstPlayer] = useState<FirstPlayer>("human");
+  const [pendingDifficulty, setPendingDifficulty] = useState<AiDifficulty | null>(null);
+  const [pendingFirstPlayer, setPendingFirstPlayer] = useState<FirstPlayer | null>(null);
+  const [pendingTransition, setPendingTransition] = useState<PendingTransition | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const aiWorkersRef = useRef<Worker[]>([]);
   const aiWorkerTimeoutRef = useRef<number | null>(null);
@@ -92,29 +108,140 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     setMoves(snapshot.moves);
   }
 
-  function handleModeChange(nextMode: GameMode) {
+  function completeModeChange(nextMode: GameMode) {
     if (nextMode === "room") {
       cancelAiTurn();
       setMode(nextMode);
       return;
     }
 
-    if (mode === "room") {
-      friendRoom.leaveRoom();
+    const nextAiSettings = resolveNextAiSettings({
+      aiDifficulty,
+      firstPlayer,
+      pendingDifficulty,
+      pendingFirstPlayer
+    });
+
+    if (nextMode === "ai") {
+      setAiDifficulty(nextAiSettings.aiDifficulty);
+      setFirstPlayer(nextAiSettings.firstPlayer);
+      setPendingDifficulty(null);
+      setPendingFirstPlayer(null);
     }
 
     setMode(nextMode);
-    resetGame({ nextMode });
+    resetGame({
+      nextDifficulty: nextAiSettings.aiDifficulty,
+      nextFirstPlayer: nextAiSettings.firstPlayer,
+      nextMode
+    });
+  }
+
+  function leaveOnlineRoomThen(nextMode: GameMode | null) {
+    setIsTransitioning(true);
+    friendRoom.leaveRoom((left) => {
+      setIsTransitioning(false);
+
+      if (!left) {
+        return;
+      }
+
+      setPendingTransition(null);
+      if (nextMode) {
+        completeModeChange(nextMode);
+      }
+    });
+  }
+
+  function handleModeChange(nextMode: GameMode) {
+    const decision = getModeChangeDecision({
+      currentMode: mode,
+      localMoveCount: moves.length,
+      nextMode,
+      onlineRole: friendRoom.room?.role ?? null,
+      onlineStatus: friendRoom.room?.snapshot.status ?? null
+    });
+
+    if (decision === "noop") {
+      return;
+    }
+
+    if (decision === "confirm-ai" || decision === "confirm-online") {
+      setPendingTransition({ kind: decision === "confirm-ai" ? "ai" : "online", nextMode });
+      return;
+    }
+
+    if (mode === "room" && friendRoom.room) {
+      leaveOnlineRoomThen(nextMode);
+      return;
+    }
+
+    completeModeChange(nextMode);
   }
 
   function handleDifficultyChange(difficulty: AiDifficulty) {
+    if (shouldDeferAiSettingChange(moves.length)) {
+      setPendingDifficulty(difficulty === aiDifficulty ? null : difficulty);
+      return;
+    }
+
     setAiDifficulty(difficulty);
+    setPendingDifficulty(null);
     resetGame({ nextDifficulty: difficulty });
   }
 
   function handleFirstPlayerChange(player: FirstPlayer) {
+    if (shouldDeferAiSettingChange(moves.length)) {
+      setPendingFirstPlayer(player === firstPlayer ? null : player);
+      return;
+    }
+
     setFirstPlayer(player);
+    setPendingFirstPlayer(null);
     resetGame({ nextFirstPlayer: player });
+  }
+
+  function handleAiReset() {
+    const nextSettings = resolveNextAiSettings({
+      aiDifficulty,
+      firstPlayer,
+      pendingDifficulty,
+      pendingFirstPlayer
+    });
+
+    setAiDifficulty(nextSettings.aiDifficulty);
+    setFirstPlayer(nextSettings.firstPlayer);
+    setPendingDifficulty(null);
+    setPendingFirstPlayer(null);
+    resetGame({ nextDifficulty: nextSettings.aiDifficulty, nextFirstPlayer: nextSettings.firstPlayer });
+  }
+
+  function handleOnlineLeaveRequest() {
+    if (
+      requiresOnlineLeaveConfirmation(friendRoom.room?.role ?? null, friendRoom.room?.snapshot.status ?? null)
+    ) {
+      setPendingTransition({ kind: "online", nextMode: null });
+      return;
+    }
+
+    friendRoom.leaveRoom();
+  }
+
+  function confirmPendingTransition() {
+    if (!pendingTransition) {
+      return;
+    }
+
+    if (pendingTransition.kind === "online") {
+      leaveOnlineRoomThen(pendingTransition.nextMode);
+      return;
+    }
+
+    const nextMode = pendingTransition.nextMode;
+    setPendingTransition(null);
+    if (nextMode) {
+      completeModeChange(nextMode);
+    }
   }
 
   function handleUndo() {
@@ -419,32 +546,57 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         <div className="mode-strip" aria-label={dictionary.modes.label}>
           <button
             className={`mode-pill ${mode === "local" ? "active" : ""}`}
+            data-game-mode="local"
             type="button"
             onClick={() => handleModeChange("local")}
-            disabled={isAiThinking || friendRoom.isJoiningRoom}
+            disabled={isAiThinking || friendRoom.isJoiningRoom || isTransitioning}
           >
             <Users aria-hidden="true" focusable={false} />
             {dictionary.modes.local}
           </button>
           <button
             className={`mode-pill ${mode === "ai" ? "active" : ""}`}
+            data-game-mode="ai"
             type="button"
             onClick={() => handleModeChange("ai")}
-            disabled={isAiThinking || friendRoom.isJoiningRoom}
+            disabled={isAiThinking || friendRoom.isJoiningRoom || isTransitioning}
           >
             <Bot aria-hidden="true" focusable={false} />
             {dictionary.modes.ai}
           </button>
           <button
             className={`mode-pill ${mode === "room" ? "active" : ""}`}
+            data-game-mode="room"
             type="button"
             onClick={() => handleModeChange("room")}
-            disabled={isAiThinking || friendRoom.isJoiningRoom}
+            disabled={isAiThinking || friendRoom.isJoiningRoom || isTransitioning}
           >
             <Wifi aria-hidden="true" focusable={false} />
             {dictionary.modes.room}
           </button>
         </div>
+
+        {pendingTransition ? (
+          <InteractionConfirmation
+            cancelLabel={dictionary.controls.cancel}
+            confirmLabel={
+              pendingTransition.kind === "online" ? dictionary.room.leaveRoom : dictionary.controls.switchMode
+            }
+            description={
+              pendingTransition.kind === "online"
+                ? dictionary.controls.onlineExitDescription
+                : dictionary.controls.aiExitDescription
+            }
+            isSubmitting={isTransitioning}
+            onCancel={() => setPendingTransition(null)}
+            onConfirm={confirmPendingTransition}
+            title={
+              pendingTransition.kind === "online"
+                ? dictionary.controls.onlineExitTitle
+                : dictionary.controls.aiExitTitle
+            }
+          />
+        ) : null}
 
         {workspace === "local" ? (
           <LocalGameView
@@ -472,11 +624,17 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             isAiThinking={isAiThinking}
             lastMove={lastMove}
             nextPlayer={activeNextPlayer}
+            onCancelPendingSettings={() => {
+              setPendingDifficulty(null);
+              setPendingFirstPlayer(null);
+            }}
             onDifficultyChange={handleDifficultyChange}
             onFirstPlayerChange={handleFirstPlayerChange}
             onPointSelect={handlePointSelect}
-            onReset={() => resetGame()}
+            onReset={handleAiReset}
             onUndo={handleUndo}
+            pendingDifficulty={pendingDifficulty}
+            pendingFirstPlayer={pendingFirstPlayer}
             winningKey={winningKey}
           />
         ) : null}
@@ -500,6 +658,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             dictionary={dictionary}
             isInteractive={canPlayPoint}
             lastMove={lastMove}
+            onLeaveRequest={handleOnlineLeaveRequest}
             onPointSelect={handlePointSelect}
             previewStone={activeNextPlayer}
             room={friendRoom}
