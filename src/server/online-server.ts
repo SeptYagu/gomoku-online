@@ -86,11 +86,18 @@ async function processAccountApiRequest(request: IncomingMessage, response: Serv
       return;
     }
 
-    const body = await readJsonBody<{ displayName?: string }>(request);
-    const result = accountStore.createAccount({ displayName: body?.displayName ?? "" });
+    const body = await readJsonBody<{ displayName?: string; publicHandle?: string }>(request);
+    const result = accountStore.createAccount({
+      displayName: body?.displayName ?? "",
+      publicHandle: body?.publicHandle
+    });
 
     if (!result.ok) {
-      writeJson(response, result.error.code === "duplicate-name" ? 409 : 400, { error: result.error.message });
+      writeJson(
+        response,
+        result.error.code === "duplicate-name" || result.error.code === "duplicate-handle" ? 409 : 400,
+        { error: result.error.message }
+      );
       return;
     }
 

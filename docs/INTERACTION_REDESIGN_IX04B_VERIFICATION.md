@@ -69,9 +69,9 @@
 ## 未实现边界
 
 - unlisted 不是高熵 invite token，不校验邀请接收者，不支持撤销/轮换，因此不能命名为 private 或 invite-protected。内部管理员导出仍可包含 unlisted 权威记录，不属于公开发现接口。
-- IX-04A 尚未实现，`@handle` / 原始 account ID 没有解析入口；这两种标识无法旁路加入 unlisted 房。
-- public handle 唯一索引、显式 hostAccountId -> roomCode 目标和查询限流均属于下一阶段。
+- 后续 IX-04A 已实现 `@handle` / 原始 account ID 入口，但 unlisted 默认关闭房主别名策略，因此这两种标识仍不能旁路加入 unlisted 房。
+- public handle 唯一索引、显式 hostAccountId -> roomCode 目标和查询限流的验证见 `docs/INTERACTION_REDESIGN_IX04A_VERIFICATION.md`。
 - 精确大厅汇总、对局中模式保护、双方再战、完整复盘、比赛配置、挑战和赛事仍未实现。
 - 当前执行环境未开放子代理派发，本报告由主控执行，不声称为独立子代理验收。
 
-下一步进入 `IX-04A`，实现统一加入标识与公开 handle，同时保持 unlisted 默认关闭房主别名发现。
+后续状态（2026-07-10）：`IX-04A` 已完成，public 房可按策略解析房主 handle/account ID；unlisted 默认关闭该策略，仍不能通过别名旁路发现。详见 `docs/INTERACTION_REDESIGN_IX04A_VERIFICATION.md`。下一步进入 `IX-06A`。

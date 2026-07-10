@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer } from "node:net";
+import { io } from "socket.io-client";
+import type { RoomAck } from "../src/server/room-contract";
 
 type BrowserTarget = {
   webSocketDebuggerUrl?: string;
@@ -36,6 +38,19 @@ type ClickResult = {
   ok: boolean;
 };
 
+type RegisteredAccount = {
+  displayName: string;
+  playerId: string;
+  publicHandle: string;
+  token: string;
+};
+
+type SmokeSocket = {
+  disconnect: () => void;
+  emit: (event: string, ...args: unknown[]) => void;
+  once: (event: string, listener: (...args: unknown[]) => void) => void;
+};
+
 const DEFAULT_BASE_URL = "http://gomoku.yagu.ddns-ip.net";
 const START_TIMEOUT_MS = 15_000;
 const STEP_TIMEOUT_MS = 20_000;
@@ -44,6 +59,7 @@ async function main(): Promise<void> {
   const baseUrl = normalizeBaseUrl(process.argv[2] ?? DEFAULT_BASE_URL);
   const baseOrigin = new URL(baseUrl).origin;
   const hostName = `Share Host ${Date.now().toString(36)}`;
+  const hostHandle = `share_${Date.now().toString(36)}`.slice(0, 20);
   const chromePath = findChromePath();
   const port = await getFreePort();
   const userDataDir = await mkdtemp(path.join(tmpdir(), "gomoku-share-smoke-"));
@@ -67,6 +83,13 @@ async function main(): Promise<void> {
       await clickButton(cdp, "Friend room");
       await clickLobbySection(cdp, "identity");
       await setPlayerName(cdp, hostName);
+      await setRegistrationHandle(cdp, hostHandle);
+      await clickButton(cdp, "Register");
+      await waitForBodyText(cdp, `@${hostHandle}`);
+      await scrollIntoView(cdp, '[data-lobby-section="identity"]');
+      await captureScreenshot(cdp, "public-handle-registration.png");
+      await clickButton(cdp, "Sign out");
+      await waitForBodyText(cdp, "Register");
       await clickLobbySection(cdp, "friends");
       await scrollIntoView(cdp, '[data-lobby-section="friends"]');
       await captureScreenshot(cdp, "unlisted-friend-entry.png");
@@ -194,7 +217,27 @@ async function main(): Promise<void> {
       await clickTableExit(cdp);
       await waitForRoomAbsent(baseUrl, registeredInviteRoomCode);
 
+      const targetHandle = `join_${Date.now().toString(36)}`.slice(0, 20);
+      const targetAccount = await registerAccount(baseUrl, `Join Target ${Date.now().toString(36)}`, targetHandle);
+      const publicHost = await createRegisteredPublicRoom(baseUrl, targetAccount);
+
+      try {
+        const joinTargets = [
+          publicHost.roomCode.toLocaleLowerCase(),
+          `${baseOrigin}/en?room=${publicHost.roomCode}`,
+          `@${targetAccount.publicHandle.toLocaleUpperCase()}`,
+          targetAccount.playerId
+        ];
+
+        for (const target of joinTargets) {
+          await joinTargetThroughLobby(cdp, target, publicHost.roomCode);
+        }
+      } finally {
+        publicHost.disconnect();
+      }
+
       console.log(`Share URL smoke: ${baseUrl}`);
+      console.log(`PASS browser registration persists immutable public handle - @${hostHandle}`);
       console.log(`PASS create unlisted room URL - ${roomCode}`);
       console.log("PASS unlisted room is absent from the public room list");
       console.log("PASS create room locked while already in room");
@@ -203,6 +246,8 @@ async function main(): Promise<void> {
       console.log(`PASS leave room URL clear - ${clearedUrl}`);
       console.log(`PASS unlisted room remains absent after leave - ${roomCode}`);
       console.log(`PASS registered account restored before invite auto join - ${registeredInviteRoomCode}`);
+      console.log("PASS unified join input resolves code, same-origin URL, mixed-case @handle, and raw account ID");
+      console.log("PASS every join target canonicalizes URL and retained input to the room code");
     } finally {
       cdp.close();
     }
@@ -213,9 +258,128 @@ async function main(): Promise<void> {
   }
 }
 
-async function registerAccount(baseUrl: string, displayName: string): Promise<{ token: string }> {
+async function createRegisteredPublicRoom(
+  baseUrl: string,
+  account: RegisteredAccount
+): Promise<{ disconnect: () => void; roomCode: string }> {
+  const socket = await connectSocket(baseUrl);
+  const response = await emitSocketAck<RoomAck>(socket, "room:create", {
+    accountToken: account.token,
+    playerId: account.playerId,
+    playerName: account.displayName,
+    visibility: "public"
+  });
+
+  if (!response.ok) {
+    socket.disconnect();
+    throw new Error(`Registered public room create failed: ${response.error.message}`);
+  }
+
+  return {
+    disconnect: () => socket.disconnect(),
+    roomCode: response.value.snapshot.code
+  };
+}
+
+async function joinTargetThroughLobby(cdp: CdpClient, target: string, roomCode: string): Promise<void> {
+  await clickLobbySection(cdp, "friends");
+  await setLobbyJoinTarget(cdp, target);
+  await clickButton(cdp, "Join room");
+  await waitForValue(async () => {
+    const state = await evaluate<{ hasTable: boolean; roomCode: string | null }>(
+      cdp,
+      `({
+        hasTable: Boolean(document.querySelector('[data-online-view="table"]')),
+        roomCode: new URL(window.location.href).searchParams.get('room')
+      })`
+    );
+
+    return state.hasTable && state.roomCode === roomCode ? true : null;
+  }, STEP_TIMEOUT_MS);
+  if (target.startsWith("@")) {
+    await clickTableSidebarInfo(cdp);
+    await waitForBodyText(cdp, target.toLocaleLowerCase());
+    await scrollIntoView(cdp, ".table-room-info");
+    await captureScreenshot(cdp, "public-host-handle.png");
+  }
+  await clickTableExit(cdp);
+  await waitForValue(async () => {
+    const state = await evaluate<{ hasLobby: boolean; hasRoom: boolean }>(
+      cdp,
+      `({
+        hasLobby: Boolean(document.querySelector('[data-online-view="lobby"]')),
+        hasRoom: new URL(window.location.href).searchParams.has('room')
+      })`
+    );
+
+    return state.hasLobby && !state.hasRoom ? true : null;
+  }, STEP_TIMEOUT_MS);
+  await clickLobbySection(cdp, "friends");
+  const canonicalTarget = await evaluate<string>(
+    cdp,
+    `document.querySelector('[data-lobby-section="friends"] input')?.value ?? ''`
+  );
+
+  if (canonicalTarget !== roomCode) {
+    throw new Error(`Join target did not canonicalize to ${roomCode}; received ${canonicalTarget}`);
+  }
+
+  await clickLobbySection(cdp, "friends");
+}
+
+async function setLobbyJoinTarget(cdp: CdpClient, target: string): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const input = document.querySelector('[data-lobby-section="friends"] input');
+      if (!input) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, ${JSON.stringify(target)});
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return { ok: true, detail: input.value };
+    })()`
+  );
+
+  if (!result.ok || result.detail !== target) {
+    throw new Error(`Could not set join target: ${result.detail}`);
+  }
+}
+
+function connectSocket(baseUrl: string): Promise<SmokeSocket> {
+  return new Promise((resolve, reject) => {
+    const socket = io(baseUrl, {
+      forceNew: true,
+      path: "/socket.io",
+      reconnection: false,
+      timeout: STEP_TIMEOUT_MS,
+      transports: ["websocket"]
+    }) as unknown as SmokeSocket;
+    const timeout = setTimeout(() => {
+      socket.disconnect();
+      reject(new Error("Socket connection timed out"));
+    }, STEP_TIMEOUT_MS);
+
+    socket.once("connect", () => {
+      clearTimeout(timeout);
+      resolve(socket);
+    });
+    socket.once("connect_error", (error: unknown) => {
+      clearTimeout(timeout);
+      socket.disconnect();
+      reject(error instanceof Error ? error : new Error("Socket connection failed"));
+    });
+  });
+}
+
+function emitSocketAck<T>(socket: SmokeSocket, event: string, payload: unknown): Promise<T> {
+  return new Promise((resolve) => socket.emit(event, payload, resolve));
+}
+
+async function registerAccount(baseUrl: string, displayName: string, publicHandle?: string): Promise<RegisteredAccount> {
   const response = await fetch(`${baseUrl}/api/account/register`, {
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify({ displayName, publicHandle }),
     headers: {
       "accept": "application/json",
       "content-type": "application/json"
@@ -227,7 +391,7 @@ async function registerAccount(baseUrl: string, displayName: string): Promise<{ 
     throw new Error(`Account registration failed: ${response.status} ${await response.text()}`);
   }
 
-  return (await response.json()) as { token: string };
+  return (await response.json()) as RegisteredAccount;
 }
 
 class CdpClient {
@@ -444,6 +608,27 @@ async function setPlayerName(cdp: CdpClient, value: string): Promise<void> {
 
   if (!result.ok) {
     throw new Error("Could not set player name before creating room");
+  }
+}
+
+async function setRegistrationHandle(cdp: CdpClient, value: string): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const inputs = Array.from(document.querySelectorAll('[data-lobby-section="identity"] input'));
+      const input = inputs[1];
+      if (!input) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      valueSetter?.call(input, ${JSON.stringify(value)});
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return { ok: true, detail: input.value };
+    })()`
+  );
+
+  if (!result.ok || result.detail !== value) {
+    throw new Error(`Could not set registration handle: ${result.detail}`);
   }
 }
 

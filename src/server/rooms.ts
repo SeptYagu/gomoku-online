@@ -89,6 +89,7 @@ export type PresenceSnapshot = {
 };
 
 export type RoomSnapshot = {
+  allowJoinByHostHandle: boolean;
   board: Board;
   chatMessages: RoomChatMessage[];
   code: string;
@@ -96,6 +97,7 @@ export type RoomSnapshot = {
   currentTurn: Stone;
   finishReason: GameRecordFinishReason | null;
   gameId: string;
+  hostPublicHandle: string | null;
   hostSeat: RoomPlayerSeat;
   moveSeq: number;
   moves: Move[];
@@ -155,9 +157,11 @@ export type RoomCleanupResult = {
 };
 
 export type CreateRoomInput = {
+  allowJoinByHostHandle?: boolean;
   identity?: PlayerIdentityKind;
   playerId: string;
   playerName: string;
+  publicHandle?: string;
   visibility?: RoomVisibility;
 };
 
@@ -165,6 +169,7 @@ export type JoinRoomInput = {
   identity?: PlayerIdentityKind;
   playerId: string;
   playerName: string;
+  publicHandle?: string;
 };
 
 export type MoveIntent = {
@@ -175,6 +180,7 @@ export type MoveIntent = {
 
 export type RoomErrorCode =
   | "account-token-invalid"
+  | "duplicate-handle"
   | "duplicate-name"
   | "duplicate-player"
   | "chat-message-empty"
@@ -187,6 +193,7 @@ export type RoomErrorCode =
   | "game-record-not-found"
   | "guest-session-invalid"
   | "invalid-player"
+  | "invalid-handle"
   | "invalid-room-code"
   | "invalid-room-visibility"
   | "not-room-host"
@@ -230,6 +237,7 @@ type RoomPlayer = {
   joinedAt: number;
   lastChatSentAt: number | null;
   name: string;
+  publicHandle: string | null;
   ready: boolean;
   rejectedUndoMoveSeq: number | null;
   seat: RoomPlayerSeat;
@@ -244,6 +252,7 @@ type RoomSpectator = {
   joinedAt: number;
   lastChatSentAt: number | null;
   name: string;
+  publicHandle: string | null;
 };
 
 type PresenceEntry = {
@@ -255,6 +264,7 @@ type PresenceEntry = {
 };
 
 type RoomState = {
+  allowJoinByHostHandle: boolean;
   board: Board;
   chatMessages: RoomChatMessage[];
   code: string;
@@ -320,6 +330,7 @@ type RoomLifecycleLimits = {
 export class RoomStore {
   private readonly codeGenerator: () => string;
   private readonly gameRecordStore: GameRecordStore;
+  private readonly hostAccountIdByRoomCode = new Map<string, string>();
   private readonly lifecycleLimits: RoomLifecycleLimits;
   private lobbyVersion = 0;
   private nextPublicChatMessageId = 1;
@@ -329,6 +340,7 @@ export class RoomStore {
   private presenceVersion = 0;
   private readonly publicChatLastSentAt = new Map<string, number>();
   private readonly publicChatMessages: PublicChatMessage[] = [];
+  private readonly roomCodeByHostAccountId = new Map<string, string>();
   private readonly rooms = new Map<string, RoomState>();
   private readonly transientIdentityLimit: number;
 
@@ -366,7 +378,9 @@ export class RoomStore {
     }
 
     const now = this.now();
+    const allowJoinByHostHandle = input.allowJoinByHostHandle ?? visibility === "public";
     const room: RoomState = {
+      allowJoinByHostHandle,
       board: createBoard(),
       chatMessages: [],
       code,
@@ -406,6 +420,7 @@ export class RoomStore {
     };
 
     this.rooms.set(code, room);
+    this.syncHostTarget(room, true);
 
     return success(getRoomSnapshot(room));
   }
@@ -536,6 +551,7 @@ export class RoomStore {
       joinedAt: now,
       lastChatSentAt: participant.lastChatSentAt,
       name: participant.name,
+      publicHandle: participant.publicHandle,
       ready: false,
       rejectedUndoMoveSeq: null,
       seat,
@@ -554,6 +570,7 @@ export class RoomStore {
     }
 
     this.markRoomListed(room);
+    this.syncHostTarget(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -578,6 +595,7 @@ export class RoomStore {
     }
 
     existingParticipant.name = player.name;
+    existingParticipant.publicHandle = player.publicHandle;
     existingParticipant.connected = true;
     existingParticipant.disconnectedAt = null;
 
@@ -587,6 +605,7 @@ export class RoomStore {
 
     room.updatedAt = this.now();
     this.markRoomListed(room);
+    this.syncHostTarget(room);
 
     return success(getRoomSnapshot(room));
   }
@@ -879,6 +898,7 @@ export class RoomStore {
       removeSpectator(room, playerId);
       room.updatedAt = now;
       this.markRoomListed(room);
+      this.syncHostTarget(room);
       return success(this.deleteIfEmpty(room) ?? getRoomSnapshot(room));
     }
 
@@ -890,6 +910,7 @@ export class RoomStore {
         updateRoomStatus(room, now);
       }
       this.markRoomListed(room);
+      this.syncHostTarget(room);
       return success(this.deleteIfEmpty(room) ?? getRoomSnapshot(room));
     }
 
@@ -902,10 +923,12 @@ export class RoomStore {
     }
 
     room.updatedAt = now;
+    this.syncHostTarget(room);
 
     if (!hasConnectedParticipant(room)) {
       abandonRoom(room, now);
       this.captureFinishedGame(room);
+      this.clearHostTarget(room.code);
       this.rooms.delete(room.code);
       if (room.visibility === "public") {
         this.nextLobbyVersion();
@@ -953,6 +976,7 @@ export class RoomStore {
     }
 
     this.markRoomListed(room);
+    this.syncHostTarget(room);
 
     return success(this.deleteIfEmpty(room) ?? getRoomSnapshot(room));
   }
@@ -1017,6 +1041,7 @@ export class RoomStore {
 
     found.value.room.updatedAt = this.now();
     this.markRoomListed(found.value.room);
+    this.syncHostTarget(found.value.room);
 
     return success(getRoomSnapshot(found.value.room));
   }
@@ -1030,6 +1055,7 @@ export class RoomStore {
 
     if (advanceRoomLifecycle(room, this.now(), this.lifecycleLimits)) {
       this.captureFinishedGame(room);
+      this.syncHostTarget(room);
     }
 
     if (this.deleteIfExpired(room, this.now())) {
@@ -1048,6 +1074,7 @@ export class RoomStore {
       if (changed) {
         this.captureFinishedGame(room);
         this.markRoomListed(room);
+        this.syncHostTarget(room);
       }
 
       this.deleteIfExpired(room, now);
@@ -1374,6 +1401,7 @@ export class RoomStore {
       if (changed) {
         this.captureFinishedGame(room);
         this.markRoomListed(room);
+        this.syncHostTarget(room);
         updatedSnapshots.push(getRoomSnapshot(room));
       }
     }
@@ -1383,6 +1411,21 @@ export class RoomStore {
 
   getLobbyVersion(): number {
     return this.lobbyVersion;
+  }
+
+  resolveHostRoom(accountId: string): string | null {
+    const normalizedAccountId = accountId.trim();
+    const roomCode = normalizedAccountId ? this.roomCodeByHostAccountId.get(normalizedAccountId) : null;
+    const room = roomCode ? this.getRoom(roomCode) : null;
+
+    if (!room || !this.isResolvableHostTarget(room, normalizedAccountId)) {
+      if (roomCode) {
+        this.clearHostTarget(roomCode);
+      }
+      return null;
+    }
+
+    return room.code;
   }
 
   getRoomListItem(roomCode: string): RoomListItem | null {
@@ -1408,6 +1451,7 @@ export class RoomStore {
 
     const snapshot = getRoomSnapshot(room);
 
+    this.clearHostTarget(room.code);
     this.rooms.delete(room.code);
     if (room.visibility === "public") {
       this.nextLobbyVersion();
@@ -1431,6 +1475,7 @@ export class RoomStore {
 
     if (advanceRoomLifecycle(room, this.now(), this.lifecycleLimits)) {
       this.captureFinishedGame(room);
+      this.syncHostTarget(room);
     }
 
     if (this.deleteIfExpired(room, this.now())) {
@@ -1513,6 +1558,7 @@ export class RoomStore {
       return false;
     }
 
+    this.clearHostTarget(room.code);
     this.rooms.delete(room.code);
 
     if (room.visibility === "public") {
@@ -1529,6 +1575,7 @@ export class RoomStore {
 
     const snapshot = getRoomSnapshot(room);
 
+    this.clearHostTarget(room.code);
     this.rooms.delete(room.code);
     if (room.visibility === "public") {
       this.nextLobbyVersion();
@@ -1541,6 +1588,51 @@ export class RoomStore {
     if (room.visibility === "public") {
       room.listVersion = this.nextLobbyVersion();
     }
+  }
+
+  private clearHostTarget(roomCode: string): void {
+    const accountId = this.hostAccountIdByRoomCode.get(roomCode);
+
+    if (accountId && this.roomCodeByHostAccountId.get(accountId) === roomCode) {
+      this.roomCodeByHostAccountId.delete(accountId);
+    }
+
+    this.hostAccountIdByRoomCode.delete(roomCode);
+  }
+
+  private isResolvableHostTarget(room: RoomState, accountId?: string): boolean {
+    const host = room.players.find((player) => player.seat === room.hostSeat);
+
+    return Boolean(
+      room.allowJoinByHostHandle &&
+        room.status !== "abandoned" &&
+        host?.connected &&
+        host.identity === "registered" &&
+        host.publicHandle &&
+        (!accountId || host.id === accountId)
+    );
+  }
+
+  private syncHostTarget(room: RoomState, replaceExisting = false): void {
+    this.clearHostTarget(room.code);
+
+    const host = room.players.find((player) => player.seat === room.hostSeat);
+
+    if (!host || !this.isResolvableHostTarget(room, host.id)) {
+      return;
+    }
+
+    const existingRoomCode = this.roomCodeByHostAccountId.get(host.id);
+
+    if (existingRoomCode && existingRoomCode !== room.code) {
+      if (!replaceExisting) {
+        return;
+      }
+      this.hostAccountIdByRoomCode.delete(existingRoomCode);
+    }
+
+    this.roomCodeByHostAccountId.set(host.id, room.code);
+    this.hostAccountIdByRoomCode.set(room.code, host.id);
   }
 
   private captureFinishedGame(room: RoomState): void {
@@ -1980,16 +2072,19 @@ function markUndoRequestRejected(room: RoomState, undoRequest: UndoRequestSnapsh
   room.updatedAt = now;
 }
 
-function normalizePlayerInput(input: CreateRoomInput | JoinRoomInput): Pick<RoomPlayer, "id" | "identity" | "name"> | null {
+function normalizePlayerInput(
+  input: CreateRoomInput | JoinRoomInput
+): Pick<RoomPlayer, "id" | "identity" | "name" | "publicHandle"> | null {
   const id = input.playerId.trim();
   const name = input.playerName.trim();
   const identity = input.identity === "registered" ? "registered" : "guest";
+  const publicHandle = identity === "registered" ? input.publicHandle?.trim().toLowerCase() || null : null;
 
   if (!id || !name) {
     return null;
   }
 
-  return { id, identity, name };
+  return { id, identity, name, publicHandle };
 }
 
 function findParticipant(room: RoomState, playerId: string): RoomPlayer | RoomSpectator | null {
@@ -2042,7 +2137,10 @@ function namesMatch(first: string, second: string): boolean {
 }
 
 function getRoomSnapshot(room: RoomState): RoomSnapshot {
+  const host = room.players.find((player) => player.seat === room.hostSeat);
+
   return {
+    allowJoinByHostHandle: room.allowJoinByHostHandle,
     board: room.board.map((row) => [...row]),
     chatMessages: room.chatMessages.map((message) => ({ ...message })),
     code: room.code,
@@ -2050,6 +2148,7 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
     currentTurn: room.currentTurn,
     finishReason: room.finishReason,
     gameId: room.gameId,
+    hostPublicHandle: room.allowJoinByHostHandle ? host?.publicHandle ?? null : null,
     hostSeat: room.hostSeat,
     moveSeq: room.moveSeq,
     moves: room.moves.map((move) => ({ ...move })),

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -16,7 +16,8 @@ describe("AccountStore", () => {
       expect(created).toMatchObject({
         displayName: "Alice Account",
         identity: "registered",
-        playerId: expect.stringMatching(/^acct_/)
+        playerId: expect.stringMatching(/^acct_/),
+        publicHandle: "alice_account"
       });
       expect(created.token).toContain(".");
       expect(firstStore.authenticate(created.token)).toMatchObject({
@@ -32,9 +33,67 @@ describe("AccountStore", () => {
 
       expect(persisted.authenticate(created.token)).toMatchObject({
         displayName: "Alice Account",
-        playerId: created.playerId
+        playerId: created.playerId,
+        publicHandle: created.publicHandle
       });
       expect(readRawFile(filePath)).not.toContain(created.token);
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("normalizes, indexes, and rejects invalid or duplicate public handles", () => {
+    const store = new AccountStore({ filePath: false });
+    const explicit = expectOk(store.createAccount({ displayName: "Alice", publicHandle: " @Alice_Play " }));
+    const generated = expectOk(store.createAccount({ displayName: "Alice Play" }));
+
+    expect(explicit.publicHandle).toBe("alice_play");
+    expect(generated.publicHandle).not.toBe(explicit.publicHandle);
+    expect(generated.publicHandle).toMatch(/^alice_play_[a-z0-9]+$/);
+    expect(store.findByPublicHandle("@ALICE_PLAY")).toMatchObject({ playerId: explicit.playerId });
+    expect(store.findByPlayerId(explicit.playerId)).toMatchObject({ publicHandle: "alice_play" });
+    expect(store.createAccount({ displayName: "Bob", publicHandle: "Alice_Play" })).toMatchObject({
+      ok: false,
+      error: { code: "duplicate-handle" }
+    });
+    expect(store.createAccount({ displayName: "Cara", publicHandle: "admin" })).toMatchObject({
+      ok: false,
+      error: { code: "invalid-handle" }
+    });
+    expect(store.createAccount({ displayName: "Dana", publicHandle: "bad handle" })).toMatchObject({
+      ok: false,
+      error: { code: "invalid-handle" }
+    });
+  });
+
+  it("deterministically migrates legacy account records without public handles", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-account-handle-migration-"));
+    const filePath = join(tempDir, "accounts.jsonl");
+    const legacyEntries = ["acct_legacy_one", "acct_legacy_two"].map((id) => ({
+      account: {
+        createdAt: 1,
+        displayName: "Legacy Player",
+        id,
+        lastSeenAt: 1,
+        tokenHash: "legacy-hash",
+        updatedAt: 1
+      },
+      type: "account",
+      writtenAt: 1
+    }));
+
+    try {
+      writeFileSync(filePath, `${legacyEntries.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
+      const firstLoad = new AccountStore({ filePath });
+      const firstHandles = legacyEntries.map((entry) => firstLoad.findByPlayerId(entry.account.id)?.publicHandle);
+      const secondLoad = new AccountStore({ filePath });
+      const secondHandles = legacyEntries.map((entry) => secondLoad.findByPlayerId(entry.account.id)?.publicHandle);
+
+      expect(firstHandles[0]).toBe("legacy_player");
+      expect(firstHandles[1]).toMatch(/^legacy_player_[a-z0-9]+$/);
+      expect(new Set(firstHandles).size).toBe(2);
+      expect(secondHandles).toEqual(firstHandles);
+      expect(readRawFile(filePath)).toBe(`${legacyEntries.map((entry) => JSON.stringify(entry)).join("\n")}\n`);
     } finally {
       rmSync(tempDir, { force: true, recursive: true });
     }
@@ -84,7 +143,8 @@ describe("AccountStore", () => {
         value: {
           identity: "registered",
           playerId: account.playerId,
-          playerName: "Ranked Player"
+          playerName: "Ranked Player",
+          publicHandle: account.publicHandle
         }
       });
     expect(

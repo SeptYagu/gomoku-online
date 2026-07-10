@@ -75,7 +75,7 @@ export type FriendRoomController = {
   error: string | null;
   inviteUrl: string;
   isJoiningRoom: boolean;
-  joinCode: string;
+  joinTarget: string;
   joinListedRoom: (roomCode: string) => void;
   joinRoom: () => void;
   leaveRoom: () => void;
@@ -97,6 +97,7 @@ export type FriendRoomController = {
   publicChatMessages: PublicChatMessage[];
   publicChatStatus: "idle" | "loading" | "ready" | "error";
   publicChatText: string;
+  registrationHandle: string;
   ready: boolean;
   nextLeaderboardPage: () => void;
   previousLeaderboardPage: () => void;
@@ -114,12 +115,13 @@ export type FriendRoomController = {
   sendChatMessage: () => void;
   signOutAccount: () => void;
   setChatText: (value: string) => void;
-  setJoinCode: (value: string) => void;
+  setJoinTarget: (value: string) => void;
   setLeaderboardIdentity: (identity: LeaderboardIdentity) => void;
   setLeaderboardSearch: (value: string) => void;
   setLeaderboardScope: (scope: LeaderboardScope) => void;
   setPlayerName: (value: string) => void;
   setPublicChatText: (value: string) => void;
+  setRegistrationHandle: (value: string) => void;
   findMatch: () => void;
   sitRoom: () => void;
   submitLeaderboardSearch: () => void;
@@ -150,7 +152,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     readAccountToken() ? "loading" : "guest"
   );
   const [playerName, setPlayerNameState] = useState(getInitialPlayerName);
-  const [joinCode, setJoinCodeState] = useState(getInitialJoinCode);
+  const [joinTarget, setJoinTargetState] = useState(getInitialJoinTarget);
   const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
   const [lobbyStatus, setLobbyStatus] = useState<FriendRoomController["lobbyStatus"]>("idle");
   const [chatText, setChatText] = useState("");
@@ -159,6 +161,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   const [publicChatMessages, setPublicChatMessages] = useState<PublicChatMessage[]>([]);
   const [publicChatStatus, setPublicChatStatus] = useState<FriendRoomController["publicChatStatus"]>("idle");
   const [publicChatText, setPublicChatText] = useState("");
+  const [registrationHandle, setRegistrationHandleState] = useState("");
   const [presenceUsers, setPresenceUsers] = useState<UserPresenceSnapshot[]>([]);
   const [presenceStatus, setPresenceStatus] = useState<FriendRoomController["presenceStatus"]>("idle");
   const [leaderboard, setLeaderboard] = useState<LeaderboardSnapshot | null>(null);
@@ -319,7 +322,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
 
     setError(null);
     setRoom(response.value);
-    setJoinCodeState(response.value.snapshot.code);
+    setJoinTargetState(response.value.snapshot.code);
     syncRoomUrl(response.value.snapshot.code);
     persistRoomSession({
       accountToken: response.value.identity === "registered" ? account?.token ?? readAccountToken() ?? undefined : undefined,
@@ -370,7 +373,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     let player = getActivePlayer();
 
     setPlayerNameState(player.playerName);
-    setJoinCodeState(nextRoomCode);
+    setJoinTargetState(nextRoomCode);
     persistPlayerName(player.playerName);
     socket.emit(
       "room:join",
@@ -404,9 +407,53 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     );
   }, [applyRoomAck, enabled, ensureSocket, getActivePlayer, identityReady]);
 
+  const joinRoomByTarget = useCallback((target: string, retryWithFreshIdentity = true) => {
+    if (!enabled || !identityReady) {
+      return;
+    }
+
+    const nextTarget = target.trim();
+
+    if (!nextTarget) {
+      setIsJoiningRoom(false);
+      setError("Enter a room link, code, @handle, or account ID.");
+      return;
+    }
+
+    setIsJoiningRoom(true);
+    const socket = ensureSocket();
+    let player = getActivePlayer();
+
+    setPlayerNameState(player.playerName);
+    setJoinTargetState(nextTarget);
+    persistPlayerName(player.playerName);
+    socket.emit("room:join-target", { ...player, target: nextTarget }, (response: RoomAck) => {
+      if (
+        !response.ok &&
+        !player.accountToken &&
+        retryWithFreshIdentity &&
+        (response.error.code === "duplicate-player" ||
+          response.error.code === "duplicate-name" ||
+          response.error.code === "guest-session-invalid")
+      ) {
+        clearGuestToken();
+        player = {
+          playerId: createAndPersistPlayerId(),
+          playerName: createGuestPlayerName()
+        };
+        setPlayerNameState(player.playerName);
+        persistPlayerName(player.playerName);
+        socket.emit("room:join-target", { ...player, target: nextTarget }, applyRoomAck);
+        return;
+      }
+
+      applyRoomAck(response);
+    });
+  }, [applyRoomAck, enabled, ensureSocket, getActivePlayer, identityReady]);
+
   const joinRoom = useCallback(() => {
-    joinRoomByCode(joinCode);
-  }, [joinCode, joinRoomByCode]);
+    joinRoomByTarget(joinTarget);
+  }, [joinRoomByTarget, joinTarget]);
 
   const joinListedRoom = useCallback((roomCode: string) => {
     joinRoomByCode(roomCode);
@@ -780,7 +827,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
 
     setAccountStatus("loading");
     void fetch("/api/account/register", {
-      body: JSON.stringify({ displayName }),
+      body: JSON.stringify({ displayName, publicHandle: registrationHandle.trim() || undefined }),
       headers: {
         "accept": "application/json",
         "content-type": "application/json"
@@ -801,6 +848,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
         setAccount(session);
         setAccountStatus("registered");
         setPlayerNameState(session.displayName);
+        setRegistrationHandleState(session.publicHandle);
         persistPlayerName(session.displayName);
         setError(null);
       })
@@ -808,13 +856,14 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
         setAccountStatus("error");
         setError(accountError instanceof Error ? accountError.message : "Account request failed.");
       });
-  }, [playerName]);
+  }, [playerName, registrationHandle]);
 
   const signOutAccount = useCallback(() => {
     clearAccountToken();
     clearGuestToken();
     setAccount(null);
     setAccountStatus("guest");
+    setRegistrationHandleState("");
     createAndPersistPlayerId();
     clearRoomSession();
   }, []);
@@ -824,8 +873,12 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     persistPlayerName(value);
   }, []);
 
-  const setJoinCode = useCallback((value: string) => {
-    setJoinCodeState(value.toUpperCase());
+  const setJoinTarget = useCallback((value: string) => {
+    setJoinTargetState(value);
+  }, []);
+
+  const setRegistrationHandle = useCallback((value: string) => {
+    setRegistrationHandleState(value.replace(/^@/, ""));
   }, []);
 
   const setLeaderboardScope = useCallback((scope: LeaderboardScope) => {
@@ -895,6 +948,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
         setAccount(session);
         setAccountStatus("registered");
         setPlayerNameState(session.displayName);
+        setRegistrationHandleState(session.publicHandle);
         persistPlayerName(session.displayName);
       })
       .catch(() => {
@@ -1052,7 +1106,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     error,
     inviteUrl,
     isJoiningRoom: enabled && isJoiningRoom,
-    joinCode,
+    joinTarget,
     joinListedRoom,
     joinRoom,
     leaveRoom,
@@ -1074,6 +1128,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     publicChatMessages,
     publicChatStatus,
     publicChatText,
+    registrationHandle,
     ready,
     nextLeaderboardPage,
     previousLeaderboardPage,
@@ -1091,12 +1146,13 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     sendChatMessage,
     signOutAccount,
     setChatText,
-    setJoinCode,
+    setJoinTarget,
     setLeaderboardIdentity,
     setLeaderboardSearch,
     setLeaderboardScope,
     setPlayerName,
     setPublicChatText,
+    setRegistrationHandle,
     findMatch,
     sitRoom,
     submitLeaderboardSearch,
@@ -1190,7 +1246,7 @@ function getInitialPlayerName(): string {
   return playerName;
 }
 
-function getInitialJoinCode(): string {
+function getInitialJoinTarget(): string {
   if (typeof window === "undefined") {
     return "";
   }

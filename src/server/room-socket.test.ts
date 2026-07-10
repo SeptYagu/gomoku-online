@@ -381,6 +381,167 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("joins a public registered host through code, same-origin URL, handle, and account ID", async () => {
+    const accountStore = new AccountStore({ filePath: false });
+    const hostAccount = expectAccountOk(
+      accountStore.createAccount({ displayName: "Target Host", publicHandle: "target_host" })
+    );
+    const harness = await createSocketHarness({ accountStore });
+
+    try {
+      const host = await harness.connectClient();
+      const createAck = await emitAck(host, "room:create", {
+        accountToken: hostAccount.token,
+        playerId: "ignored",
+        playerName: "Ignored",
+        visibility: "public"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+      const targets = [
+        roomCode.toLocaleLowerCase(),
+        `${harness.url}/en?room=${roomCode}`,
+        "@TARGET_HOST",
+        hostAccount.playerId
+      ];
+
+      for (const [index, target] of targets.entries()) {
+        const client = await harness.connectClient();
+        const joined = await emitAck(client, "room:join-target", {
+          playerId: `target-guest-${index}`,
+          playerName: `Target Guest ${index}`,
+          target
+        });
+
+        expect(joined).toMatchObject({ ok: true, value: { snapshot: { code: roomCode } } });
+        expect(joined.ok ? joined.value.role : null).toBe(index < 1 ? "player" : "spectator");
+      }
+
+      const rejectedUrlClient = await harness.connectClient();
+      expect(
+        await emitAck(rejectedUrlClient, "room:join-target", {
+          playerId: "cross-origin-guest",
+          playerName: "Cross Origin",
+          target: `https://example.com/?room=${roomCode}`
+        })
+      ).toMatchObject({ ok: false, error: { code: "room-not-found" } });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("does not resolve unlisted rooms by host handle or account ID", async () => {
+    const accountStore = new AccountStore({ filePath: false });
+    const hostAccount = expectAccountOk(
+      accountStore.createAccount({ displayName: "Hidden Host", publicHandle: "hidden_host" })
+    );
+    const harness = await createSocketHarness({ accountStore });
+
+    try {
+      const host = await harness.connectClient();
+      const createAck = await emitAck(host, "room:create", {
+        accountToken: hostAccount.token,
+        playerId: "ignored",
+        playerName: "Ignored",
+        visibility: "unlisted"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+
+      for (const [index, target] of ["@hidden_host", hostAccount.playerId].entries()) {
+        const client = await harness.connectClient();
+        expect(
+          await emitAck(client, "room:join-target", {
+            playerId: `hidden-alias-guest-${index}`,
+            playerName: `Hidden Alias ${index}`,
+            target
+          })
+        ).toMatchObject({ ok: false, error: { code: "room-not-found" } });
+      }
+
+      const codeClient = await harness.connectClient();
+      const urlClient = await harness.connectClient();
+      expect(
+        await emitAck(codeClient, "room:join-target", {
+          playerId: "hidden-code-guest",
+          playerName: "Hidden Code",
+          target: roomCode
+        })
+      ).toMatchObject({ ok: true, value: { snapshot: { code: roomCode } } });
+      expect(
+        await emitAck(urlClient, "room:join-target", {
+          playerId: "hidden-url-guest",
+          playerName: "Hidden URL",
+          target: `${harness.url}/?room=${roomCode}`
+        })
+      ).toMatchObject({ ok: true, value: { snapshot: { code: roomCode } } });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("rate limits handle enumeration across reconnects without changing not-found errors", async () => {
+    const accountStore = new AccountStore({ filePath: false });
+    const hostAccount = expectAccountOk(
+      accountStore.createAccount({ displayName: "Rate Host", publicHandle: "rate_host" })
+    );
+    const requesterAccount = expectAccountOk(
+      accountStore.createAccount({ displayName: "Rate Requester", publicHandle: "rate_requester" })
+    );
+    const harness = await createSocketHarness({ accountStore });
+
+    try {
+      const host = await harness.connectClient();
+      const requester = await harness.connectClient();
+      const createAck = await emitAck(host, "room:create", {
+        accountToken: hostAccount.token,
+        playerId: "ignored",
+        playerName: "Ignored"
+      });
+
+      expect(createAck).toMatchObject({ ok: true });
+
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        expect(
+          await emitAck(requester, "room:join-target", {
+            accountToken: requesterAccount.token,
+            playerId: "ignored",
+            playerName: "Ignored",
+            target: `@missing_${attempt}`
+          })
+        ).toMatchObject({ ok: false, error: { code: "room-not-found" } });
+      }
+
+      expect(
+        await emitAck(requester, "room:join-target", {
+          accountToken: requesterAccount.token,
+          playerId: "ignored",
+          playerName: "Ignored",
+          target: "@rate_host"
+        })
+      ).toMatchObject({ ok: false, error: { code: "room-not-found" } });
+
+      const freshRequester = await harness.connectClient();
+      expect(
+        await emitAck(freshRequester, "room:join-target", {
+          playerId: "fresh-rate-requester",
+          playerName: "Fresh Requester",
+          target: "@rate_host"
+        })
+      ).toMatchObject({ ok: false, error: { code: "room-not-found" } });
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("reuses the current waiting room when the same socket creates again", async () => {
     const harness = await createSocketHarness();
 
@@ -1214,7 +1375,8 @@ async function createSocketHarness(
       await waitForEvent(client, "connect");
 
       return client;
-    }
+    },
+    url
   };
 }
 

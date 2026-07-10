@@ -80,6 +80,107 @@ describe("RoomStore", () => {
     ).toMatchObject({ ok: false, error: { code: "invalid-room-visibility" } });
   });
 
+  it("maintains one explicit registered host target through transfer, disconnect, and rebind", () => {
+    const store = createTestRoomStore(["ROOM01", "ROOM02", "ROOM03"]);
+    const first = expectOk(
+      store.createRoom({
+        identity: "registered",
+        playerId: "acct_host",
+        playerName: "Host",
+        publicHandle: "host_one"
+      })
+    );
+
+    expect(first).toMatchObject({
+      allowJoinByHostHandle: true,
+      hostPublicHandle: "host_one",
+      visibility: "public"
+    });
+    expect(store.resolveHostRoom("acct_host")).toBe(first.code);
+
+    expectOk(
+      store.joinRoom(first.code, {
+        identity: "registered",
+        playerId: "acct_guest",
+        playerName: "Guest",
+        publicHandle: "guest_two"
+      })
+    );
+    expectOk(store.leaveRoom(first.code, "acct_host"));
+    expect(store.resolveHostRoom("acct_host")).toBeNull();
+    expect(store.resolveHostRoom("acct_guest")).toBe(first.code);
+    expect(expectOk(store.getSnapshot(first.code)).hostPublicHandle).toBe("guest_two");
+
+    const second = expectOk(
+      store.createRoom({
+        identity: "registered",
+        playerId: "acct_guest",
+        playerName: "Guest",
+        publicHandle: "guest_two"
+      })
+    );
+
+    expect(store.resolveHostRoom("acct_guest")).toBe(second.code);
+    expect(store.deleteRoom(second.code)?.code).toBe(second.code);
+    expect(store.resolveHostRoom("acct_guest")).toBeNull();
+
+    const unlisted = expectOk(
+      store.createRoom({
+        identity: "registered",
+        playerId: "acct_host",
+        playerName: "Host",
+        publicHandle: "host_one",
+        visibility: "unlisted"
+      })
+    );
+
+    expect(unlisted.allowJoinByHostHandle).toBe(false);
+    expect(unlisted.hostPublicHandle).toBeNull();
+    expect(store.resolveHostRoom("acct_host")).toBeNull();
+
+    const guestStore = createTestRoomStore(["GUEST1"]);
+    const guestRoom = expectOk(guestStore.createRoom({ playerId: "guest-host", playerName: "Guest Host" }));
+
+    expect(guestRoom.allowJoinByHostHandle).toBe(true);
+    expect(guestRoom.hostPublicHandle).toBeNull();
+    expect(guestStore.resolveHostRoom("guest-host")).toBeNull();
+  });
+
+  it("pauses a playing host alias while disconnected and restores it on reconnect", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+    const room = expectOk(
+      store.createRoom({
+        identity: "registered",
+        playerId: "acct_host",
+        playerName: "Host",
+        publicHandle: "host_live"
+      })
+    );
+
+    expectOk(store.joinRoom(room.code, { playerId: "guest", playerName: "Guest" }));
+    expectOk(store.setPlayerReady(room.code, "acct_host"));
+    expectOk(store.setPlayerReady(room.code, "guest"));
+    expect(store.resolveHostRoom("acct_host")).toBe(room.code);
+    expect(
+      expectOk(store.joinRoom(store.resolveHostRoom("acct_host")!, {
+        playerId: "playing-watcher",
+        playerName: "Playing Watcher"
+      })).spectators
+    ).toContainEqual(expect.objectContaining({ name: "Playing Watcher" }));
+
+    expectOk(store.markDisconnected(room.code, "acct_host"));
+    expect(store.resolveHostRoom("acct_host")).toBeNull();
+    expectOk(store.restoreConnection(room.code, "acct_host"));
+    expect(store.resolveHostRoom("acct_host")).toBe(room.code);
+    expectOk(store.resignGame(room.code, "guest"));
+    const finishedTarget = store.resolveHostRoom("acct_host");
+
+    expect(finishedTarget).toBe(room.code);
+    expect(
+      expectOk(store.joinRoom(finishedTarget!, { playerId: "finished-watcher", playerName: "Watcher" })).spectators
+    ).toContainEqual(expect.objectContaining({ name: "Watcher" }));
+  });
+
   it("normalizes room codes and rejects duplicate or invalid joins", () => {
     const store = createTestRoomStore(["ROOM01"]);
     expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));

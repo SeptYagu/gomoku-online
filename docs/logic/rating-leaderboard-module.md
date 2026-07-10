@@ -465,6 +465,7 @@ Game 增加：
   - `GET /api/account/session` 校验 bearer token。
   - 默认 JSONL 持久化到 `data/accounts/accounts.jsonl`。
   - 只保存 token hash，不保存明文 token。
+  - IX-04A 新增不可变 `publicHandle`：3–20 位 ASCII、当前 store 内大小写无关唯一；旧记录确定性迁移。
 - Socket.IO 入口支持 `accountToken`：
   - `room:create`
   - `room:join`
@@ -473,10 +474,12 @@ Game 增加：
   - `presence:join`
   - `public-chat:send`
 - 有效 token 由服务端解析为 registered `playerId` 和 `displayName`，忽略客户端伪造的 playerId/playerName。
+- 有效 token 同时提供服务端权威 `publicHandle`；客户端不能通过 socket payload 伪造 registered handle。
 - `RoomStore` 内玩家、观战者、presence、服务端权威棋谱都保留 `identity`。
 - `GameRecordStore` 的 Profile 和 Leaderboard 读回会继承棋谱里的 `registered` / `guest` 身份。
 - 前端好友房面板新增账号条：
   - 使用当前昵称注册轻账号。
+  - 可在首次注册时选择一次公开 handle，之后以只读 `@handle` 展示。
   - token 存入浏览器 localStorage。
   - Sign out 后回到 guest。
 

@@ -58,7 +58,10 @@ export type GameDictionary = {
     gameRecords: string;
     gamesCount: string;
     guestAccount: string;
+    hostHandle: string;
     joinRoom: string;
+    joinTarget: string;
+    joinTargetPlaceholder: string;
     joinableRooms: string;
     joiningRoom: string;
     leaderboard: string;
@@ -103,6 +106,8 @@ export type GameDictionary = {
     profileWins: string;
     publicChat: string;
     publicChatPlaceholder: string;
+    publicHandle: string;
+    publicHandlePlaceholder: string;
     publicRoom: string;
     publicRoomNotice: string;
     ready: string;
@@ -238,7 +243,7 @@ const en = {
       cancelWaiting: "Cancel waiting",
       copied: "Copied",
       copyInvite: "Copy invite",
-      createOrJoin: "Create a room or enter a code.",
+      createOrJoin: "Create an unlisted room or enter a link, code, or @handle.",
       createRoom: "Create room",
       createUnlistedRoom: "Create unlisted room",
       disconnected: "Disconnected",
@@ -253,7 +258,10 @@ const en = {
       gameRecords: "Game records",
       gamesCount: "Games {count}",
       guestAccount: "Guest",
+      hostHandle: "Host handle",
       joinRoom: "Join room",
+      joinTarget: "Room link, code, or @handle",
+      joinTargetPlaceholder: "https://… / ABC123 / @alice",
       joinableRooms: "Rooms to join",
       joiningRoom: "Joining room",
       leaderboard: "Rankings",
@@ -298,6 +306,8 @@ const en = {
       profileWins: "Wins {count}",
       publicChat: "Public chat",
       publicChatPlaceholder: "Message everyone",
+      publicHandle: "Public handle",
+      publicHandlePlaceholder: "alice (optional)",
       publicRoom: "Public",
       publicRoomNotice: "Rooms created here are public and appear in the lobby. Share the invite after creating one.",
       ready: "Ready",
@@ -429,7 +439,7 @@ const zh = {
       cancelWaiting: "取消等待",
       copied: "已复制",
       copyInvite: "复制邀请",
-      createOrJoin: "创建房间或输入房间码。",
+      createOrJoin: "创建不公开列出房间，或输入链接、房间码、@标识。",
       createRoom: "创建房间",
       createUnlistedRoom: "创建不公开列出房间",
       disconnected: "已断开",
@@ -444,7 +454,10 @@ const zh = {
       gameRecords: "棋谱记录",
       gamesCount: "对局 {count}",
       guestAccount: "游客",
+      hostHandle: "房主标识",
       joinRoom: "加入房间",
+      joinTarget: "房间链接、房间码或 @标识",
+      joinTargetPlaceholder: "https://… / ABC123 / @alice",
       joinableRooms: "可加入",
       joiningRoom: "正在进入房间",
       leaderboard: "排行榜",
@@ -489,6 +502,8 @@ const zh = {
       profileWins: "胜 {count}",
       publicChat: "公共聊天",
       publicChatPlaceholder: "发送公共消息",
+      publicHandle: "公开标识",
+      publicHandlePlaceholder: "alice（可选）",
       publicRoom: "公开",
       publicRoomNotice: "当前创建的房间会显示在公开大厅。创建后可复制邀请链接分享。",
       ready: "已准备",
@@ -620,7 +635,7 @@ const fr = {
       cancelWaiting: "Annuler l'attente",
       copied: "Copié",
       copyInvite: "Copier l'invitation",
-      createOrJoin: "Créez un salon ou entrez un code.",
+      createOrJoin: "Créez un salon non répertorié ou entrez un lien, un code ou un @identifiant.",
       createRoom: "Créer un salon",
       createUnlistedRoom: "Créer un salon non répertorié",
       disconnected: "Déconnecté",
@@ -635,7 +650,10 @@ const fr = {
       gameRecords: "Parties",
       gamesCount: "Parties {count}",
       guestAccount: "Invité",
+      hostHandle: "Identifiant de l'hôte",
       joinRoom: "Rejoindre",
+      joinTarget: "Lien, code ou @identifiant",
+      joinTargetPlaceholder: "https://… / ABC123 / @alice",
       joinableRooms: "Salons à rejoindre",
       joiningRoom: "Connexion au salon",
       leaderboard: "Classement",
@@ -680,6 +698,8 @@ const fr = {
       profileWins: "Victoires {count}",
       publicChat: "Chat public",
       publicChatPlaceholder: "Message public",
+      publicHandle: "Identifiant public",
+      publicHandlePlaceholder: "alice (facultatif)",
       publicRoom: "Public",
       publicRoomNotice: "Les salons créés ici sont publics et apparaissent dans le hall. Partagez l'invitation après création.",
       ready: "Prêt",
@@ -811,7 +831,7 @@ const es = {
       cancelWaiting: "Cancelar espera",
       copied: "Copiado",
       copyInvite: "Copiar invitación",
-      createOrJoin: "Crea una sala o introduce un código.",
+      createOrJoin: "Crea una sala no listada o introduce un enlace, código o @identificador.",
       createRoom: "Crear sala",
       createUnlistedRoom: "Crear sala no listada",
       disconnected: "Desconectado",
@@ -826,7 +846,10 @@ const es = {
       gameRecords: "Partidas",
       gamesCount: "Partidas {count}",
       guestAccount: "Invitado",
+      hostHandle: "Identificador del anfitrión",
       joinRoom: "Unirse",
+      joinTarget: "Enlace, código o @identificador",
+      joinTargetPlaceholder: "https://… / ABC123 / @alice",
       joinableRooms: "Salas disponibles",
       joiningRoom: "Entrando en la sala",
       leaderboard: "Ranking",
@@ -871,6 +894,8 @@ const es = {
       profileWins: "Victorias {count}",
       publicChat: "Chat público",
       publicChatPlaceholder: "Mensaje público",
+      publicHandle: "Identificador público",
+      publicHandlePlaceholder: "alice (opcional)",
       publicRoom: "Pública",
       publicRoomNotice: "Las salas creadas aquí son públicas y aparecen en el vestíbulo. Comparte la invitación después de crearla.",
       ready: "Listo",
@@ -1002,7 +1027,7 @@ const ru = {
       cancelWaiting: "Отменить ожидание",
       copied: "Скопировано",
       copyInvite: "Копировать ссылку",
-      createOrJoin: "Создайте комнату или введите код.",
+      createOrJoin: "Создайте комнату не из списка или введите ссылку, код либо @идентификатор.",
       createRoom: "Создать комнату",
       createUnlistedRoom: "Создать комнату не в списке",
       disconnected: "Отключен",
@@ -1017,7 +1042,10 @@ const ru = {
       gameRecords: "Партии",
       gamesCount: "Партии {count}",
       guestAccount: "Гость",
+      hostHandle: "Идентификатор хозяина",
       joinRoom: "Войти",
+      joinTarget: "Ссылка, код или @идентификатор",
+      joinTargetPlaceholder: "https://… / ABC123 / @alice",
       joinableRooms: "Комнаты для входа",
       joiningRoom: "Вход в комнату",
       leaderboard: "Рейтинг",
@@ -1062,6 +1090,8 @@ const ru = {
       profileWins: "Победы {count}",
       publicChat: "Общий чат",
       publicChatPlaceholder: "Сообщение всем",
+      publicHandle: "Публичный идентификатор",
+      publicHandlePlaceholder: "alice (необязательно)",
       publicRoom: "Публичная",
       publicRoomNotice: "Созданные здесь комнаты публичны и видны в лобби. После создания поделитесь ссылкой.",
       ready: "Готов",
@@ -1193,7 +1223,7 @@ const ar = {
       cancelWaiting: "إلغاء الانتظار",
       copied: "تم النسخ",
       copyInvite: "نسخ الدعوة",
-      createOrJoin: "أنشئ غرفة أو أدخل رمزا.",
+      createOrJoin: "أنشئ غرفة غير مدرجة أو أدخل رابطا أو رمزا أو @معرّفا.",
       createRoom: "إنشاء غرفة",
       createUnlistedRoom: "إنشاء غرفة غير مدرجة",
       disconnected: "غير متصل",
@@ -1208,7 +1238,10 @@ const ar = {
       gameRecords: "السجلات",
       gamesCount: "الألعاب {count}",
       guestAccount: "ضيف",
+      hostHandle: "معرّف المضيف",
       joinRoom: "انضمام",
+      joinTarget: "رابط أو رمز أو @معرّف",
+      joinTargetPlaceholder: "https://… / ABC123 / @alice",
       joinableRooms: "غرف للانضمام",
       joiningRoom: "جارٍ الانضمام إلى الغرفة",
       leaderboard: "الترتيب",
@@ -1253,6 +1286,8 @@ const ar = {
       profileWins: "انتصارات {count}",
       publicChat: "الدردشة العامة",
       publicChatPlaceholder: "رسالة للجميع",
+      publicHandle: "المعرّف العام",
+      publicHandlePlaceholder: "alice (اختياري)",
       publicRoom: "عامة",
       publicRoomNotice: "الغرف المنشأة هنا عامة وتظهر في الردهة. شارك رابط الدعوة بعد الإنشاء.",
       ready: "جاهز",

@@ -319,14 +319,14 @@ Custom Game：
 ### 2026-07-10 IX-04 大厅入口分层
 
 - 快速匹配是大厅唯一大型主动作；已恢复游客身份时，从大厅到 `matchmaking:find` 只需一次点击。
-- “和朋友玩”按需展开后才挂载创建房和房间码表单；创建区明确提示当前房间会出现在公开大厅，不能称为私密房。
+- “和朋友玩”按需展开后才挂载创建 unlisted 房和统一加入表单；说明明确“不公开列出”不等于私密或访问保护。
 - 昵称和账号在“编辑身份”后展开；公共聊天/Presence 与 Profile/排行榜分别位于房间列表后的次级区，默认不建立对应读取 effect。
 - 房间列表直接按服务端 `RoomListItem.canJoin` / `canWatch` 分为 joinable/watchable；满员 waiting 房可以出现在 watchable 组，但仍显示真实 waiting 状态。
 - 空列表提供 `matchmaking:find`、`room:create` 和切换 AI 三条真实路径；不从分页列表或 Presence 样本推导全站热度。
 - 单人 waiting 通过 `FriendRoomController.canCancelMatch` 在任务栏显示 Cancel waiting；该动作调用既有 `matchmaking:cancel`，成功后清 stored session、room URL 和客户端房间态。
 - controller 尚未持久化房间入口意图，因此快速匹配和朋友创建的单人桌统一使用“取消等待”，不显示可能失真的“取消匹配”。
-- 手动朋友路径经 Chrome smoke 验证为：展开一次 -> 输入一次房间码 -> 提交一次；邀请 URL 继续自动直达 joining/table，不增加确认页。
-- 本阶段没有新增 visibility、invite token、handle/account-ID 解析或汇总统计；这些分别留给 IX-04B、IX-04A 和 IX-07。
+- 手动朋友路径经 Chrome smoke 验证为：展开一次 -> 输入一次目标 -> 提交一次；邀请 URL 继续自动直达 joining/table，不增加确认页。
+- 后续 IX-04B 已加入 public/unlisted，IX-04A 已加入 handle/account-ID 解析；高熵 invite token 和 IX-07 汇总统计仍未实现。
 
 IX-04 新增并接入的六语种 UI 文案 key：
 
@@ -347,7 +347,7 @@ IX-04 新增并接入的六语种 UI 文案 key：
 - 删除前 snapshot 会随清理/生命周期结果返回，socket 层据其 visibility 决定是否发公共 deletion，避免房间删除后无法判断而泄漏 code。
 - unlisted 仍可通过规范房间码、邀请 URL 和 stored session 加入/恢复；RoomStore、socket room、URL、gameId 和记录继续只使用规范 roomCode。
 - 产品文案必须使用“不公开列出”，并说明知道 code/link 的任何人仍能加入；当前没有高熵 token、接收者授权、撤销/轮换或访问限流，不能称 private/protected。
-- IX-04A 未落地前不存在 host handle/account-ID 解析分支，因此也不存在通过这些别名旁路发现 unlisted 的情况。
+- IX-04A 落地后，public 房默认可用 host handle/account ID 解析；unlisted 默认关闭该策略，因此这些别名不能旁路发现 unlisted。
 
 IX-04B 新增并接入的六语种 UI 文案 key：
 
@@ -356,6 +356,22 @@ IX-04B 新增并接入的六语种 UI 文案 key：
 - `publicRoom`
 - `unlistedRoom`
 - `unlistedRoomNotice`
+
+### 2026-07-10 IX-04A 统一加入标识与公开 handle
+
+- 注册账户新增当前 AccountStore 内大小写无关唯一、创建后不可变的 `publicHandle`；旧 JSONL 账户按 displayName + account ID 确定性迁移。
+- 同一朋友输入框通过 `room:join-target` 接受本站邀请 URL、裸 roomCode、`@handle` 和原始 `acct_...`；只有裸 roomCode 转大写，成功后统一回写权威 `snapshot.code`。
+- RoomStore 以显式双向索引维护一个注册房主的当前目标，不扫描 rooms 或猜测最新房间；转移、断线、恢复、删除与 finished 保留窗口均有测试。
+- public 默认允许别名；unlisted 默认关闭。失败与限流统一伪装为 room-not-found，handle/account-ID 查询按来源地址 20 次/分钟限制。
+- 当前索引和限流仍是单进程边界；多实例前需要共享账户唯一约束、共享房主目标和分布式限流。
+
+IX-04A 新增并接入的六语种 UI 文案 key：
+
+- `publicHandle`
+- `publicHandlePlaceholder`
+- `joinTarget`
+- `joinTargetPlaceholder`
+- `hostHandle`
 
 大厅与匹配至少需要：
 

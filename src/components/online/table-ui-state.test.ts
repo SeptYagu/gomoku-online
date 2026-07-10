@@ -183,6 +183,7 @@ function createInput({
   undoRequest?: UndoRequestSnapshot | null;
 } = {}): TableUiStateInput {
   const snapshot: RoomSnapshot = {
+    allowJoinByHostHandle: true,
     board: createBoard(),
     chatMessages: [],
     code: "ABC123",
@@ -190,6 +191,7 @@ function createInput({
     currentTurn,
     finishReason: status === "finished" ? "draw" : null,
     gameId: "ABC123-1",
+    hostPublicHandle: null,
     hostSeat,
     moveSeq: 0,
     moves: [],

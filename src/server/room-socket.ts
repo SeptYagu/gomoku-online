@@ -2,6 +2,7 @@ import type { Point } from "../game/types";
 import { AccountStore, GuestSessionStore, resolvePlayerIdentity } from "./accounts";
 import type { GameRecordAck, PresenceAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import type { GameRecordClientSubmission } from "./game-records";
+import { FixedWindowRateLimiter } from "./rate-limit";
 import {
   RoomStore,
   type LobbyRoomDeletedEvent,
@@ -27,6 +28,11 @@ type PlayerAuthPayload = {
   guestToken?: null | string;
   playerId: string;
   playerName: string;
+};
+
+export type ResolvedJoinTarget = {
+  kind: "account-id" | "host-handle" | "invite-url" | "room-code";
+  roomCode: string;
 };
 
 export type ClientToServerEvents = {
@@ -73,6 +79,10 @@ export type ClientToServerEvents = {
   ) => void;
   "room:join": (
     payload: PlayerAuthPayload & { roomCode: string },
+    ack: (response: RoomAck) => void
+  ) => void;
+  "room:join-target": (
+    payload: PlayerAuthPayload & { target: string },
     ack: (response: RoomAck) => void
   ) => void;
   "room:leave": (payload: { roomCode: string }, ack: (response: RoomAck) => void) => void;
@@ -130,6 +140,15 @@ type RoomSocket = {
     ...args: Parameters<ServerToClientEvents[Event]>
   ) => void;
   join: (roomCode: string) => void;
+  handshake: {
+    address: string;
+    headers: {
+      host?: string;
+      origin?: string;
+      "x-forwarded-for"?: string | string[];
+    };
+  };
+  id: string;
   leave: (roomCode: string) => void;
   on: <Event extends keyof ClientToServerEvents | "disconnect">(
     event: Event,
@@ -152,6 +171,7 @@ export function registerRoomSocketHandlers(
   const guestSessionStore = options.guestSessionStore ?? new GuestSessionStore();
   const lifecycleIntervalMs = options.lifecycleIntervalMs ?? 10_000;
   const connections = new RoomConnectionTracker();
+  const joinTargetLimiter = new FixedWindowRateLimiter({ limit: 20, windowMs: 60_000 });
 
   if (lifecycleIntervalMs !== false) {
     const interval = setInterval(() => broadcastLifecycleSweep(io, roomStore), lifecycleIntervalMs);
@@ -205,6 +225,40 @@ export function registerRoomSocketHandlers(
         roomStore,
         connections,
         roomStore.joinRoom(payload.roomCode, player.value),
+        player.value
+      );
+      acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
+    });
+
+    socket.on("room:join-target", (payload, ack) => {
+      const player = resolveSocketPlayer(socket, payload, accountStore, guestSessionStore);
+
+      if (!player.ok) {
+        acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
+        return;
+      }
+
+      const target = payload.target?.trim() ?? "";
+      const aliasLookup = target.startsWith("@") || target.startsWith("acct_");
+
+      if (aliasLookup && !joinTargetLimiter.consume(getJoinTargetRateKey(socket)).allowed) {
+        acknowledgeAndBroadcast(io, socket, roomStore, roomNotFound(), ack);
+        return;
+      }
+
+      const resolved = resolveJoinTarget(socket, target, accountStore, roomStore);
+
+      if (!resolved) {
+        acknowledgeAndBroadcast(io, socket, roomStore, roomNotFound(), ack);
+        return;
+      }
+
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, resolved.roomCode);
+      const response = handleJoinedRoom(
+        socket,
+        roomStore,
+        connections,
+        roomStore.joinRoom(resolved.roomCode, player.value),
         player.value
       );
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
@@ -1039,6 +1093,96 @@ function releaseSocketPresence(socket: RoomSocket, roomStore: RoomStore) {
 
   roomStore.disconnectPresence(previousPlayerId);
   socket.data.presencePlayerId = undefined;
+}
+
+function resolveJoinTarget(
+  socket: RoomSocket,
+  target: string,
+  accountStore: AccountStore,
+  roomStore: RoomStore
+): ResolvedJoinTarget | null {
+  if (!target) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(target)) {
+    try {
+      const url = new URL(target);
+      const roomCode = url.searchParams.get("room")?.trim().toUpperCase() ?? "";
+
+      return isAllowedInviteUrl(socket, url) && roomCode
+        ? { kind: "invite-url", roomCode }
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (target.startsWith("@")) {
+    const account = accountStore.findByPublicHandle(target);
+    const roomCode = account ? roomStore.resolveHostRoom(account.playerId) : null;
+
+    return roomCode ? { kind: "host-handle", roomCode } : null;
+  }
+
+  if (target.startsWith("acct_")) {
+    const account = accountStore.findByPlayerId(target);
+    const roomCode = account ? roomStore.resolveHostRoom(account.playerId) : null;
+
+    return roomCode ? { kind: "account-id", roomCode } : null;
+  }
+
+  return { kind: "room-code", roomCode: target.toUpperCase() };
+}
+
+function getJoinTargetRateKey(socket: RoomSocket): string {
+  const remoteAddress = socket.handshake.address || "unknown";
+
+  if (!isLoopbackAddress(remoteAddress)) {
+    return remoteAddress;
+  }
+
+  const forwardedFor = socket.handshake.headers["x-forwarded-for"];
+  const forwardedValue = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+  const forwardedClient = forwardedValue?.split(",").at(-1)?.trim();
+
+  return forwardedClient || remoteAddress || socket.id;
+}
+
+function isLoopbackAddress(address: string): boolean {
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
+function isAllowedInviteUrl(socket: RoomSocket, url: URL): boolean {
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return false;
+  }
+
+  const requestOrigin = socket.handshake.headers.origin;
+
+  if (requestOrigin) {
+    try {
+      if (url.origin === new URL(requestOrigin).origin) {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  const requestHost = socket.handshake.headers.host?.toLocaleLowerCase();
+
+  return Boolean(requestHost && url.host.toLocaleLowerCase() === requestHost);
+}
+
+function roomNotFound(): RoomResult<never> {
+  return {
+    ok: false,
+    error: {
+      code: "room-not-found",
+      message: "No joinable room was found."
+    }
+  };
 }
 
 function parseRoomListQuery(payload: RoomListQuery | undefined): RoomListQuery {

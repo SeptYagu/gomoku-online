@@ -222,6 +222,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 
 - `room:create`
 - `room:join`
+- `room:join-target`
 - `room:leave`
 - `room:ready`
 - `room:rejoin`
@@ -289,6 +290,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 实现房间 TTL 和空房清理。已完成单进程基础版：空 waiting 房清理、finished/abandoned 房延迟清理、长期无活动 playing 房 abandoned。
 - `room:create` 的核心状态操作已实现：创建房间并加入黑棋房主。
 - `room:join` 的核心状态操作已实现：昵称、重复玩家校验；前两名成员进入黑白座位，第三人及之后进入 `spectators` 观战席；密码未做。
+- `room:join-target` 已实现：服务端原子解析同源 URL、裸 roomCode、`@publicHandle` 和原始 account ID，再复用同一 `joinRoom`；成功后客户端只保留规范 roomCode。
 - `room:rejoin` 已实现：同 `playerId` 可恢复原玩家座位或观战身份，并刷新昵称、连接状态。
 - `room:sit` 已实现：观战者可在非 `playing` 状态下补入空玩家座位；对局进行中不能抢座位。
 - 观战权限已实现：观战者可以收到 `RoomSnapshot` 和棋盘变化，但不能 ready、落子、认输、请求悔棋、响应悔棋或重开。
@@ -304,6 +306,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 断线宽限期和超时判负已完成基础版：`playing` 中断线会设置 `disconnectDeadline`，默认宽限期 60 秒，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned，并在无人状态下清理房间。
 - 邀请链接已支持根路径保留房间参数：`/?room=ABC123` 会重定向为 `/en?room=ABC123`，前端加载后自动加入房间。
 - unlisted 只改变公开发现：不会进入 lobby 列表/增量/删除事件或 Presence roomCode，但 `room:join`、`room:rejoin`、邀请 URL 和 stored session 仍使用同一规范 roomCode；当前没有邀请 token 授权。
+- public 注册房主可通过显式 accountId -> roomCode 索引被 handle/account ID 解析；unlisted 默认关闭，房主转移、断线、恢复和房间清理会同步索引。当前索引与限流为单进程边界。
 - unlisted 终局仍写入带 visibility 的内部权威记录以校验客户端提交，但不进入公开 Profile recent records/排行榜；管理员本地导出仍可读取完整记录。
 - Guest reconnect token 已完成：公开 playerId 不能直接重连；registered 用户继续使用 account token。Token 当前随单进程房间生命周期存在，多实例共享 session 留给 Redis/正式账号基础设施。
 - 同一已认证玩家可以有多个活动 socket；只有最后一个房间 socket 断开才把座位标记为 disconnected，避免刷新/多标签旧连接误触发判负。

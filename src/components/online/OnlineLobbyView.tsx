@@ -72,6 +72,7 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room }: OnlineLo
         <div>
           <p className="metric-label">{labels.panelLabel}</p>
           <strong>{room.account?.displayName ?? room.playerName}</strong>
+          {room.account ? <p className="room-message">@{room.account.publicHandle}</p> : null}
         </div>
         <button
           aria-expanded={activeSection === "identity"}
@@ -98,11 +99,26 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room }: OnlineLo
                 value={room.playerName}
               />
             </label>
+            {!room.account ? (
+              <label className="room-field">
+                <span>{labels.publicHandle}</span>
+                <input
+                  autoCapitalize="none"
+                  maxLength={20}
+                  onChange={(event) => room.setRegistrationHandle(event.target.value)}
+                  placeholder={labels.publicHandlePlaceholder}
+                  spellCheck={false}
+                  type="text"
+                  value={room.registrationHandle}
+                />
+              </label>
+            ) : null}
           </div>
           <div className="room-account">
             <div>
               <p className="metric-label">{labels.account}</p>
               <strong>{room.account ? room.account.displayName : labels.guestAccount}</strong>
+              {room.account ? <p className="room-message">@{room.account.publicHandle}</p> : null}
             </div>
             {room.account ? (
               <div className="room-account-actions">
@@ -180,13 +196,15 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room }: OnlineLo
               }}
             >
               <label className="room-field">
-                <span>{labels.roomCode}</span>
+                <span>{labels.joinTarget}</span>
                 <input
-                  maxLength={8}
-                  onChange={(event) => room.setJoinCode(event.target.value)}
-                  placeholder={labels.roomCodePlaceholder}
+                  autoCapitalize="none"
+                  maxLength={256}
+                  onChange={(event) => room.setJoinTarget(event.target.value)}
+                  placeholder={labels.joinTargetPlaceholder}
+                  spellCheck={false}
                   type="text"
-                  value={room.joinCode}
+                  value={room.joinTarget}
                 />
               </label>
               <button className="mode-pill" disabled={!room.canJoinRoom} type="submit">
