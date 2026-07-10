@@ -84,6 +84,7 @@ function createAuthoritativeRecord(gameId: string, moves: Move[], winner: "black
     ],
     roomCode: gameId.split("-", 1)[0],
     status: "finished",
+    visibility: "public",
     winLine: [],
     winner
   };

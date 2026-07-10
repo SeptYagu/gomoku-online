@@ -99,6 +99,30 @@ describe("GameRecordStore", () => {
     expect(bobProfile.recentRecords[0]?.result).toBe("win");
   });
 
+  it("stores unlisted records for internal integrity without publishing them in profiles or rankings", () => {
+    const store = new GameRecordStore({ now: createClock() });
+    const publicRecord = createAuthoritativeGameRecord();
+    const unlistedRecord = createAuthoritativeGameRecord({
+      gameId: "ROOM02-1",
+      roomCode: "ROOM02",
+      visibility: "unlisted"
+    });
+
+    store.recordAuthoritative(publicRecord);
+    store.recordAuthoritative(unlistedRecord);
+
+    expect(store.listRecords()).toHaveLength(2);
+    expect(store.getRecord(unlistedRecord.gameId)).toMatchObject({ visibility: "unlisted" });
+    expect(store.getPlayerProfile("player-1", "Alice")).toMatchObject({
+      recentRecords: [expect.objectContaining({ gameId: publicRecord.gameId, roomCode: publicRecord.roomCode })],
+      stats: { games: 1 }
+    });
+    expect(store.getLeaderboard({ identity: "guest" }).entries).toEqual([
+      expect.objectContaining({ displayName: "Bob", games: 1 }),
+      expect.objectContaining({ displayName: "Alice", games: 1 })
+    ]);
+  });
+
   it("builds leaderboard rankings from verified online records only", () => {
     const store = new GameRecordStore({ now: createClock() });
     const verifiedRecord = createAuthoritativeGameRecord();
@@ -266,6 +290,7 @@ function createAuthoritativeGameRecord(
     ],
     roomCode: "ROOM01",
     status: "finished",
+    visibility: "public",
     winLine: [],
     winner: "white",
     ...overrides

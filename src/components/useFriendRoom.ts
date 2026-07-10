@@ -26,6 +26,7 @@ import type {
   PublicChatSnapshot,
   RoomListItem,
   RoomSnapshot,
+  RoomVisibility,
   UserPresenceSnapshot
 } from "@/server/rooms";
 import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
@@ -70,7 +71,7 @@ export type FriendRoomController = {
   cancelMatch: () => void;
   copyInvite: () => void;
   copiedInvite: boolean;
-  createRoom: () => void;
+  createRoom: (visibility?: RoomVisibility) => void;
   error: string | null;
   inviteUrl: string;
   isJoiningRoom: boolean;
@@ -332,7 +333,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     }
   }, [account]);
 
-  const createRoom = useCallback(() => {
+  const createRoom = useCallback((visibility: RoomVisibility = "public") => {
     if (!canCreateRoom || createRequestInFlightRef.current) {
       return;
     }
@@ -344,7 +345,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     setIsCreatingRoom(true);
     setPlayerNameState(player.playerName);
     persistPlayerName(player.playerName);
-    socket.emit("room:create", player, (response: RoomAck) => {
+    socket.emit("room:create", { ...player, visibility }, (response: RoomAck) => {
       createRequestInFlightRef.current = false;
       setIsCreatingRoom(false);
       applyRoomAck(response);

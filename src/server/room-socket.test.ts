@@ -328,6 +328,59 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("keeps unlisted room create, updates, and deletion out of lobby discovery", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const lobby = await harness.connectClient();
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+      const updatedCodes: string[] = [];
+      const deletedCodes: string[] = [];
+
+      lobby.on("lobby:room-updated", (event: LobbyRoomUpdatedEvent) => updatedCodes.push(event.room.code));
+      lobby.on("lobby:room-deleted", (event: LobbyRoomDeletedEvent) => deletedCodes.push(event.code));
+      const initialList = await emitAck<RoomListAck>(lobby, "lobby:join", { limit: 20 });
+
+      if (!initialList.ok) {
+        throw new Error(initialList.error.message);
+      }
+
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "unlisted-host",
+        playerName: "Unlisted Host",
+        visibility: "unlisted"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+
+      expect(createAck.value.snapshot.visibility).toBe("unlisted");
+      expect(
+        await emitAck(guest, "room:join", {
+          playerId: "unlisted-guest",
+          playerName: "Unlisted Guest",
+          roomCode
+        })
+      ).toMatchObject({ ok: true, value: { snapshot: { visibility: "unlisted" } } });
+      expect(await emitAck(guest, "room:leave", { roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(host, "matchmaking:cancel", { roomCode })).toMatchObject({ ok: true });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const finalList = await emitAck<RoomListAck>(lobby, "lobby:list", { limit: 20 });
+
+      expect(finalList.ok ? finalList.value.rooms : ["unexpected"]).toEqual([]);
+      expect(finalList.ok ? finalList.value.version : -1).toBe(initialList.value.version);
+      expect(updatedCodes).not.toContain(roomCode);
+      expect(deletedCodes).not.toContain(roomCode);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("reuses the current waiting room when the same socket creates again", async () => {
     const harness = await createSocketHarness();
 
@@ -357,6 +410,53 @@ describe("room socket handlers", () => {
 
       const finalList = await emitAck<RoomListAck>(lobby, "lobby:list", { limit: 20 });
       expect(finalList.ok ? finalList.value.rooms.filter((room) => room.code === firstRoomCode) : []).toHaveLength(1);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("does not reuse a waiting room when the requested visibility changes", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const host = await harness.connectClient();
+      const stranger = await harness.connectClient();
+      const lobby = await harness.connectClient();
+
+      expect(await emitAck<RoomListAck>(lobby, "lobby:join", { limit: 20 })).toMatchObject({ ok: true });
+      const unlistedAck = await emitAck(host, "room:create", {
+        playerId: "visibility-host",
+        playerName: "Visibility Host",
+        visibility: "unlisted"
+      });
+
+      if (!unlistedAck.ok) {
+        throw new Error(unlistedAck.error.message);
+      }
+
+      const unlistedCode = unlistedAck.value.snapshot.code;
+      const publicAck = await emitAck(host, "room:create", {
+        playerId: "visibility-host",
+        playerName: "Visibility Host",
+        visibility: "public"
+      });
+
+      if (!publicAck.ok) {
+        throw new Error(publicAck.error.message);
+      }
+
+      expect(publicAck.value.snapshot.code).not.toBe(unlistedCode);
+      expect(publicAck.value.snapshot.visibility).toBe("public");
+      expect(await emitAck(stranger, "room:join", {
+        playerId: "visibility-stranger",
+        playerName: "Stranger",
+        roomCode: unlistedCode
+      })).toMatchObject({ ok: false, error: { code: "room-not-found" } });
+      const finalList = await emitAck<RoomListAck>(lobby, "lobby:list", { limit: 20 });
+
+      expect(finalList.ok ? finalList.value.rooms : []).toEqual([
+        expect.objectContaining({ code: publicAck.value.snapshot.code, visibility: "public" })
+      ]);
     } finally {
       await harness.close();
     }

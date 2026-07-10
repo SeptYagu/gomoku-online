@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { PlayerIdentityKind } from "./accounts";
+import type { RoomVisibility } from "./rooms";
 import type { Board, Move, Point, Stone } from "../game/types";
 
 export type GameRecordStatus = "partial" | "verified" | "conflicted";
@@ -36,6 +37,7 @@ export type AuthoritativeGameRecord = {
   players: GameRecordPlayer[];
   roomCode: string;
   status: "finished" | "abandoned";
+  visibility: RoomVisibility;
   winLine: Point[];
   winner: Stone | null;
 };
@@ -219,7 +221,10 @@ export class GameRecordStore {
     const baseEntries =
       this.leaderboardCache?.revision === this.recordsRevision && this.leaderboardCache.dayStart === dayStart
         ? this.leaderboardCache.entries
-        : calculateLeaderboardEntries([...this.records.values()], now);
+        : calculateLeaderboardEntries(
+            [...this.records.values()].filter((record) => record.visibility === "public"),
+            now
+          );
 
     if (baseEntries !== this.leaderboardCache?.entries) {
       this.leaderboardCache = {
@@ -314,7 +319,11 @@ export class GameRecordStore {
     const clampedLimit = Math.max(1, Math.min(200, Math.floor(limit)));
 
     return [...this.records.values()]
-      .filter((record) => record.players.some((player) => player.playerId === normalizedPlayerId))
+      .filter(
+        (record) =>
+          record.visibility === "public" &&
+          record.players.some((player) => player.playerId === normalizedPlayerId)
+      )
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, clampedLimit);
   }
@@ -385,7 +394,8 @@ export class GameRecordStore {
         if (entry.type === "game-record" && entry.record?.id) {
           this.records.set(entry.record.id, {
             ...entry.record,
-            authoritative: entry.record.authoritative === true
+            authoritative: entry.record.authoritative === true,
+            visibility: entry.record.visibility === "unlisted" ? "unlisted" : "public"
           });
           this.recordsRevision += 1;
         }

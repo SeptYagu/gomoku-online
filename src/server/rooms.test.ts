@@ -15,6 +15,7 @@ describe("RoomStore", () => {
     expect(created.status).toBe("waiting");
     expect(created.currentTurn).toBe("black");
     expect(created.moveSeq).toBe(0);
+    expect(created.visibility).toBe("public");
     expect(created.players).toEqual([
       {
         connected: true,
@@ -29,6 +30,54 @@ describe("RoomStore", () => {
     expect(created.spectators).toEqual([]);
     expect(created.board).toHaveLength(15);
     expect(created.board.flat().every((cell) => cell === null)).toBe(true);
+  });
+
+  it("keeps unlisted rooms out of public discovery while direct joins still work", () => {
+    const store = createTestRoomStore(["ROOM01", "ROOM02"]);
+    const initialLobbyVersion = store.getLobbyVersion();
+
+    expectOk(store.connectPresence({ playerId: "host-player", playerName: "Host" }));
+    expectOk(store.connectPresence({ playerId: "guest-player", playerName: "Guest" }));
+    const unlisted = expectOk(
+      store.createRoom({
+        playerId: "host-player",
+        playerName: "Host",
+        visibility: "unlisted"
+      })
+    );
+
+    expect(unlisted.visibility).toBe("unlisted");
+    expect(store.getLobbyVersion()).toBe(initialLobbyVersion);
+    expect(store.listRooms().rooms).toEqual([]);
+    expectOk(store.joinRoom(unlisted.code, { playerId: "guest-player", playerName: "Guest" }));
+    expect(store.getLobbyVersion()).toBe(initialLobbyVersion);
+    expect(store.listPresence().users).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "Host", roomCode: null, status: "in_room" }),
+        expect.objectContaining({ name: "Guest", roomCode: null, status: "in_room" })
+      ])
+    );
+
+    const matched = expectOk(store.findMatch({ playerId: "matched-player", playerName: "Matched" }));
+
+    expect(matched.code).toBe("ROOM02");
+    expect(matched.visibility).toBe("public");
+    expect(store.listRooms().rooms).toEqual([
+      expect.objectContaining({ code: "ROOM02", visibility: "public" })
+    ]);
+    expect(expectOk(store.getSnapshot(unlisted.code)).players).toHaveLength(2);
+  });
+
+  it("rejects unknown room visibility values", () => {
+    const store = createTestRoomStore(["ROOM01"]);
+
+    expect(
+      store.createRoom({
+        playerId: "player-1",
+        playerName: "Alice",
+        visibility: "private" as "public"
+      })
+    ).toMatchObject({ ok: false, error: { code: "invalid-room-visibility" } });
   });
 
   it("normalizes room codes and rejects duplicate or invalid joins", () => {

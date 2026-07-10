@@ -160,16 +160,17 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room }: OnlineLo
 
       {activeSection === "friends" ? (
         <section className="lobby-disclosure-panel" data-lobby-section="friends">
-          <p className="room-message">{labels.publicRoomNotice}</p>
+          <p className="room-message">{labels.unlistedRoomNotice}</p>
           <div className="lobby-friend-actions">
             <button
               className="mode-pill"
+              data-lobby-action="create-unlisted"
               disabled={!room.canCreateRoom}
-              onClick={room.createRoom}
+              onClick={() => room.createRoom("unlisted")}
               type="button"
             >
               <Wifi aria-hidden="true" focusable={false} />
-              {labels.createRoom}
+              {labels.createUnlistedRoom}
             </button>
             <form
               className="lobby-join-form"
@@ -643,7 +644,7 @@ function RoomLobbyList({
       ) : (
         <div className="room-lobby-empty" data-lobby-empty-state>
           <strong>{labels.noRooms}</strong>
-          <p className="room-message">{labels.publicRoomNotice}</p>
+          <p className="room-message">{labels.unlistedRoomNotice}</p>
           <div className="room-lobby-empty-actions">
             <button
               className="mode-pill success"
@@ -655,9 +656,15 @@ function RoomLobbyList({
               <Search aria-hidden="true" focusable={false} />
               {labels.findMatch}
             </button>
-            <button className="mode-pill" disabled={!room.canCreateRoom} onClick={room.createRoom} type="button">
+            <button
+              className="mode-pill"
+              data-lobby-action="empty-create-unlisted"
+              disabled={!room.canCreateRoom}
+              onClick={() => room.createRoom("unlisted")}
+              type="button"
+            >
               <Wifi aria-hidden="true" focusable={false} />
-              {labels.createRoom}
+              {labels.createUnlistedRoom}
             </button>
             <button className="mode-pill" onClick={onPlayAi} type="button">
               <Bot aria-hidden="true" focusable={false} />

@@ -104,11 +104,14 @@ export type RoomSnapshot = {
   status: RoomStatus;
   undoRequest: UndoRequestSnapshot | null;
   updatedAt: number;
+  visibility: RoomVisibility;
   winner: Stone | null;
   winLine: Point[];
 };
 
 export type RoomListStatus = Extract<RoomStatus, "waiting" | "playing" | "finished">;
+
+export type RoomVisibility = "public" | "unlisted";
 
 export type RoomListItem = {
   canJoin: boolean;
@@ -121,6 +124,7 @@ export type RoomListItem = {
   status: RoomStatus;
   updatedAt: number;
   version: number;
+  visibility: RoomVisibility;
 };
 
 export type RoomListQuery = {
@@ -146,6 +150,7 @@ export type LobbyRoomDeletedEvent = {
 
 export type RoomCleanupResult = {
   deletedRoomCodes: string[];
+  deletedSnapshots: RoomSnapshot[];
   updatedSnapshots: RoomSnapshot[];
 };
 
@@ -153,6 +158,7 @@ export type CreateRoomInput = {
   identity?: PlayerIdentityKind;
   playerId: string;
   playerName: string;
+  visibility?: RoomVisibility;
 };
 
 export type JoinRoomInput = {
@@ -182,6 +188,7 @@ export type RoomErrorCode =
   | "guest-session-invalid"
   | "invalid-player"
   | "invalid-room-code"
+  | "invalid-room-visibility"
   | "not-room-host"
   | "move-seq-mismatch"
   | "no-moves-to-undo"
@@ -210,6 +217,7 @@ export type RoomResult<T> = { ok: true; value: T } | { ok: false; error: RoomErr
 
 export type RoomLifecycleSweep = {
   deletedRoomCodes: string[];
+  deletedSnapshots: RoomSnapshot[];
   updatedSnapshots: RoomSnapshot[];
 };
 
@@ -267,6 +275,7 @@ type RoomState = {
   status: RoomStatus;
   undoRequest: UndoRequestSnapshot | null;
   updatedAt: number;
+  visibility: RoomVisibility;
   winner: Stone | null;
   winLine: Point[];
 };
@@ -340,9 +349,14 @@ export class RoomStore {
 
   createRoom(input: CreateRoomInput): RoomResult<RoomSnapshot> {
     const player = normalizePlayerInput(input);
+    const visibility = normalizeRoomVisibility(input.visibility);
 
     if (!player) {
       return failure("invalid-player", "Player id and name are required.");
+    }
+
+    if (!visibility) {
+      return failure("invalid-room-visibility", "Room visibility must be public or unlisted.");
     }
 
     const code = this.generateUniqueRoomCode();
@@ -378,7 +392,7 @@ export class RoomStore {
           seat: "black"
         }
       ],
-      listVersion: this.nextLobbyVersion(),
+      listVersion: visibility === "public" ? this.nextLobbyVersion() : this.lobbyVersion,
       nextChatMessageId: 1,
       nextUndoRequestId: 1,
       nextStartingSeat: "black",
@@ -386,6 +400,7 @@ export class RoomStore {
       status: "waiting",
       undoRequest: null,
       updatedAt: now,
+      visibility,
       winner: null,
       winLine: []
     };
@@ -405,6 +420,7 @@ export class RoomStore {
     const room = [...this.rooms.values()]
       .filter(
         (candidate) =>
+          candidate.visibility === "public" &&
           candidate.status === "waiting" &&
           candidate.players.length < 2 &&
           !hasParticipantId(candidate, player.id) &&
@@ -413,7 +429,7 @@ export class RoomStore {
       .sort((left, right) => left.createdAt - right.createdAt)[0];
 
     if (!room) {
-      return this.createRoom(input);
+      return this.createRoom({ ...input, visibility: "public" });
     }
 
     return this.joinRoom(room.code, input);
@@ -891,7 +907,9 @@ export class RoomStore {
       abandonRoom(room, now);
       this.captureFinishedGame(room);
       this.rooms.delete(room.code);
-      this.nextLobbyVersion();
+      if (room.visibility === "public") {
+        this.nextLobbyVersion();
+      }
       return success(getRoomSnapshot(room));
     }
 
@@ -1023,9 +1041,8 @@ export class RoomStore {
 
   listRooms(query: RoomListQuery = {}): RoomListSnapshot {
     const now = this.now();
-    const deletedRoomCodes: string[] = [];
 
-    for (const [code, room] of this.rooms) {
+    for (const room of this.rooms.values()) {
       const changed = advanceRoomLifecycle(room, now, this.lifecycleLimits);
 
       if (changed) {
@@ -1033,13 +1050,7 @@ export class RoomStore {
         this.markRoomListed(room);
       }
 
-      if (this.deleteIfExpired(room, now)) {
-        deletedRoomCodes.push(code);
-      }
-    }
-
-    if (deletedRoomCodes.length > 0) {
-      this.nextLobbyVersion();
+      this.deleteIfExpired(room, now);
     }
 
     const limit = clampRoomListLimit(query.limit);
@@ -1269,7 +1280,7 @@ export class RoomStore {
     const normalizedPlayerId = playerId.trim();
 
     if (!normalizedPlayerId) {
-      return { deletedRoomCodes: [], updatedSnapshots: [] };
+      return { deletedRoomCodes: [], deletedSnapshots: [], updatedSnapshots: [] };
     }
 
     const normalizedKeepRoomCode = keepRoomCode ? normalizeRoomCode(keepRoomCode) : null;
@@ -1277,6 +1288,7 @@ export class RoomStore {
       .filter((room) => room.code !== normalizedKeepRoomCode && hasParticipantId(room, normalizedPlayerId))
       .map((room) => room.code);
     const deletedRoomCodes: string[] = [];
+    const deletedSnapshots: RoomSnapshot[] = [];
     const updatedSnapshots: RoomSnapshot[] = [];
 
     for (const roomCode of roomCodes) {
@@ -1290,17 +1302,18 @@ export class RoomStore {
         updatedSnapshots.push(result.value);
       } else {
         deletedRoomCodes.push(roomCode);
+        deletedSnapshots.push(result.value);
       }
     }
 
-    return { deletedRoomCodes, updatedSnapshots };
+    return { deletedRoomCodes, deletedSnapshots, updatedSnapshots };
   }
 
   leaveDisposableWaitingRoomsByParticipantName(playerName: string, keepRoomCode?: string): RoomCleanupResult {
     const normalizedPlayerName = playerName.trim();
 
     if (!normalizedPlayerName) {
-      return { deletedRoomCodes: [], updatedSnapshots: [] };
+      return { deletedRoomCodes: [], deletedSnapshots: [], updatedSnapshots: [] };
     }
 
     const normalizedKeepRoomCode = keepRoomCode ? normalizeRoomCode(keepRoomCode) : null;
@@ -1313,6 +1326,7 @@ export class RoomStore {
       )
       .map((room) => room.code);
     const deletedRoomCodes: string[] = [];
+    const deletedSnapshots: RoomSnapshot[] = [];
     const updatedSnapshots: RoomSnapshot[] = [];
 
     for (const roomCode of roomCodes) {
@@ -1333,23 +1347,27 @@ export class RoomStore {
         updatedSnapshots.push(result.value);
       } else {
         deletedRoomCodes.push(roomCode);
+        deletedSnapshots.push(result.value);
       }
     }
 
-    return { deletedRoomCodes, updatedSnapshots };
+    return { deletedRoomCodes, deletedSnapshots, updatedSnapshots };
   }
 
   sweepExpiredRooms(): RoomLifecycleSweep {
     const now = this.now();
     const deletedRoomCodes: string[] = [];
+    const deletedSnapshots: RoomSnapshot[] = [];
     const updatedSnapshots: RoomSnapshot[] = [];
 
     for (const [code, room] of this.rooms) {
       const changed = advanceRoomLifecycle(room, now, this.lifecycleLimits);
 
+      const snapshotBeforeExpiry = getRoomSnapshot(room);
+
       if (this.deleteIfExpired(room, now)) {
         deletedRoomCodes.push(code);
-        this.nextLobbyVersion();
+        deletedSnapshots.push(snapshotBeforeExpiry);
         continue;
       }
 
@@ -1360,7 +1378,7 @@ export class RoomStore {
       }
     }
 
-    return { deletedRoomCodes, updatedSnapshots };
+    return { deletedRoomCodes, deletedSnapshots, updatedSnapshots };
   }
 
   getLobbyVersion(): number {
@@ -1391,7 +1409,9 @@ export class RoomStore {
     const snapshot = getRoomSnapshot(room);
 
     this.rooms.delete(room.code);
-    this.nextLobbyVersion();
+    if (room.visibility === "public") {
+      this.nextLobbyVersion();
+    }
 
     return snapshot;
   }
@@ -1495,6 +1515,10 @@ export class RoomStore {
 
     this.rooms.delete(room.code);
 
+    if (room.visibility === "public") {
+      this.nextLobbyVersion();
+    }
+
     return true;
   }
 
@@ -1506,13 +1530,17 @@ export class RoomStore {
     const snapshot = getRoomSnapshot(room);
 
     this.rooms.delete(room.code);
-    this.nextLobbyVersion();
+    if (room.visibility === "public") {
+      this.nextLobbyVersion();
+    }
 
     return snapshot;
   }
 
   private markRoomListed(room: RoomState): void {
-    room.listVersion = this.nextLobbyVersion();
+    if (room.visibility === "public") {
+      room.listVersion = this.nextLobbyVersion();
+    }
   }
 
   private captureFinishedGame(room: RoomState): void {
@@ -1540,6 +1568,7 @@ export class RoomStore {
       })),
       roomCode: room.code,
       status: room.status,
+      visibility: room.visibility,
       winLine: room.winLine,
       winner: room.winner
     });
@@ -1637,7 +1666,8 @@ function getRoomListItem(room: RoomState): RoomListItem {
     spectatorCount,
     status: room.status,
     updatedAt: room.updatedAt,
-    version: room.listVersion
+    version: room.listVersion,
+    visibility: room.visibility
   };
 }
 
@@ -1693,6 +1723,10 @@ function isDisposableWaitingRoom(room: RoomState): boolean {
 }
 
 function isRoomVisibleInLobby(room: RoomState, status: RoomListQuery["status"] = "all"): boolean {
+  if (room.visibility !== "public") {
+    return false;
+  }
+
   if (room.status === "abandoned") {
     return false;
   }
@@ -1727,7 +1761,7 @@ function getPresenceSnapshotForEntry(entry: PresenceEntry, rooms: RoomState[]): 
     name: entry.name,
     playerId: entry.playerId,
     role: roomPresence?.role ?? null,
-    roomCode: roomPresence?.room.code ?? null,
+    roomCode: roomPresence?.room.visibility === "public" ? roomPresence.room.code : null,
     roomStatus: roomPresence?.room.status ?? null,
     status: getPresenceStatus(connected, roomPresence)
   };
@@ -1985,6 +2019,14 @@ function hasParticipantName(room: RoomState, playerName: string): boolean {
   );
 }
 
+function normalizeRoomVisibility(visibility: RoomVisibility | undefined): RoomVisibility | null {
+  if (visibility === undefined) {
+    return "public";
+  }
+
+  return visibility === "public" || visibility === "unlisted" ? visibility : null;
+}
+
 function normalizeRoomCode(roomCode: string): string | null {
   const code = roomCode.trim().toUpperCase();
 
@@ -2027,6 +2069,7 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
     status: room.status,
     undoRequest: room.undoRequest ? { ...room.undoRequest } : null,
     updatedAt: room.updatedAt,
+    visibility: room.visibility,
     winner: room.winner,
     winLine: room.winLine.map((point) => ({ ...point }))
   };

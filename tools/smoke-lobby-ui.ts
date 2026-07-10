@@ -243,6 +243,7 @@ async function assertLobbyEntryHierarchy(cdp: CdpClient): Promise<void> {
     const current = await evaluate<{
       collapsedSections: boolean;
       emptyActions: string[];
+      emptyNotice: string;
       friendCollapsed: boolean;
       primaryActionCount: number;
       primaryBeforeFriends: boolean;
@@ -256,6 +257,7 @@ async function assertLobbyEntryHierarchy(cdp: CdpClient): Promise<void> {
           collapsedSections: document.querySelectorAll('[data-lobby-section]').length === 0 &&
             !document.querySelector('.room-field input, .public-chat, .room-presence, .room-leaderboard'),
           emptyActions: Array.from(empty?.querySelectorAll('button') ?? []).map((button) => (button.textContent || '').trim()),
+          emptyNotice: empty?.querySelector('.room-message')?.textContent || '',
           friendCollapsed: friends?.getAttribute('aria-expanded') === 'false',
           primaryActionCount: document.querySelectorAll('[data-lobby-action="quick-match"]').length,
           primaryBeforeFriends: Boolean(primary && friends && (primary.compareDocumentPosition(friends) & Node.DOCUMENT_POSITION_FOLLOWING))
@@ -265,7 +267,7 @@ async function assertLobbyEntryHierarchy(cdp: CdpClient): Promise<void> {
 
     return current.emptyActions.length === 3 ? current : null;
   }, STEP_TIMEOUT_MS);
-  const hasEmptyFallbacks = ["Find match", "Create room", "AI"].every((label) =>
+  const hasEmptyFallbacks = ["Find match", "Create unlisted room", "AI"].every((label) =>
     result.emptyActions.some((action) => action.includes(label))
   );
 
@@ -274,7 +276,8 @@ async function assertLobbyEntryHierarchy(cdp: CdpClient): Promise<void> {
     !result.friendCollapsed ||
     result.primaryActionCount !== 1 ||
     !result.primaryBeforeFriends ||
-    !hasEmptyFallbacks
+    !hasEmptyFallbacks ||
+    !result.emptyNotice.includes("not access protection")
   ) {
     throw new Error(`Lobby entry hierarchy failed: ${JSON.stringify(result)}`);
   }

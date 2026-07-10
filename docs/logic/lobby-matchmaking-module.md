@@ -337,6 +337,26 @@ IX-04 新增并接入的六语种 UI 文案 key：
 - `watchableRooms`
 - `cancelWaiting`
 
+### 2026-07-10 IX-04B public / unlisted 权威可见性
+
+- `RoomVisibility` 只有 `public | unlisted`；省略值默认 public，未知值由 RoomStore 拒绝。
+- `visibility` 写入权威 `RoomSnapshot`，客户端 Room info 不根据入口猜测房间类型。
+- 快速匹配只搜索并创建 public 房；朋友创建显式发送 unlisted。
+- unlisted 在服务端同时隔离：REST/socket 初始列表、lobby update、lobby deletion、Presence roomCode 和公共 lobby version；不能只依赖客户端过滤。
+- unlisted 终局记录内部照常保存以支持一致性审计，但不进入公开 Profile recent records 或排行榜，避免从 roomCode/gameId 形成事后发现旁路；旧持久化记录默认迁移为 public。
+- 删除前 snapshot 会随清理/生命周期结果返回，socket 层据其 visibility 决定是否发公共 deletion，避免房间删除后无法判断而泄漏 code。
+- unlisted 仍可通过规范房间码、邀请 URL 和 stored session 加入/恢复；RoomStore、socket room、URL、gameId 和记录继续只使用规范 roomCode。
+- 产品文案必须使用“不公开列出”，并说明知道 code/link 的任何人仍能加入；当前没有高熵 token、接收者授权、撤销/轮换或访问限流，不能称 private/protected。
+- IX-04A 未落地前不存在 host handle/account-ID 解析分支，因此也不存在通过这些别名旁路发现 unlisted 的情况。
+
+IX-04B 新增并接入的六语种 UI 文案 key：
+
+- `createUnlistedRoom`
+- `roomVisibility`
+- `publicRoom`
+- `unlistedRoom`
+- `unlistedRoomNotice`
+
 大厅与匹配至少需要：
 
 - `copyCurrentUrl`

@@ -45,6 +45,7 @@ export type GameDictionary = {
     copyInvite: string;
     createOrJoin: string;
     createRoom: string;
+    createUnlistedRoom: string;
     disconnected: string;
     downloadSgf: string;
     editIdentity: string;
@@ -102,6 +103,7 @@ export type GameDictionary = {
     profileWins: string;
     publicChat: string;
     publicChatPlaceholder: string;
+    publicRoom: string;
     publicRoomNotice: string;
     ready: string;
     readyAction: string;
@@ -130,6 +132,7 @@ export type GameDictionary = {
     roomCode: string;
     roomCodePlaceholder: string;
     roomInfo: string;
+    roomVisibility: string;
     selfStatus: string;
     sendMessage: string;
     signOutAccount: string;
@@ -144,6 +147,8 @@ export type GameDictionary = {
     presenceSpectating: string;
     startGame: string;
     unready: string;
+    unlistedRoom: string;
+    unlistedRoomNotice: string;
     undoRequestCopy: string;
     undoRequestTitle: string;
     undoRequestsRemaining: string;
@@ -235,6 +240,7 @@ const en = {
       copyInvite: "Copy invite",
       createOrJoin: "Create a room or enter a code.",
       createRoom: "Create room",
+      createUnlistedRoom: "Create unlisted room",
       disconnected: "Disconnected",
       downloadSgf: "Download SGF",
       editIdentity: "Edit identity",
@@ -292,6 +298,7 @@ const en = {
       profileWins: "Wins {count}",
       publicChat: "Public chat",
       publicChatPlaceholder: "Message everyone",
+      publicRoom: "Public",
       publicRoomNotice: "Rooms created here are public and appear in the lobby. Share the invite after creating one.",
       ready: "Ready",
       readyAction: "Ready",
@@ -320,6 +327,7 @@ const en = {
       roomCode: "Room code",
       roomCodePlaceholder: "Random code",
       roomInfo: "Room info",
+      roomVisibility: "Visibility",
       selfStatus: "{name} is in the room.",
       sendMessage: "Send",
       signOutAccount: "Sign out",
@@ -334,6 +342,8 @@ const en = {
       presenceSpectating: "Watching",
       startGame: "Start",
       unready: "Unready",
+      unlistedRoom: "Unlisted",
+      unlistedRoomNotice: "Unlisted rooms do not appear in the lobby. Anyone with the room code or link can still join; this is not access protection.",
       undoRequestCopy: "{name} asks to undo the last move.",
       undoRequestTitle: "Undo request",
       undoRequestsRemaining: "Undo requests: {count}",
@@ -421,6 +431,7 @@ const zh = {
       copyInvite: "复制邀请",
       createOrJoin: "创建房间或输入房间码。",
       createRoom: "创建房间",
+      createUnlistedRoom: "创建不公开列出房间",
       disconnected: "已断开",
       downloadSgf: "下载 SGF",
       editIdentity: "编辑身份",
@@ -478,6 +489,7 @@ const zh = {
       profileWins: "胜 {count}",
       publicChat: "公共聊天",
       publicChatPlaceholder: "发送公共消息",
+      publicRoom: "公开",
       publicRoomNotice: "当前创建的房间会显示在公开大厅。创建后可复制邀请链接分享。",
       ready: "已准备",
       readyAction: "准备",
@@ -506,6 +518,7 @@ const zh = {
       roomCode: "房间码",
       roomCodePlaceholder: "随机房间码",
       roomInfo: "房间信息",
+      roomVisibility: "可见性",
       selfStatus: "{name} 已在房间中。",
       sendMessage: "发送",
       signOutAccount: "退出账号",
@@ -520,6 +533,8 @@ const zh = {
       presenceSpectating: "观战中",
       startGame: "开始",
       unready: "取消准备",
+      unlistedRoom: "不公开列出",
+      unlistedRoomNotice: "不公开列出的房间不会出现在大厅；任何知道房间码或链接的人仍可加入，这不等于访问保护。",
       undoRequestCopy: "{name} 请求悔回上一手。",
       undoRequestTitle: "悔棋请求",
       undoRequestsRemaining: "悔棋请求：{count}",
@@ -607,6 +622,7 @@ const fr = {
       copyInvite: "Copier l'invitation",
       createOrJoin: "Créez un salon ou entrez un code.",
       createRoom: "Créer un salon",
+      createUnlistedRoom: "Créer un salon non répertorié",
       disconnected: "Déconnecté",
       downloadSgf: "Télécharger SGF",
       editIdentity: "Modifier l'identité",
@@ -664,6 +680,7 @@ const fr = {
       profileWins: "Victoires {count}",
       publicChat: "Chat public",
       publicChatPlaceholder: "Message public",
+      publicRoom: "Public",
       publicRoomNotice: "Les salons créés ici sont publics et apparaissent dans le hall. Partagez l'invitation après création.",
       ready: "Prêt",
       readyAction: "Prêt",
@@ -692,6 +709,7 @@ const fr = {
       roomCode: "Code du salon",
       roomCodePlaceholder: "Code aléatoire",
       roomInfo: "Infos du salon",
+      roomVisibility: "Visibilité",
       selfStatus: "{name} est dans le salon.",
       sendMessage: "Envoyer",
       signOutAccount: "Déconnexion",
@@ -706,6 +724,8 @@ const fr = {
       presenceSpectating: "Regarde",
       startGame: "Démarrer",
       unready: "Annuler prêt",
+      unlistedRoom: "Non répertorié",
+      unlistedRoomNotice: "Les salons non répertoriés n'apparaissent pas dans le hall. Toute personne ayant le code ou le lien peut entrer ; ce n'est pas une protection d'accès.",
       undoRequestCopy: "{name} demande d'annuler le dernier coup.",
       undoRequestTitle: "Demande d'annulation",
       undoRequestsRemaining: "Demandes restantes : {count}",
@@ -793,6 +813,7 @@ const es = {
       copyInvite: "Copiar invitación",
       createOrJoin: "Crea una sala o introduce un código.",
       createRoom: "Crear sala",
+      createUnlistedRoom: "Crear sala no listada",
       disconnected: "Desconectado",
       downloadSgf: "Descargar SGF",
       editIdentity: "Editar identidad",
@@ -850,6 +871,7 @@ const es = {
       profileWins: "Victorias {count}",
       publicChat: "Chat público",
       publicChatPlaceholder: "Mensaje público",
+      publicRoom: "Pública",
       publicRoomNotice: "Las salas creadas aquí son públicas y aparecen en el vestíbulo. Comparte la invitación después de crearla.",
       ready: "Listo",
       readyAction: "Listo",
@@ -878,6 +900,7 @@ const es = {
       roomCode: "Código",
       roomCodePlaceholder: "Código aleatorio",
       roomInfo: "Información de la sala",
+      roomVisibility: "Visibilidad",
       selfStatus: "{name} está en la sala.",
       sendMessage: "Enviar",
       signOutAccount: "Salir",
@@ -892,6 +915,8 @@ const es = {
       presenceSpectating: "Mirando",
       startGame: "Empezar",
       unready: "No listo",
+      unlistedRoom: "No listada",
+      unlistedRoomNotice: "Las salas no listadas no aparecen en el vestíbulo. Cualquiera con el código o el enlace puede entrar; esto no es protección de acceso.",
       undoRequestCopy: "{name} pide deshacer el último movimiento.",
       undoRequestTitle: "Solicitud de deshacer",
       undoRequestsRemaining: "Solicitudes restantes: {count}",
@@ -979,6 +1004,7 @@ const ru = {
       copyInvite: "Копировать ссылку",
       createOrJoin: "Создайте комнату или введите код.",
       createRoom: "Создать комнату",
+      createUnlistedRoom: "Создать комнату не в списке",
       disconnected: "Отключен",
       downloadSgf: "Скачать SGF",
       editIdentity: "Изменить имя",
@@ -1036,6 +1062,7 @@ const ru = {
       profileWins: "Победы {count}",
       publicChat: "Общий чат",
       publicChatPlaceholder: "Сообщение всем",
+      publicRoom: "Публичная",
       publicRoomNotice: "Созданные здесь комнаты публичны и видны в лобби. После создания поделитесь ссылкой.",
       ready: "Готов",
       readyAction: "Готов",
@@ -1064,6 +1091,7 @@ const ru = {
       roomCode: "Код комнаты",
       roomCodePlaceholder: "Случайный код",
       roomInfo: "Информация о комнате",
+      roomVisibility: "Видимость",
       selfStatus: "{name} в комнате.",
       sendMessage: "Отправить",
       signOutAccount: "Выйти",
@@ -1078,6 +1106,8 @@ const ru = {
       presenceSpectating: "Смотрит",
       startGame: "Старт",
       unready: "Не готов",
+      unlistedRoom: "Не в списке",
+      unlistedRoomNotice: "Комнаты не из списка не видны в лобби. Любой, у кого есть код или ссылка, может войти; это не защита доступа.",
       undoRequestCopy: "{name} просит отменить последний ход.",
       undoRequestTitle: "Запрос отмены",
       undoRequestsRemaining: "Запросов осталось: {count}",
@@ -1165,6 +1195,7 @@ const ar = {
       copyInvite: "نسخ الدعوة",
       createOrJoin: "أنشئ غرفة أو أدخل رمزا.",
       createRoom: "إنشاء غرفة",
+      createUnlistedRoom: "إنشاء غرفة غير مدرجة",
       disconnected: "غير متصل",
       downloadSgf: "تنزيل SGF",
       editIdentity: "تعديل الهوية",
@@ -1222,6 +1253,7 @@ const ar = {
       profileWins: "انتصارات {count}",
       publicChat: "الدردشة العامة",
       publicChatPlaceholder: "رسالة للجميع",
+      publicRoom: "عامة",
       publicRoomNotice: "الغرف المنشأة هنا عامة وتظهر في الردهة. شارك رابط الدعوة بعد الإنشاء.",
       ready: "جاهز",
       readyAction: "جاهز",
@@ -1250,6 +1282,7 @@ const ar = {
       roomCode: "رمز الغرفة",
       roomCodePlaceholder: "رمز عشوائي",
       roomInfo: "معلومات الغرفة",
+      roomVisibility: "الظهور",
       selfStatus: "{name} داخل الغرفة.",
       sendMessage: "إرسال",
       signOutAccount: "خروج",
@@ -1264,6 +1297,8 @@ const ar = {
       presenceSpectating: "يشاهد",
       startGame: "بدء",
       unready: "إلغاء الجاهزية",
+      unlistedRoom: "غير مدرجة",
+      unlistedRoomNotice: "الغرف غير المدرجة لا تظهر في الردهة. يمكن لأي شخص لديه الرمز أو الرابط الانضمام؛ وهذا ليس حماية وصول.",
       undoRequestCopy: "{name} يطلب التراجع عن النقلة الأخيرة.",
       undoRequestTitle: "طلب تراجع",
       undoRequestsRemaining: "طلبات التراجع: {count}",

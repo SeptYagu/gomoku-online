@@ -14,7 +14,8 @@ import {
   type RoomListQuery,
   type RoomListSnapshot,
   type RoomResult,
-  type RoomSnapshot
+  type RoomSnapshot,
+  type RoomVisibility
 } from "./rooms";
 
 const LOBBY_ROOM = "lobby";
@@ -66,7 +67,10 @@ export type ClientToServerEvents = {
     payload: { roomCode: string; text: string },
     ack: (response: RoomAck) => void
   ) => void;
-  "room:create": (payload: PlayerAuthPayload, ack: (response: RoomAck) => void) => void;
+  "room:create": (
+    payload: PlayerAuthPayload & { visibility?: RoomVisibility },
+    ack: (response: RoomAck) => void
+  ) => void;
   "room:join": (
     payload: PlayerAuthPayload & { roomCode: string },
     ack: (response: RoomAck) => void
@@ -164,7 +168,11 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      const currentWaitingRoom = getCurrentDisposableWaitingRoom(socket, roomStore, player.value.playerId);
+      const requestedVisibility = payload.visibility ?? "public";
+      const currentWaitingRoom =
+        requestedVisibility === "public" || requestedVisibility === "unlisted"
+          ? getCurrentDisposableWaitingRoom(socket, roomStore, player.value.playerId, requestedVisibility)
+          : null;
 
       if (currentWaitingRoom) {
         const response = handleJoinedRoom(socket, roomStore, connections, currentWaitingRoom, player.value);
@@ -173,7 +181,13 @@ export function registerRoomSocketHandlers(
       }
 
       leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value);
-      const response = handleJoinedRoom(socket, roomStore, connections, roomStore.createRoom(player.value), player.value);
+      const response = handleJoinedRoom(
+        socket,
+        roomStore,
+        connections,
+        roomStore.createRoom({ ...player.value, visibility: payload.visibility }),
+        player.value
+      );
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
@@ -621,7 +635,8 @@ function leaveRoomsBeforeEntry(
 function getCurrentDisposableWaitingRoom(
   socket: RoomSocket,
   roomStore: RoomStore,
-  playerId: string
+  playerId: string,
+  visibility: RoomVisibility
 ): RoomResult<RoomSnapshot> | null {
   const roomCode = socket.data.roomCode;
 
@@ -638,6 +653,7 @@ function getCurrentDisposableWaitingRoom(
   const snapshot = currentRoom.value;
 
   if (
+    snapshot.visibility !== visibility ||
     snapshot.status !== "waiting" ||
     snapshot.moves.length > 0 ||
     snapshot.players.length !== 1 ||
@@ -653,11 +669,11 @@ function getCurrentDisposableWaitingRoom(
 function broadcastRoomCleanup(io: RoomSocketServer, roomStore: RoomStore, cleanup: RoomCleanupResult) {
   for (const snapshot of cleanup.updatedSnapshots) {
     io.to(snapshot.code).emit("room:state", snapshot);
-    broadcastLobbyRoomChange(io, roomStore, snapshot.code);
+    broadcastLobbyRoomChange(io, roomStore, snapshot.code, snapshot.visibility);
   }
 
-  for (const code of cleanup.deletedRoomCodes) {
-    broadcastRoomClosed(io, roomStore, code);
+  for (const snapshot of cleanup.deletedSnapshots) {
+    broadcastRoomClosed(io, roomStore, snapshot.code, snapshot.visibility);
   }
 
   if (cleanup.updatedSnapshots.length > 0 || cleanup.deletedRoomCodes.length > 0) {
@@ -676,7 +692,7 @@ function closeRoomsWithoutSocketMembers(io: RoomSocketServer, roomStore: RoomSto
     const snapshot = roomStore.deleteRoom(roomCode);
 
     if (snapshot) {
-      broadcastRoomClosed(io, roomStore, snapshot.code);
+      broadcastRoomClosed(io, roomStore, snapshot.code, snapshot.visibility);
     }
   }
 }
@@ -688,11 +704,11 @@ function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
 
   for (const snapshot of sweep.updatedSnapshots) {
     io.to(snapshot.code).emit("room:state", snapshot);
-    broadcastLobbyRoomChange(io, roomStore, snapshot.code);
+    broadcastLobbyRoomChange(io, roomStore, snapshot.code, snapshot.visibility);
   }
 
-  for (const code of sweep.deletedRoomCodes) {
-    broadcastRoomClosed(io, roomStore, code);
+  for (const snapshot of sweep.deletedSnapshots) {
+    broadcastRoomClosed(io, roomStore, snapshot.code, snapshot.visibility);
   }
 
   if (sweep.updatedSnapshots.length > 0 || sweep.deletedRoomCodes.length > 0) {
@@ -845,7 +861,7 @@ function acknowledgeAndBroadcast(
   }
 
   socket.to(response.value.snapshot.code).emit("room:state", response.value.snapshot);
-  broadcastLobbyRoomChange(io, roomStore, response.value.snapshot.code);
+  broadcastLobbyRoomChange(io, roomStore, response.value.snapshot.code, response.value.snapshot.visibility);
   broadcastPresence(io, roomStore);
 }
 
@@ -917,9 +933,18 @@ function acknowledgeAndBroadcastPublicChat(
   io.to(PUBLIC_CHAT_ROOM).emit("public-chat:messages", response.value);
 }
 
-function broadcastLobbyRoomChange(io: RoomSocketServer, roomStore: RoomStore, roomCode: string) {
+function broadcastLobbyRoomChange(
+  io: RoomSocketServer,
+  roomStore: RoomStore,
+  roomCode: string,
+  knownVisibility?: RoomVisibility
+) {
   const room = roomStore.getRoomListItem(roomCode);
   const version = roomStore.getLobbyVersion();
+
+  if ((room?.visibility ?? knownVisibility) === "unlisted") {
+    return;
+  }
 
   if (room && (room.status === "waiting" || room.status === "playing")) {
     io.to(LOBBY_ROOM).emit("lobby:room-updated", {
@@ -942,23 +967,30 @@ function broadcastRoomSnapshotOrClosure(
   snapshot: RoomSnapshot
 ) {
   if (!roomStore.getRoomListItem(roomCode)) {
-    broadcastRoomClosed(io, roomStore, roomCode);
+    broadcastRoomClosed(io, roomStore, roomCode, snapshot.visibility);
     return;
   }
 
   io.to(roomCode).emit("room:state", snapshot);
-  broadcastLobbyRoomChange(io, roomStore, roomCode);
+  broadcastLobbyRoomChange(io, roomStore, roomCode, snapshot.visibility);
   broadcastPresence(io, roomStore);
 }
 
-function broadcastRoomClosed(io: RoomSocketServer, roomStore: RoomStore, roomCode: string) {
+function broadcastRoomClosed(
+  io: RoomSocketServer,
+  roomStore: RoomStore,
+  roomCode: string,
+  visibility: RoomVisibility
+) {
   const event = {
     code: roomCode,
     version: roomStore.getLobbyVersion()
   };
 
   io.to(roomCode).emit("room:closed", event);
-  io.to(LOBBY_ROOM).emit("lobby:room-deleted", event);
+  if (visibility === "public") {
+    io.to(LOBBY_ROOM).emit("lobby:room-deleted", event);
+  }
   broadcastPresence(io, roomStore);
 }
 

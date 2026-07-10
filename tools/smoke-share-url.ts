@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer } from "node:net";
@@ -68,7 +68,9 @@ async function main(): Promise<void> {
       await clickLobbySection(cdp, "identity");
       await setPlayerName(cdp, hostName);
       await clickLobbySection(cdp, "friends");
-      await clickButton(cdp, "Create room");
+      await scrollIntoView(cdp, '[data-lobby-section="friends"]');
+      await captureScreenshot(cdp, "unlisted-friend-entry.png");
+      await clickButton(cdp, "Create unlisted room");
 
       const roomUrl = await waitForValue(async () => {
         const href = await evaluate<string>(cdp, "window.location.href");
@@ -79,10 +81,10 @@ async function main(): Promise<void> {
       const roomCode = new URL(roomUrl).searchParams.get("room") ?? "";
 
       await assertCreateRoomUnavailable(cdp);
-      await assertHostRoomCount(baseUrl, hostName, 1);
+      await assertHostRoomCount(baseUrl, hostName, 0);
       await clickCreateRoomIfAvailable(cdp);
       await sleep(750);
-      await assertHostRoomCount(baseUrl, hostName, 1);
+      await assertHostRoomCount(baseUrl, hostName, 0);
 
       const inviteTargetUrl = await openBrowserTarget(port, `${baseOrigin}/?room=${roomCode}`);
       const inviteCdp = await CdpClient.connect(inviteTargetUrl);
@@ -112,6 +114,9 @@ async function main(): Promise<void> {
       await sleep(750);
       await cdp.send("Page.bringToFront").catch(() => undefined);
       await clickTableSidebarInfo(cdp);
+      await waitForBodyText(cdp, "Unlisted");
+      await scrollIntoView(cdp, ".table-room-info");
+      await captureScreenshot(cdp, "unlisted-room-info.png");
       await clickButton(cdp, "Copy invite");
       const copyState = await waitForValue(async () => {
         const bodyText = await evaluate<string>(cdp, "document.body.innerText");
@@ -144,7 +149,7 @@ async function main(): Promise<void> {
       const registeredName = `Invite ${Date.now().toString(36)}`;
 
       await clickLobbySection(cdp, "friends");
-      await clickButton(cdp, "Create room");
+      await clickButton(cdp, "Create unlisted room");
       const registeredInviteRoomUrl = await waitForValue(async () => {
         const href = await evaluate<string>(cdp, "window.location.href");
 
@@ -190,12 +195,13 @@ async function main(): Promise<void> {
       await waitForRoomAbsent(baseUrl, registeredInviteRoomCode);
 
       console.log(`Share URL smoke: ${baseUrl}`);
-      console.log(`PASS create room URL - ${roomCode}`);
+      console.log(`PASS create unlisted room URL - ${roomCode}`);
+      console.log("PASS unlisted room is absent from the public room list");
       console.log("PASS create room locked while already in room");
       console.log("PASS invite link auto join - root URL preserved room");
       console.log("PASS copy invite - copied current URL");
       console.log(`PASS leave room URL clear - ${clearedUrl}`);
-      console.log(`PASS empty room closed after leave - ${roomCode}`);
+      console.log(`PASS unlisted room remains absent after leave - ${roomCode}`);
       console.log(`PASS registered account restored before invite auto join - ${registeredInviteRoomCode}`);
     } finally {
       cdp.close();
@@ -394,9 +400,7 @@ async function clickCreateRoomIfAvailable(cdp: CdpClient): Promise<void> {
   await evaluate(
     cdp,
     `(() => {
-      const button = Array.from(document.querySelectorAll("button")).find((candidate) =>
-        (candidate.textContent || "").includes("Create room")
-      );
+      const button = document.querySelector('[data-lobby-action="create-unlisted"], [data-lobby-action="empty-create-unlisted"]');
 
       if (button && !button.disabled) {
         button.click();
@@ -409,9 +413,7 @@ async function assertCreateRoomUnavailable(cdp: CdpClient): Promise<void> {
   const state = await evaluate<{ disabled: boolean; found: boolean }>(
     cdp,
     `(() => {
-      const button = Array.from(document.querySelectorAll("button")).find((candidate) =>
-        (candidate.textContent || "").includes("Create room")
-      );
+      const button = document.querySelector('[data-lobby-action="create-unlisted"], [data-lobby-action="empty-create-unlisted"]');
 
       return { disabled: Boolean(button?.disabled), found: Boolean(button) };
     })()`
@@ -456,6 +458,41 @@ async function waitForRuntime(cdp: CdpClient): Promise<void> {
       return ready ? true : null;
     },
     START_TIMEOUT_MS
+  );
+}
+
+async function waitForBodyText(cdp: CdpClient, text: string): Promise<void> {
+  await waitForValue(async () => {
+    const bodyText = await evaluate<string>(cdp, "document.body.innerText");
+
+    return bodyText.includes(text) ? true : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function captureScreenshot(cdp: CdpClient, fileName: string): Promise<void> {
+  const captureDir = process.env.GOMOKU_SMOKE_CAPTURE_DIR;
+
+  if (!captureDir) {
+    return;
+  }
+
+  await mkdir(captureDir, { recursive: true });
+  const screenshot = (await cdp.send("Page.captureScreenshot", {
+    format: "png",
+    fromSurface: true
+  })) as { data?: string };
+
+  if (!screenshot.data) {
+    throw new Error(`Chrome did not return screenshot ${fileName}`);
+  }
+
+  await writeFile(path.join(captureDir, fileName), Buffer.from(screenshot.data, "base64"));
+}
+
+async function scrollIntoView(cdp: CdpClient, selector: string): Promise<void> {
+  await evaluate<void>(
+    cdp,
+    `document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: 'center', inline: 'nearest' })`
   );
 }
 

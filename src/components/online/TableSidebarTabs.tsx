@@ -110,6 +110,10 @@ function TableRoomInfo({ dictionary, room }: TableSidebarTabsProps) {
           <dd>{snapshot.code}</dd>
         </div>
         <div>
+          <dt>{labels.roomVisibility}</dt>
+          <dd>{snapshot.visibility === "unlisted" ? labels.unlistedRoom : labels.publicRoom}</dd>
+        </div>
+        <div>
           <dt>{labels.yourSeat}</dt>
           <dd>{seatLabel}</dd>
         </div>

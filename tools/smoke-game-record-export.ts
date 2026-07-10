@@ -76,6 +76,7 @@ function createAuthoritativeRecord(): AuthoritativeGameRecord {
     ],
     roomCode: "EXPORT1",
     status: "finished",
+    visibility: "public",
     winLine: [],
     winner: "white"
   };

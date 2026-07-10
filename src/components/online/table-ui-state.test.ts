@@ -198,6 +198,7 @@ function createInput({
     status,
     undoRequest,
     updatedAt: 1,
+    visibility: "public",
     winner: null,
     winLine: []
   };
