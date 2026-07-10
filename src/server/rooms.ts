@@ -10,6 +10,7 @@ import {
   type LeaderboardQuery,
   type LeaderboardSnapshot,
   type PlayerProfileSnapshot,
+  type RoomGameRecordSnapshot,
   type SavedGameRecord
 } from "./game-records";
 
@@ -107,6 +108,7 @@ export type RoomSnapshot = {
   moveSeq: number;
   moves: Move[];
   players: RoomPlayerSnapshot[];
+  previousGameId: string | null;
   rematch: RematchStateSnapshot;
   spectators: RoomSpectatorSnapshot[];
   status: RoomStatus;
@@ -287,6 +289,7 @@ type RoomState = {
   nextUndoRequestId: number;
   listVersion: number;
   players: RoomPlayer[];
+  previousGameId: string | null;
   rematch: RematchStateSnapshot;
   spectators: RoomSpectator[];
   status: RoomStatus;
@@ -413,6 +416,7 @@ export class RoomStore {
           seat: "black"
         }
       ],
+      previousGameId: null,
       rematch: createEmptyRematchState(),
       listVersion: visibility === "public" ? this.nextLobbyVersion() : this.lobbyVersion,
       nextChatMessageId: 1,
@@ -1284,6 +1288,14 @@ export class RoomStore {
     return this.gameRecordStore.listRecords(limit);
   }
 
+  getRoomGameRecord(gameId: string, roomCode: string): RoomResult<RoomGameRecordSnapshot> {
+    const record = this.gameRecordStore.getRoomRecord(gameId, roomCode);
+
+    return record
+      ? success(record)
+      : failure("game-record-not-found", "Finished game record is no longer available.");
+  }
+
   getLeaderboard(query?: LeaderboardQuery): LeaderboardSnapshot {
     return this.gameRecordStore.getLeaderboard(query);
   }
@@ -2097,6 +2109,7 @@ function maybeStartRematch(room: RoomState, now: number): boolean {
 }
 
 function resetForNextGame(room: RoomState, status: Extract<RoomStatus, "playing" | "waiting">, now: number) {
+  room.previousGameId = room.gameId;
   room.board = createBoard();
   room.gameNumber += 1;
   room.gameId = `${room.code}-${room.gameNumber}`;
@@ -2259,6 +2272,7 @@ function getRoomSnapshot(room: RoomState): RoomSnapshot {
       seat,
       undoRequestsRemaining
     })),
+    previousGameId: room.previousGameId,
     rematch: {
       readySeats: [...room.rematch.readySeats],
       requestedAt: { ...room.rematch.requestedAt }

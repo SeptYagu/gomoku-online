@@ -87,6 +87,21 @@ export type PlayerGameRecordSummary = {
   winner: Stone | null;
 };
 
+export type RoomGameRecordSnapshot = {
+  board: Board;
+  finishReason: GameRecordFinishReason;
+  finishedAt: number;
+  gameId: string;
+  moveSeq: number;
+  moves: Move[];
+  players: Array<{ name: string; seat: Stone }>;
+  recordStatus: GameRecordStatus;
+  roomCode: string;
+  status: "abandoned" | "finished";
+  visibility: RoomVisibility;
+  winner: Stone | null;
+};
+
 export type PlayerProfileSnapshot = {
   displayName: string;
   generatedAt: number;
@@ -180,6 +195,29 @@ export class GameRecordStore {
     const record = this.records.get(gameId.trim());
 
     return record ? cloneRecord(record) : null;
+  }
+
+  getRoomRecord(gameId: string, roomCode: string): RoomGameRecordSnapshot | null {
+    const record = this.records.get(gameId.trim());
+
+    if (!record || record.roomCode !== roomCode.trim().toUpperCase()) {
+      return null;
+    }
+
+    return {
+      board: record.board.map((row) => [...row]),
+      finishReason: record.finishReason,
+      finishedAt: record.finishedAt,
+      gameId: record.gameId,
+      moveSeq: record.moveSeq,
+      moves: record.moves.map((move) => ({ ...move })),
+      players: record.players.map(({ name, seat }) => ({ name, seat })),
+      recordStatus: record.recordStatus,
+      roomCode: record.roomCode,
+      status: record.status,
+      visibility: record.visibility,
+      winner: record.winner
+    };
   }
 
   recordAuthoritative(authoritative: AuthoritativeGameRecord): SavedGameRecord {

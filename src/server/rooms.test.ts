@@ -1113,6 +1113,7 @@ describe("RoomStore", () => {
       currentTurn: "white",
       gameId: `${room.code}-2`,
       moveSeq: 0,
+      previousGameId: finished.gameId,
       rematch: { readySeats: [], requestedAt: {} },
       status: "playing",
       winner: null
@@ -1120,6 +1121,15 @@ describe("RoomStore", () => {
     expect(rematched.board.flat().every((cell) => cell === null)).toBe(true);
     expect(rematched.players.every((player) => player.ready)).toBe(true);
     expect(store.listGameRecords().filter((record) => record.gameId === finished.gameId)).toEqual([finishedRecord]);
+    expect(expectOk(store.getRoomGameRecord(finished.gameId, room.code))).toMatchObject({
+      gameId: finished.gameId,
+      moves: [expect.objectContaining({ col: 7, row: 7 })],
+      players: [{ name: "Alice", seat: "black" }, { name: "Bob", seat: "white" }]
+    });
+    expect(store.getRoomGameRecord(finished.gameId, "OTHER1")).toMatchObject({
+      ok: false,
+      error: { code: "game-record-not-found" }
+    });
     expect(store.setRematchReady(room.code, "player-2", true)).toMatchObject({
       ok: false,
       error: { code: "game-not-playing" }

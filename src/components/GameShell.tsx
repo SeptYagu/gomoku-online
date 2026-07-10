@@ -26,6 +26,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { GameTableView } from "./online/GameTableView";
 import { OnlineJoiningView, OnlineLobbyView } from "./online/OnlineLobbyView";
 import { TableSidebar } from "./online/TableSidebar";
+import { createTableReplay, type TableReplayState } from "./online/table-replay";
 import { deriveGameWorkspace, isOnlineWorkspaceEnabled, type GameMode } from "./online/workspace-state";
 import { AiGameView, type FirstPlayer } from "./play/AiGameView";
 import { LocalGameView } from "./play/LocalGameView";
@@ -81,6 +82,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const [pendingFirstPlayer, setPendingFirstPlayer] = useState<FirstPlayer | null>(null);
   const [pendingTransition, setPendingTransition] = useState<PendingTransition | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [tableReplay, setTableReplay] = useState<TableReplayState | null>(null);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const aiWorkersRef = useRef<Worker[]>([]);
   const aiWorkerTimeoutRef = useRef<number | null>(null);
@@ -115,6 +117,8 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       return;
     }
 
+    setTableReplay(null);
+
     const nextAiSettings = resolveNextAiSettings({
       aiDifficulty,
       firstPlayer,
@@ -147,6 +151,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       }
 
       setPendingTransition(null);
+      setTableReplay(null);
       if (nextMode) {
         completeModeChange(nextMode);
       }
@@ -224,7 +229,11 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       return;
     }
 
-    friendRoom.leaveRoom();
+    friendRoom.leaveRoom((left) => {
+      if (left) {
+        setTableReplay(null);
+      }
+    });
   }
 
   function confirmPendingTransition() {
@@ -660,7 +669,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             lastMove={lastMove}
             onLeaveRequest={handleOnlineLeaveRequest}
             onPointSelect={handlePointSelect}
+            onReplayChange={setTableReplay}
             previewStone={activeNextPlayer}
+            replay={tableReplay}
             room={friendRoom}
             winningKey={winningKey}
           />
@@ -669,7 +680,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
       {workspace === "online-table" ? (
         <aside className="side-panel table-side-panel" aria-label={dictionary.room.panelLabel}>
-          <TableSidebar dictionary={dictionary} room={friendRoom} />
+          <TableSidebar
+            dictionary={dictionary}
+            locale={locale}
+            onReplayGame={(gameId, replayMoves) => setTableReplay(createTableReplay(gameId, replayMoves))}
+            room={friendRoom}
+          />
         </aside>
       ) : (
         <aside className="side-panel" aria-label={dictionary.status.panelLabel}>

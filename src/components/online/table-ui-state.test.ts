@@ -100,6 +100,7 @@ describe("getTableActions", () => {
   const enabledCapabilities: TableActionCapabilities = {
     canCancelMatch: true,
     canReady: true,
+    canReplay: true,
     canRematch: true,
     canResign: true,
     canSit: true,
@@ -121,9 +122,9 @@ describe("getTableActions", () => {
     { expected: ["undo", "resign", "leave"], state: "playing-opponent-turn" },
     { expected: ["resign", "leave"], state: "undo-request-pending" },
     { expected: ["reject-undo", "allow-undo"], state: "undo-response-required" },
-    { expected: ["rematch-ready", "leave"], state: "finished-rematch-open" },
-    { expected: ["rematch-cancel", "leave"], state: "finished-rematch-ready" },
-    { expected: ["leave"], state: "abandoned" }
+    { expected: ["rematch-ready", "replay", "leave"], state: "finished-rematch-open" },
+    { expected: ["rematch-cancel", "replay", "leave"], state: "finished-rematch-ready" },
+    { expected: ["replay", "leave"], state: "abandoned" }
   ];
 
   for (const testCase of cases) {
@@ -145,6 +146,7 @@ describe("getTableActions", () => {
     const capabilities: TableActionCapabilities = {
       canCancelMatch: false,
       canReady: false,
+      canReplay: false,
       canRematch: false,
       canResign: false,
       canSit: false,
@@ -198,6 +200,7 @@ function createInput({
     moveSeq: 0,
     moves: [],
     players,
+    previousGameId: null,
     rematch: { readySeats: rematchReadySeats, requestedAt: {} },
     spectators: [],
     status,

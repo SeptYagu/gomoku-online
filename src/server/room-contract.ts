@@ -1,6 +1,6 @@
 import type { Stone } from "../game/types";
 import type { PlayerIdentityKind } from "./accounts";
-import type { GameRecordSubmitResult } from "./game-records";
+import type { GameRecordSubmitResult, RoomGameRecordSnapshot } from "./game-records";
 import type {
   PresenceSnapshot,
   PublicChatSnapshot,
@@ -69,3 +69,5 @@ export type GameRecordAck =
       error: RoomError;
       ok: false;
     };
+
+export type RoomGameRecordAck = RoomAck<RoomGameRecordSnapshot>;

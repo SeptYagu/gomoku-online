@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Flag, LogOut, RotateCcw, Undo2, UserRound, X } from "lucide-react";
+import { Check, Copy, Flag, History, LogOut, RotateCcw, Undo2, UserRound, X } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import type { TableAction, TableActionId } from "./table-ui-state";
 
@@ -71,6 +71,7 @@ export function TableActionButton({
       {action.id === "unready" || action.id === "reject-undo" ? <X aria-hidden="true" focusable={false} /> : null}
       {action.id === "undo" ? <Undo2 aria-hidden="true" focusable={false} /> : null}
       {action.id === "resign" ? <Flag aria-hidden="true" focusable={false} /> : null}
+      {action.id === "replay" ? <History aria-hidden="true" focusable={false} /> : null}
       {action.id === "rematch-ready" || action.id === "rematch-cancel" ? (
         <RotateCcw aria-hidden="true" focusable={false} />
       ) : null}
@@ -105,6 +106,8 @@ function getActionLabel(
       return labels.rejectUndo.replace("{seconds}", String(secondsLeft));
     case "resign":
       return labels.resign;
+    case "replay":
+      return labels.reviewGame;
     case "rematch-cancel":
       return labels.cancelRematch;
     case "rematch-ready":

@@ -72,6 +72,6 @@
 
 - pending AI 设置只存在于当前页面内存，刷新后不恢复；长期偏好持久化仍属于独立设置基础设施。
 - 在线确认使用当前默认 60 秒文案；若服务端以后把不同房间的 grace 变为可配置，应把权威秒数加入 snapshot，而不是保留静态文案。
-- 完整终局逐手复盘仍属于 IX-06；activity summary、比赛配置、挑战和赛事未混入。
+- IX-06 已完成当前终局与刷新后上一局的牌桌内逐手复盘；activity summary、比赛配置、挑战和赛事仍未混入。
 
-下一步按计划进入 `IX-06`，以当前 snapshot moves 和已保存 record 建立牌桌内终局复盘入口。
+后续状态（2026-07-10）：`IX-06` 已完成，详见 `docs/INTERACTION_REDESIGN_IX06_VERIFICATION.md`。下一步进入 `IX-07` 精确大厅汇总。

@@ -137,6 +137,10 @@ export type GameDictionary = {
     replayMove: string;
     replayNext: string;
     replayPrevious: string;
+    exitReplay: string;
+    previousGame: string;
+    previousGameLoading: string;
+    reviewGame: string;
     resign: string;
     resultAbandoned: string;
     resultDraw: string;
@@ -347,6 +351,10 @@ const en = {
       replayMove: "Move {move} / {total}",
       replayNext: "Next move",
       replayPrevious: "Previous move",
+      exitReplay: "Exit replay",
+      previousGame: "Previous game",
+      previousGameLoading: "Loading the previous game…",
+      reviewGame: "Replay",
       resign: "Resign",
       resultAbandoned: "Abandoned",
       resultDraw: "Draw",
@@ -553,6 +561,10 @@ const zh = {
       replayMove: "第 {move} / {total} 手",
       replayNext: "下一手",
       replayPrevious: "上一手",
+      exitReplay: "退出复盘",
+      previousGame: "上一局",
+      previousGameLoading: "正在加载上一局…",
+      reviewGame: "复盘",
       resign: "认输",
       resultAbandoned: "中止",
       resultDraw: "和棋",
@@ -759,6 +771,10 @@ const fr = {
       replayMove: "Coup {move} / {total}",
       replayNext: "Coup suivant",
       replayPrevious: "Coup précédent",
+      exitReplay: "Quitter la relecture",
+      previousGame: "Partie précédente",
+      previousGameLoading: "Chargement de la partie précédente…",
+      reviewGame: "Revoir",
       resign: "Abandonner",
       resultAbandoned: "Abandon",
       resultDraw: "Nulle",
@@ -965,6 +981,10 @@ const es = {
       replayMove: "Movimiento {move} / {total}",
       replayNext: "Movimiento siguiente",
       replayPrevious: "Movimiento anterior",
+      exitReplay: "Salir de la repetición",
+      previousGame: "Partida anterior",
+      previousGameLoading: "Cargando la partida anterior…",
+      reviewGame: "Repetición",
       resign: "Rendirse",
       resultAbandoned: "Abandonada",
       resultDraw: "Empate",
@@ -1171,6 +1191,10 @@ const ru = {
       replayMove: "Ход {move} / {total}",
       replayNext: "Следующий ход",
       replayPrevious: "Предыдущий ход",
+      exitReplay: "Выйти из повтора",
+      previousGame: "Предыдущая игра",
+      previousGameLoading: "Загрузка предыдущей игры…",
+      reviewGame: "Повтор",
       resign: "Сдаться",
       resultAbandoned: "Прервана",
       resultDraw: "Ничья",
@@ -1377,6 +1401,10 @@ const ar = {
       replayMove: "النقلة {move} / {total}",
       replayNext: "النقلة التالية",
       replayPrevious: "النقلة السابقة",
+      exitReplay: "إنهاء الإعادة",
+      previousGame: "المباراة السابقة",
+      previousGameLoading: "جارٍ تحميل المباراة السابقة…",
+      reviewGame: "إعادة العرض",
       resign: "استسلام",
       resultAbandoned: "متروكة",
       resultDraw: "تعادل",

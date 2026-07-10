@@ -135,6 +135,18 @@ async function main(): Promise<void> {
       await assertUndoLayoutAtTargetViewports(cdp);
       await clickButton(cdp, "Allow");
       await waitForTableState(cdp, "playing-opponent-turn");
+      const replayableRoom = requireOk(
+        await emitAck(preparedRooms.waitingHost, "game:move", {
+          expectedMoveSeq: 0,
+          point: { col: 6, row: 7 },
+          roomCode: preparedRooms.waitingCode
+        }),
+        "waiting host replayable move"
+      ).snapshot;
+      if (replayableRoom.moveSeq !== 1) {
+        throw new Error(`Expected one replayable move before resign, received ${replayableRoom.moveSeq}`);
+      }
+      await waitForTableState(cdp, "playing-my-turn");
       requireOk(
         await emitAck(preparedRooms.waitingHost, "game:resign", { roomCode: preparedRooms.waitingCode }),
         "waiting host resign before rematch"
@@ -142,6 +154,16 @@ async function main(): Promise<void> {
       await waitForTableState(cdp, "finished-rematch-open");
       await assertTableTaskModel(cdp, "finished-rematch-open", ["Play again"]);
       await captureEvidence(cdp, "rematch-open.png");
+      await clickTableAction(cdp, "replay");
+      await assertReplayFrame(cdp, `${preparedRooms.waitingCode}-1`, 1, 1, "finished-rematch-open");
+      await clickReplayControl(cdp, "previous");
+      await assertReplayFrame(cdp, `${preparedRooms.waitingCode}-1`, 0, 0, "finished-rematch-open");
+      await clickReplayControl(cdp, "next");
+      await assertReplayFrame(cdp, `${preparedRooms.waitingCode}-1`, 1, 1, "finished-rematch-open");
+      await captureEvidence(cdp, "terminal-replay.png");
+      await clickReplayExit(cdp);
+      await waitForTableState(cdp, "finished-rematch-open");
+      await assertTableTaskModel(cdp, "finished-rematch-open", ["Play again"]);
       await clickButton(cdp, "Play again");
       await waitForTableState(cdp, "finished-rematch-ready");
       await assertTableTaskModel(cdp, "finished-rematch-ready", ["Cancel rematch"]);
@@ -161,6 +183,10 @@ async function main(): Promise<void> {
       await assertRtlMobileConfirmation(cdp);
       await clickConfirmationButton(cdp, "cancel");
       await navigateToLocaleTable(cdp, baseUrl, "en", preparedRooms.waitingCode);
+      await waitForPlayingTable(cdp);
+      await assertPreviousGameReplay(cdp, `${preparedRooms.waitingCode}-1`);
+      await captureEvidence(cdp, "previous-game-replay.png");
+      await clickReplayExit(cdp);
       await waitForPlayingTable(cdp);
       await clickButton(cdp, "AI");
       await assertInteractionConfirmation(cdp, "60 seconds", true);
@@ -202,6 +228,8 @@ async function main(): Promise<void> {
       console.log(`PASS lobby playing row is watchable - ${preparedRooms.playingCode}`);
       console.log("PASS online lobby and table are mutually exclusive");
       console.log("PASS table tasks are state-driven, non-blocking, and limited to four actions");
+      console.log("PASS terminal and post-rematch records replay move-by-move on the readonly table board");
+      console.log("PASS the previous authoritative game remains available after locale refresh and rejoin");
       console.log("PASS both players choose rematch before one immediate next game starts");
       console.log("PASS active online mode switches and explicit table exit explain the disconnect grace period");
       console.log("PASS confirmation controls remain operable at 390x844 RTL");
@@ -758,6 +786,130 @@ async function clickSidebarTab(cdp: CdpClient, tab: "chat" | "history" | "info")
   if (!result.ok) {
     throw new Error(`Sidebar tab ${tab} was not unique: ${result.count}`);
   }
+}
+
+async function assertReplayFrame(
+  cdp: CdpClient,
+  gameId: string,
+  moveNumber: number,
+  stoneCount: number,
+  expectedTableState: string
+): Promise<void> {
+  await waitForValue(async () => {
+    const replay = await evaluate<{
+      allPointsDisabled: boolean;
+      gameId: string | null;
+      hasActions: boolean;
+      hasControls: boolean;
+      hasTask: boolean;
+      moveNumber: number | null;
+      state: string | null;
+      stoneCount: number;
+    }>(
+      cdp,
+      `(() => {
+        const table = document.querySelector('[data-online-view="table"]');
+        const points = Array.from(table?.querySelectorAll('.play-area button') ?? []);
+        const slider = table?.querySelector('[data-table-replay-slider]');
+        return {
+          allPointsDisabled: points.length > 0 && points.every((point) => point.disabled),
+          gameId: table?.getAttribute('data-table-replay') ?? null,
+          hasActions: Boolean(table?.querySelector('.table-action-bar')),
+          hasControls: Boolean(table?.querySelector('[data-table-replay-controls]')),
+          hasTask: Boolean(table?.querySelector('.table-task-bar')),
+          moveNumber: slider ? Number.parseInt(slider.value, 10) : null,
+          state: table?.getAttribute('data-table-state') ?? null,
+          stoneCount: table?.querySelectorAll('.play-area .stone').length ?? 0
+        };
+      })()`
+    );
+
+    return replay.gameId === gameId &&
+      replay.moveNumber === moveNumber &&
+      replay.stoneCount === stoneCount &&
+      replay.state === expectedTableState &&
+      replay.allPointsDisabled &&
+      replay.hasControls &&
+      !replay.hasActions &&
+      !replay.hasTask
+      ? replay
+      : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function clickReplayControl(cdp: CdpClient, direction: "next" | "previous"): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const button = document.querySelector('[data-table-replay-step="${direction}"]');
+      if (!button || button.disabled) {
+        return { ok: false, detail: document.querySelector('[data-table-replay-controls]')?.textContent ?? document.body.innerText };
+      }
+      button.click();
+      return { ok: true, detail: button.getAttribute('aria-label') ?? '' };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not step replay ${direction}: ${result.detail}`);
+  }
+}
+
+async function clickReplayExit(cdp: CdpClient): Promise<void> {
+  const result = await evaluate<ClickResult>(
+    cdp,
+    `(() => {
+      const button = document.querySelector('[data-table-replay-exit]');
+      if (!button) {
+        return { ok: false, detail: document.body.innerText };
+      }
+      button.click();
+      return { ok: true, detail: (button.textContent || '').trim() };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not exit table replay: ${result.detail}`);
+  }
+}
+
+async function assertPreviousGameReplay(cdp: CdpClient, gameId: string): Promise<void> {
+  await clickSidebarTab(cdp, "history");
+  await waitForValue(async () => {
+    const previous = await evaluate<{
+      gameId: string | null;
+      hasProfileLink: boolean;
+      replayButton: boolean;
+    }>(
+      cdp,
+      `(() => ({
+        gameId: document.querySelector('.table-previous-game strong')?.textContent ?? null,
+        hasProfileLink: Boolean(document.querySelector('[data-table-record-profile][href*="/profile/"]')),
+        replayButton: Boolean(document.querySelector('[data-table-replay-previous]'))
+      }))()`
+    );
+
+    return previous.gameId === gameId && previous.hasProfileLink && previous.replayButton ? previous : null;
+  }, STEP_TIMEOUT_MS);
+
+  const clicked = await evaluate<boolean>(
+    cdp,
+    `(() => {
+      const button = document.querySelector('[data-table-replay-previous]');
+      button?.click();
+      return Boolean(button);
+    })()`
+  );
+
+  if (!clicked) {
+    throw new Error(`Could not open previous game replay ${gameId}`);
+  }
+
+  await assertReplayFrame(cdp, gameId, 1, 1, "playing-my-turn");
+  await clickReplayControl(cdp, "previous");
+  await assertReplayFrame(cdp, gameId, 0, 0, "playing-my-turn");
+  await clickReplayControl(cdp, "next");
+  await assertReplayFrame(cdp, gameId, 1, 1, "playing-my-turn");
 }
 
 async function assertUndoLayoutAtTargetViewports(cdp: CdpClient): Promise<void> {

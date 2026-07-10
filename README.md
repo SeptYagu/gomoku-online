@@ -23,6 +23,7 @@
 - 在线终局由服务端立即保存为权威棋谱；客户端双份提交用于一致性审计，不再决定胜局能否进入排行榜。
 - 轻账号、注册用户/游客榜单、Profile、Game records 回放、单局 SGF 下载、排行榜搜索分页和服务器棋谱开局分析第一版已实现。
 - 游客重连使用服务器签发的 guest token；公开 playerId 不能直接接管座位，多标签连接只在最后一个活动 socket 断开后启动宽限期。
+- 在线牌桌支持双方分别表达再战意愿，并可在终局或下一局中直接逐手复盘当前/上一局；刷新后上一局从成员授权的权威 record 读回。
 
 下一轮建议：
 
@@ -301,6 +302,7 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/INTERACTION_REDESIGN_IX04A_VERIFICATION.md`：公开 handle、显式房主索引和四种统一加入目标验证。
 - `docs/INTERACTION_REDESIGN_IX06A_VERIFICATION.md`：双方再战意愿、断线重连门控和旧 restart 兼容验证。
 - `docs/INTERACTION_REDESIGN_IX05_VERIFICATION.md`：在线离桌确认、AI 设置下一局生效和 guest rejoin token 修复验证。
+- `docs/INTERACTION_REDESIGN_IX06_VERIFICATION.md`：终局/跨局牌桌复盘、成员 record 鉴权和刷新恢复验证。
 - `docs/HANDOFF.md`：当前任务交接文档，方便新窗口接手。
 - `docs/logic/`：按模块记录从参考项目提取出的实现逻辑。
 

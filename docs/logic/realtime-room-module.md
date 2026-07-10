@@ -209,12 +209,12 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `GameShell` 用 workspace selector 保证在线大厅、joining gate、在线牌桌三者互斥；有 room ack 时牌桌优先于可能残留的 joining 标志。
 - `useFriendRoom({ enabled })` 在 local/AI 模式禁止新的自动 rejoin；从活跃房切换模式时仍先发既有 `room:leave`，没有为了门控提前断开 socket 或改变 leave ack 语义。
 - 邀请 URL 和 stored session 恢复期间进入 `OnlineJoiningView`；ack 成功仍以服务端 `snapshot.code` 同步 URL/session，失败仍走原错误与重新加入路径。
-- `getTableActions(state, capabilities)` 现在把 controller 权限转换为有序可见动作；无权限动作直接隐藏，task 区最多 2 个决策，task + toolbar 总数最多 3 个。
+- `getTableActions(state, capabilities)` 现在把 controller 权限转换为有序可见动作；无权限动作直接隐藏，task 区最多 2 个决策，task + toolbar 总数最多 3 个。finished 与仍有 moves 的 abandoned 可出现 Replay 工具动作。
 - `GameTableView` 通过 `TableTaskBar` / `TableActionBar` 承载 ready、undo、resign、rematch、sit、leave；悔棋 Reject/Allow 和倒计时已从棋盘中央 modal 移到非阻塞任务栏，超时自动拒绝语义保持不变。
 - 新增状态与真实 Chrome smoke 覆盖视图互斥、local/AI 不建立 Socket.IO、Ready、Host 落子/发起悔棋、Guest Allow 和 spectator 状态；本批没有修改本节列出的任何房间/对局事件。
 - 终局已由 IX-06A 改为双方 rematch readiness；host restart 只保留旧客户端兼容语义。IX-05 已为 playing player 的顶部模式切换和明确 Leave 增加非阻塞后果确认，并等待 leave ack 后再切工作区。
 - `IX-03` 后，`GameTableView` 只保留 task/board/actions；`TableSidebar` 接管既有 280–320px 右栏，玩家和连接状态优先，聊天、当前局最近步骤和房间信息进入页签。
-- 900px 以下 sidebar 排在 game-stage 后，移动顺序为任务、棋盘、动作、玩家、次要页签；390×844 阿拉伯语 RTL 已验证无根级横向溢出。当前步骤页签只读取 `RoomSnapshot.moves`，不替代 IX-06 的完整复盘。
+- 900px 以下 sidebar 排在 game-stage 后，移动顺序为任务、棋盘、动作、玩家、次要页签；390×844 阿拉伯语 RTL 已验证无根级横向溢出。IX-06 已让当前终局 snapshot 与上一局授权 record 共用主棋盘只读复盘。
 
 ## 推荐事件
 
@@ -238,6 +238,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `game:resign`
 - `game:rematch-ready`
 - `game:restart`
+- `game-record:get`（仅当前房间成员读取匹配 roomCode 的去身份化上一局 record）
 
 连接：
 
@@ -310,7 +311,8 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - unlisted 只改变公开发现：不会进入 lobby 列表/增量/删除事件或 Presence roomCode，但 `room:join`、`room:rejoin`、邀请 URL 和 stored session 仍使用同一规范 roomCode；当前没有邀请 token 授权。
 - public 注册房主可通过显式 accountId -> roomCode 索引被 handle/account ID 解析；unlisted 默认关闭，房主转移、断线、恢复和房间清理会同步索引。当前索引与限流为单进程边界。
 - unlisted 终局仍写入带 visibility 的内部权威记录以校验客户端提交，但不进入公开 Profile recent records/排行榜；管理员本地导出仍可读取完整记录。
-- rematch 开始新局前上一局已由服务端权威记录保存；新局清当前 snapshot moves，但不删除上一局 record。牌桌内逐手复盘仍留给 IX-06。
+- rematch/restart 开始新局前上一局已由服务端权威记录保存，并把旧 gameId 写入 `previousGameId`。新局清当前 snapshot moves 后，controller 通过成员鉴权 `game-record:get` 读回上一局；public/unlisted 均可房内复盘，但 unlisted 不进入公开 Profile。
+- IX-06 牌桌复盘只使用 `RoomSnapshot.moves` 或 `RoomGameRecordSnapshot.moves`，不读取聊天。Previous/Next/range 重建本地只读棋盘，Exit 后恢复实时 snapshot；public seated player 可链接自己的 Profile/Game records。
 - Guest reconnect token 已完成：公开 playerId 不能直接重连；registered 用户继续使用 account token。Token 当前随单进程房间生命周期存在，多实例共享 session 留给 Redis/正式账号基础设施。
 - IX-05 修复动作 ack 擦除 guest rejoin token：`runForCurrentPlayer` 对 guest 回传当前 socket token，客户端对旧服务端缺字段 ack 也保留既有 token；真实 locale refresh 已验证恢复原 seat 而非新 spectator。
 - 同一已认证玩家可以有多个活动 socket；只有最后一个房间 socket 断开才把座位标记为 disconnected，避免刷新/多标签旧连接误触发判负。
@@ -332,6 +334,8 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - 客户端伪造 board/color 无效。当前 API 不接收客户端 board/color，只接收 `MoveIntent`；成员、回合、坐标和 `moveSeq` 校验已覆盖。
 - Socket.IO 双客户端创建、加入、ready 自动开局、落子广播、悔棋请求确认、非法连走、断线提示和断线超时广播。已覆盖：`src/server/room-socket.test.ts`。
 - Socket.IO 三客户端观战：第三人进入观战席、不能执行玩家动作、能收到落子广播。已覆盖：`src/server/room-socket.test.ts` 和 `tools/smoke-online-room.ts`。
+- 跨局 record：rematch 后 previousGameId 正确、当前房间 spectator 可读去身份化上一局、outsider/错误 roomCode 被拒。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`。
+- 牌桌复盘：终局与刷新后的上一局可 1 -> 0 -> 1 逐手回看，复盘时棋盘只读，退出恢复原桌。已覆盖：`src/components/online/table-replay.test.ts`、`tools/smoke-lobby-ui.ts`。
 - 浏览器双上下文创建、邀请 URL 加入、实时落子、非当前回合禁点、刷新恢复和断线提示。已手动验证。
 - 断线宽限期内可恢复。Guest token、registered account token、同玩家多 socket 和最后连接断开语义已由 `src/server/accounts.test.ts`、`src/server/room-socket.test.ts` 覆盖。
 - 宽限期后按规则处理。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`。

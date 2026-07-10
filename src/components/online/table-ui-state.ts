@@ -27,6 +27,7 @@ export type TableActionId =
   | "leave"
   | "ready"
   | "reject-undo"
+  | "replay"
   | "rematch-cancel"
   | "rematch-ready"
   | "resign"
@@ -44,6 +45,7 @@ export type TableAction = {
 export type TableActionCapabilities = {
   canCancelMatch: boolean;
   canReady: boolean;
+  canReplay: boolean;
   canRematch: boolean;
   canResign: boolean;
   canSit: boolean;
@@ -150,15 +152,20 @@ export function getTableActions(
     case "finished-rematch-open":
       return [
         ...(capabilities.canRematch ? [action("rematch-ready", "task")] : []),
+        ...(capabilities.canReplay ? [action("replay", "toolbar")] : []),
         action("leave", "toolbar")
       ];
     case "finished-rematch-ready":
       return [
         ...(capabilities.canRematch ? [action("rematch-cancel", "task")] : []),
+        ...(capabilities.canReplay ? [action("replay", "toolbar")] : []),
         action("leave", "toolbar")
       ];
     case "abandoned":
-      return [action("leave", "task")];
+      return [
+        ...(capabilities.canReplay ? [action("replay", "toolbar")] : []),
+        action("leave", "task")
+      ];
   }
 }
 

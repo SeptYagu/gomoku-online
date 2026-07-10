@@ -113,6 +113,16 @@ describe("GameRecordStore", () => {
 
     expect(store.listRecords()).toHaveLength(2);
     expect(store.getRecord(unlistedRecord.gameId)).toMatchObject({ visibility: "unlisted" });
+    const roomRecord = store.getRoomRecord(unlistedRecord.gameId, unlistedRecord.roomCode);
+    expect(roomRecord).toMatchObject({
+      gameId: unlistedRecord.gameId,
+      players: [
+        { name: "Alice", seat: "black" },
+        { name: "Bob", seat: "white" }
+      ],
+      visibility: "unlisted"
+    });
+    expect(roomRecord?.players[0]).not.toHaveProperty("playerId");
     expect(store.getPlayerProfile("player-1", "Alice")).toMatchObject({
       recentRecords: [expect.objectContaining({ gameId: publicRecord.gameId, roomCode: publicRecord.roomCode })],
       stats: { games: 1 }

@@ -3,7 +3,14 @@ import type { AddressInfo } from "node:net";
 import { Server } from "socket.io";
 import { describe, expect, it } from "vitest";
 import { AccountStore } from "./accounts";
-import type { GameRecordAck, PresenceAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
+import type {
+  GameRecordAck,
+  PresenceAck,
+  PublicChatAck,
+  RoomAck,
+  RoomGameRecordAck,
+  RoomListAck
+} from "./room-contract";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
 import {
   RoomStore,
@@ -576,6 +583,21 @@ describe("room socket handlers", () => {
         }
       });
       expect(await hostSawRematch).toMatchObject({ gameId: `${roomCode}-2`, status: "playing" });
+      expect(await emitAck<RoomGameRecordAck>(spectator, "game-record:get", { gameId: `${roomCode}-1` })).toMatchObject({
+        ok: true,
+        value: {
+          gameId: `${roomCode}-1`,
+          players: [
+            { name: "Rematch Host", seat: "black" },
+            { name: "Rematch Guest", seat: "white" }
+          ]
+        }
+      });
+      const outsider = await harness.connectClient();
+      expect(await emitAck<RoomGameRecordAck>(outsider, "game-record:get", { gameId: `${roomCode}-1` })).toMatchObject({
+        ok: false,
+        error: { code: "not-room-member" }
+      });
       expect(await emitAck(rejoinedGuest, "game:rematch-ready", { ready: true, roomCode })).toMatchObject({
         ok: false,
         error: { code: "game-not-playing" }

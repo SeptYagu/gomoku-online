@@ -583,6 +583,14 @@ Game 增加：
   - 可指定 `--format sgf|jsonl`、`--status verified|partial|conflicted|all`、`--limit`。
 - 新增 `npm run smoke:game-record-export`，使用临时棋谱库验证 SGF / JSONL 序列化。
 
+## 当前落地：牌桌内终局与上一局复盘（2026-07-10）
+
+- 当前 finished 局直接复用权威 `RoomSnapshot.moves`，无需先离桌进入 Profile。
+- rematch/restart 前保存 `previousGameId`；新局和刷新重连后，当前房间成员可通过 `game-record:get` 读取 roomCode 匹配的去身份化上一局 record。
+- 成员 record 保留 visibility，但不返回 playerId。unlisted 可在当前连续桌内复盘，仍不进入公开 Profile/排行榜；public seated player 可从上一局卡片进入自己的 Profile/Game records。
+- 牌桌 replay state 只在客户端内存中保存，Previous/Next/range 复用 `replayBoardAtMove`；复盘不提交落子、不改变权威 snapshot，退出即回到实时牌桌。
+- 当前只保留一个 previousGameId；更早多局记录仍由 Profile recent records/持久化导出承担，不把房间聊天当成棋谱。
+
 仍保留到后续小步：
 
 - 排行榜分页、搜索和增量事件。

@@ -1,14 +1,18 @@
 import type { GameDictionary } from "@/i18n/dictionaries";
+import type { Locale } from "@/i18n/config";
+import type { Move } from "@/game/types";
 import type { FriendRoomController } from "../useFriendRoom";
 import { TablePlayers } from "./TablePlayers";
 import { TableSidebarTabs } from "./TableSidebarTabs";
 
 type TableSidebarProps = {
   dictionary: GameDictionary;
+  locale: Locale;
+  onReplayGame: (gameId: string, moves: Move[]) => void;
   room: FriendRoomController;
 };
 
-export function TableSidebar({ dictionary, room }: TableSidebarProps) {
+export function TableSidebar({ dictionary, locale, onReplayGame, room }: TableSidebarProps) {
   const clientState = room.room;
 
   if (!clientState) {
@@ -27,7 +31,7 @@ export function TableSidebar({ dictionary, room }: TableSidebarProps) {
         </span>
       </div>
       <TablePlayers dictionary={dictionary} room={clientState} />
-      <TableSidebarTabs dictionary={dictionary} room={room} />
+      <TableSidebarTabs dictionary={dictionary} locale={locale} onReplayGame={onReplayGame} room={room} />
       {room.error ? <p className="room-error">{room.error}</p> : null}
     </section>
   );

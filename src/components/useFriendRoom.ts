@@ -8,7 +8,8 @@ import type {
   LeaderboardIdentity,
   LeaderboardScope,
   LeaderboardSnapshot,
-  PlayerProfileSnapshot
+  PlayerProfileSnapshot,
+  RoomGameRecordSnapshot
 } from "@/server/game-records";
 import type {
   GameRecordAck,
@@ -16,6 +17,7 @@ import type {
   PublicChatAck,
   RoomAck,
   RoomClientState,
+  RoomGameRecordAck,
   RoomListAck
 } from "@/server/room-contract";
 import type {
@@ -94,6 +96,8 @@ export type FriendRoomController = {
   presenceUsers: UserPresenceSnapshot[];
   profile: PlayerProfileSnapshot | null;
   profileStatus: "idle" | "loading" | "ready" | "error";
+  previousGameRecord: RoomGameRecordSnapshot | null;
+  previousGameRecordStatus: "idle" | "loading" | "ready" | "error";
   publicChatMessages: PublicChatMessage[];
   publicChatStatus: "idle" | "loading" | "ready" | "error";
   publicChatText: string;
@@ -146,6 +150,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   const leaderboardAbortControllerRef = useRef<AbortController | null>(null);
   const leaderboardRequestSeqRef = useRef(0);
   const submittedGameRecordsRef = useRef<Set<string>>(new Set());
+  const previousGameRecordRequestRef = useRef<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<FriendRoomController["connectionStatus"]>("idle");
   const [room, setRoom] = useState<RoomClientState | null>(null);
   const [account, setAccount] = useState<AccountSession | null>(null);
@@ -159,6 +164,9 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   const [chatText, setChatText] = useState("");
   const [profile, setProfile] = useState<PlayerProfileSnapshot | null>(null);
   const [profileStatus, setProfileStatus] = useState<FriendRoomController["profileStatus"]>("idle");
+  const [previousGameRecord, setPreviousGameRecord] = useState<RoomGameRecordSnapshot | null>(null);
+  const [previousGameRecordStatus, setPreviousGameRecordStatus] =
+    useState<FriendRoomController["previousGameRecordStatus"]>("idle");
   const [publicChatMessages, setPublicChatMessages] = useState<PublicChatMessage[]>([]);
   const [publicChatStatus, setPublicChatStatus] = useState<FriendRoomController["publicChatStatus"]>("idle");
   const [publicChatText, setPublicChatText] = useState("");
@@ -1034,6 +1042,43 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   }, [applyRoomAck, enabled, ensureSocket, identityReady, joinRoomByCode, room]);
 
   useEffect(() => {
+    const roomCode = room?.snapshot.code;
+    const previousGameId = room?.snapshot.previousGameId;
+
+    if (!enabled || !roomCode || !previousGameId) {
+      previousGameRecordRequestRef.current = null;
+      window.setTimeout(() => {
+        setPreviousGameRecord(null);
+        setPreviousGameRecordStatus("idle");
+      }, 0);
+      return;
+    }
+
+    const requestKey = `${roomCode}:${previousGameId}`;
+
+    if (previousGameRecordRequestRef.current === requestKey) {
+      return;
+    }
+
+    previousGameRecordRequestRef.current = requestKey;
+    window.setTimeout(() => setPreviousGameRecordStatus("loading"), 0);
+    ensureSocket().emit("game-record:get", { gameId: previousGameId }, (response: RoomGameRecordAck) => {
+      if (previousGameRecordRequestRef.current !== requestKey) {
+        return;
+      }
+
+      if (!response.ok) {
+        setPreviousGameRecord(null);
+        setPreviousGameRecordStatus("error");
+        return;
+      }
+
+      setPreviousGameRecord(response.value);
+      setPreviousGameRecordStatus("ready");
+    });
+  }, [enabled, ensureSocket, room?.snapshot.code, room?.snapshot.previousGameId]);
+
+  useEffect(() => {
     const snapshot = room?.snapshot;
 
     if (!room || room.role !== "player" || !snapshot || !snapshot.finishReason) {
@@ -1134,6 +1179,8 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     presenceUsers,
     profile,
     profileStatus,
+    previousGameRecord,
+    previousGameRecordStatus,
     publicChatMessages,
     publicChatStatus,
     publicChatText,

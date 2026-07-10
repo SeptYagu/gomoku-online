@@ -66,9 +66,9 @@ socket 测试显式覆盖刷新：guest ready 后断线，host ready 仍保持 f
 
 ## 未实现边界与下一步
 
-- IX-06A 只保留上一局 record 的服务端可查询性；牌桌内逐手复盘仍属于 IX-06。
+- IX-06 已在此 record 边界上补齐当前终局与刷新后上一局的牌桌内逐手复盘。
 - 局中离桌/模式切换确认和 AI 设置下一局生效仍属于 IX-05。
 - rematch 状态随单进程房间存在，不是跨实例共享状态；多实例前仍需 Redis Adapter/共享房间存储。
 - activity summary、matchConfig、点名挑战和赛事没有混入本阶段。
 
-后续状态（2026-07-10）：`IX-05` 已完成在线离桌确认、AI 设置下一局生效和 guest rejoin token 保留。详见 `docs/INTERACTION_REDESIGN_IX05_VERIFICATION.md`。下一步进入 `IX-06`。
+后续状态（2026-07-10）：`IX-05` 与 `IX-06` 已完成，安全切换和跨局复盘均不改变双方再战的权威门控。详见对应验证报告。下一步进入 `IX-07`。

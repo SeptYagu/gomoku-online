@@ -1,6 +1,13 @@
 import type { Point } from "../game/types";
 import { AccountStore, GuestSessionStore, resolvePlayerIdentity } from "./accounts";
-import type { GameRecordAck, PresenceAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
+import type {
+  GameRecordAck,
+  PresenceAck,
+  PublicChatAck,
+  RoomAck,
+  RoomGameRecordAck,
+  RoomListAck
+} from "./room-contract";
 import type { GameRecordClientSubmission } from "./game-records";
 import { FixedWindowRateLimiter } from "./rate-limit";
 import {
@@ -56,6 +63,7 @@ export type ClientToServerEvents = {
     payload: Omit<GameRecordClientSubmission, "playerId">,
     ack: (response: GameRecordAck) => void
   ) => void;
+  "game-record:get": (payload: { gameId: string }, ack: (response: RoomGameRecordAck) => void) => void;
   "lobby:join": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:leave": (payload: undefined, ack: (response: RoomListAck) => void) => void;
   "lobby:list": (payload: RoomListQuery | undefined, ack: (response: RoomListAck) => void) => void;
@@ -498,6 +506,18 @@ export function registerRoomSocketHandlers(
       }
 
       acknowledgeGameRecord(socket, roomStore.submitGameRecord({ ...payload, playerId }), ack);
+    });
+
+    socket.on("game-record:get", (payload, ack) => {
+      const playerId = socket.data.playerId;
+      const roomCode = socket.data.roomCode;
+
+      if (!playerId || !roomCode || !roomStore.getParticipantRole(roomCode, playerId)) {
+        ack({ ok: false, error: { code: "not-room-member", message: "Join this room before reading its record." } });
+        return;
+      }
+
+      ack(roomStore.getRoomGameRecord(payload.gameId, roomCode));
     });
 
     socket.on("room:chat-send", (payload, ack) => {
