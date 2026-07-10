@@ -4529,3 +4529,11 @@ b6faf9e
 7. 本轮仍只修改计划、真实性核验和本 handoff 文档，没有修改产品源码、协议、依赖或运行配置；所有新增能力仍为待实施任务。
 8. 自洽性复核确认计划共有 13 个独立任务 ID：原 `IX-00`～`IX-09` 加 `IX-04A`、`IX-04B`、`IX-06A`；新增全栈任务均排在 P0 工作区拆分之后。
 9. 提交前差异范围为上述 3 个文档，`.codex/` 仍是既有未跟踪本地元数据；疑似密钥模式扫描无匹配。
+
+### 计划更新提交与推送
+
+- 提交：`273a1a8 docs: expand interaction plan for room aliases`。
+- 提交范围：计划、真实性核验和本 handoff，共 265 行新增、20 行删除；没有产品代码变更。
+- `git diff --cached --check`：通过；仅有 Windows 工作区 LF/CRLF 转换提示。
+- `git push origin main`：成功，`9c75ea5..273a1a8`。
+- 本段提交结果将作为单独 handoff 记录提交，之后再次推送并核对 `main` 与 `origin/main`。
