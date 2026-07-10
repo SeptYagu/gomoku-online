@@ -4970,3 +4970,46 @@ b6faf9e
 - 提交范围：19 个文件，666 行新增、84 行删除；包含权威 rematch 状态与事件、finished 断线/重连/补位边界、旧 restart 兼容、新终局任务栏、六语种文案、160 项测试、Chrome/协议 smoke、验证报告和计划/逻辑文档。
 - `git push origin main`：成功，`de0943a..7856c6f`。
 - 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-05。
+
+## 2026-07-10 IX-05 安全模式切换与局中设置
+
+### 步骤 1：重读模式切换与 AI 重置链路
+
+1. 重读 IX-05、GameShell mode/reset、AiGameView 难度/先手按钮、online leave ack、GameTable Leave、工作区门控、六语种字典、CSS 响应式和 lobby UI smoke；Git 与远端同步，仅 `.codex/` 未跟踪。
+2. 当前顶部 active 模式按钮再次点击也会 reset 本地状态；AI 难度或先手每次点击都会立即 reset；online playing 切模式先发 leave 但不等待 ack 就隐藏牌桌。三者均可能无提示丢失上下文。
+3. IX-05 选择应用内非阻塞 alertdialog 确认条，不使用 `window.confirm` 或遮棋盘 modal。在线 playing player 的顶部模式切换和明确 Leave 都先解释 seat 断开、约 60 秒恢复宽限和超时可能判负；Cancel 默认获焦。waiting/finished/spectator/lobby 直接离开。
+4. online 模式切换只有在 `room:leave` ack 成功后才切工作区；失败则保留当前牌桌和确认条，避免 UI 已离开但服务端 seat 仍活跃。
+5. AI 已有任一落子后，难度/先手只写入 pending 并显示“下一局生效”；New game 或下次进入 AI 时原子应用，可取消 pending。空棋盘继续立即应用。AI 有落子时切模式也需确认。
+6. 新增纯 `interaction-guards` 决策表，覆盖 active mode noop、AI 有/无落子、online player/spectator/waiting，以及 pending AI 设置解析；真实 Chrome smoke 将覆盖键盘 Enter 取消、触摸按钮、URL 保留/清理和截图。
+
+### 步骤 2：确认条、AI pending 设置与首轮门禁
+
+1. 新增 `InteractionConfirmation`：非遮挡 `role=alertdialog`、标题/说明关联、Cancel 自动聚焦、Cancel/危险确认两按钮均为触摸目标；移动端两列转两行，继承 RTL。
+2. `FriendRoomController.leaveRoom` 新增 success/failure completion 回调；GameShell 只在成功 ack 后完成跨工作区切换。GameTable Leave 改为向壳层请求，由壳层依据 role/status 决定确认或直离。
+3. AI 设置新增 pending difficulty/firstPlayer；当前值继续用 active，待生效值用边框标记和 status 条展示，Cancel changes 可撤销，New game 应用并清 pending。
+4. 六语种新增在线离桌后果、AI 局面离开、Cancel/Switch mode、Next game/Cancel changes 文案；新增确认条和 pending 设置响应式样式。
+5. 新增 `interaction-guards.test.ts`；与 table state 合计 36 项定向测试通过。首轮 lint 发现 effect 内同步 setState 的 React 反模式；删除非必要“状态变化时自动收起” effect 后 lint 通过，build 的编译、TypeScript 和 11 页面生成通过。
+6. lobby UI smoke 已扩展待验证：AI 两手后设置 Expert -> pending 保留棋盘 -> New game 才应用；AI 切模式确认用自动聚焦 Cancel 的键盘 Enter；online playing 顶部模式先取消，再用明确 Leave 确认并等待 ack 清 URL。
+
+### 步骤 3：真实浏览器发现并修复 guest rejoin token 丢失
+
+1. 首轮 Chrome IX-05 主流程通过 AI pending、AI 键盘确认和英文在线确认；在线截图最初因旧取证逻辑滚动到牌桌而裁掉确认标题，改为优先滚动确认条后重拍，确认说明和棋盘同时完整。
+2. 为验证 RTL 确认，流程在 mutual rematch 新局中刷新到 `/ar?room=...`。连续两次都没有恢复原 seat，而是生成新游客 spectator；诊断正文明确显示原玩家 disconnected、新玩家 watching，证明这是产品 rejoin 缺陷，不是回合断言过严。
+3. 根因：`applyRoomAck` 会在 ready/move/rematch 等每次动作 ack 后重写 stored room session；`runForCurrentPlayer` 旧 ack 不带 guestToken，因而把 session 中 token 擦除。独立 guest token 仍在 sessionStorage，但自动 rejoin 只提交 stored session，失败后按 URL 走新游客 join，最终成为 spectator。
+4. 修复两层兼容边界：服务端当前成员动作 ack 对 guest 回传 socket.data.guestToken；客户端即使连接旧服务端、ack 缺 token，也从既有 session/guest token 保留值，不再覆盖成 undefined。socket 测试验证普通 ready ack 与首次 join 返回相同 token。
+5. 修复后重新 build 并运行 Chrome 全流程：刷新到阿拉伯语后恢复原 playing seat；390×844 RTL 确认条无横向溢出、两按钮均至少 44px、Cancel 自动聚焦、终局/棋盘保持可见；取消后回英语仍恢复同一 seat，显式 Leave 确认成功后 URL 清理并回大厅。
+6. 人工确认 `ai-settings-next-game.png` 显示两手棋与 Next game: AI first · Expert；New game 后 AI 自动落第一手、玩家落子后 AI 继续应手，证明难度与先手都已应用。`ai-mode-switch-confirmation.png` 显示完整 AI 离开说明和未丢棋盘；`online-mode-switch-confirmation.png` 显示 60 秒宽限、棋盘与牌桌动作；`confirmation-rtl-390x844.png` 显示真实阿拉伯语布局和可触摸按钮。
+
+### 步骤 4：文档同步与最终门禁
+
+1. 新增 `INTERACTION_REDESIGN_IX05_VERIFICATION.md`，更新计划为 IX-05 完成、下一步 IX-06；同步 README、实时房间、AI Worker/设置逻辑以及 IX-04A/04B/06A 后续状态。
+2. 全量 `npm test` 为 16 个文件、168 个测试通过；`npm run lint`、`npm audit --omit=dev`（0 漏洞）和 `git diff --check` 通过。
+3. 最终生产构建上的 lobby UI、share-url、online-room、room-lifecycle 和 account smoke 全部通过；确认条、AI pending、guest 刷新、邀请 URL、双方再战、断线超时和注册身份均无回归。
+4. 停止本轮单一 3050 服务并确认无监听后执行最终 `npm run build`；编译、TypeScript 和 11 个页面生成成功。
+
+### IX-05 提交与推送
+
+- 提交：`d9122f9 feat: protect active game transitions`。
+- 提交范围：20 个文件，931 行新增、47 行删除；包含非阻塞可访问确认条、online leave ack 门控、AI pending 难度/先手、guest rejoin token 双层修复、六语种与响应式样式、168 项测试、真实 Chrome/RTL smoke、验证报告和计划/逻辑文档。
+- `git push origin main`：成功，`9a5f1c4..d9122f9`。
+- 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-06。
