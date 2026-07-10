@@ -5013,3 +5013,44 @@ b6faf9e
 - 提交范围：20 个文件，931 行新增、47 行删除；包含非阻塞可访问确认条、online leave ack 门控、AI pending 难度/先手、guest rejoin token 双层修复、六语种与响应式样式、168 项测试、真实 Chrome/RTL smoke、验证报告和计划/逻辑文档。
 - `git push origin main`：成功，`9a5f1c4..d9122f9`。
 - 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-06。
+
+## 2026-07-10 IX-06 终局历史与牌桌内复盘
+
+### 步骤 1：重读 moves、record 与跨局边界
+
+1. 重读 IX-06、Table Move history、Profile record replay、`record-replay.ts`、终局权威记录、Profile API 可见性和 IX-06A reset；Git 与远端同步，仅 `.codex/` 未跟踪。
+2. 当前侧栏 History 只列 snapshot 最后 20 手，不能改变主棋盘；Profile 已有 range + previous/next 的逐手逻辑可复用。finished 当前局可直接用 snapshot.moves，但 rematch/restart 后 moves 被清空，刷新也丢失客户端缓存。
+3. 不能直接用公开 Profile 解决跨局：IX-04B 正确过滤 unlisted 记录。IX-06 新增仅限“当前房间成员”的 socket `game-record:get`，按 snapshot.previousGameId 查询当前 roomCode 的去身份化 record；返回玩家名/座位/棋谱，不返回 playerId，允许当前房内 spectator，但拒绝外部 socket。
+4. RoomState/Snapshot 新增 `previousGameId`；每次 rematch/restart 在递增 gameId 前保存旧值。当前终局 Replay 使用 snapshot.moves；新局/刷新后的 Previous game 使用成员授权 record，因此 public/unlisted 都保持原发现边界。
+5. 主棋盘复盘为本地只读 inspection state：打开时默认最后一手，Previous/Next/range 通过现有 `replayBoardAtMove` 重建棋盘，Exit replay 回到实时权威 snapshot；复盘中不发送 move 或改写 room state。
+
+### 步骤 2：成员 record lookup、复盘工作区与定向门禁
+
+1. `GameRecordStore.getRoomRecord` 返回去身份化 `RoomGameRecordSnapshot`；RoomStore 校验 gameId + roomCode；socket 还校验请求者当前确实在该房间。RoomStore/socket 测试覆盖 previousGameId、上一局一手棋、玩家名/座位、错误 roomCode 和 outsider 拒绝。
+2. controller 监听权威 previousGameId，通过 socket 加载 previousGameRecord；缺记录显示 error/空，不从聊天或公开 Profile 猜测。请求 key 防止旧异步结果覆盖新房/新局。
+3. 新增 `table-replay.ts` 纯状态与 `TableReplayBar`；终局 task actions 增加 Replay 工具动作，总数为 3；复盘时隐藏普通任务/动作栏、棋盘禁用落子，退出后恢复实时任务。
+4. 侧栏 History 在 finished 提供当前局 Replay，在新局显示 Previous game + gameId/手数/Replay；GameShell 提升 replay state，让主棋盘与右侧栏共享入口，并在成功离桌/切模式后清理。
+5. 六语种新增 Replay/Exit replay/Previous game/loading 文案；桌面和移动端新增 replay bar、range 与上一局卡片样式。
+6. 首轮 4 份定向测试共 93 项、lint 通过；首次 build 发现 `TableRoomInfo` 复用了新增 onReplayGame 的完整侧栏 props，收窄为实际 dictionary/room 后构建编译、TypeScript 和 11 页面生成通过。
+
+### 步骤 3：公开 Profile 边界与真实 Chrome 复盘
+
+1. 对照计划中“已保存 record 链接到 Profile/Game records”补齐公开路径：成员 record 增加原始 visibility，但玩家仍只返回 name/seat，不返回 playerId。只有上一局为 public 且当前连接仍是该房玩家时，侧栏才链接当前玩家自己的 Profile；unlisted record 继续只允许房内复盘，不会出现指向不含该棋局的公开入口。
+2. game-record 单测新增 unlisted 成员 record 可读、visibility 保留且无 playerId；连同 replay/table state/RoomStore/socket 五份定向测试共 101 项通过。lint、build（编译、TypeScript、11 页面）和 `git diff --check` 通过。
+3. Chrome smoke 在悔棋接受后让 host 再落一手并认输，终局动作保持 Play again + Replay + Leave 三项；Replay 默认最后一手，可退到第 0 手再前进，主棋盘石子数 1 -> 0 -> 1，全部 225 个交点禁用，普通任务栏/动作栏在复盘期间隐藏，Exit replay 后恢复原 finished 牌桌。
+4. 双方同意再战进入 game 2 后，浏览器先刷新到阿拉伯语并恢复原 seat，再刷新回英语；History 从授权 `previousGameId` 读到 game 1，显示手数、Replay 和 Game records，上一局仍可在主棋盘 1 -> 0 -> 1 逐手复盘，证明不是只依赖本地缓存。
+5. 人工检查 `.codex/validation/ix06/terminal-replay.png` 与 `previous-game-replay.png`：1280×720 下复盘条、完整棋盘、玩家/历史侧栏和退出入口同屏，无遮挡或横向溢出；证据目录仍不纳入 Git。
+
+### 步骤 4：计划反查、全量回归与文档收口
+
+1. 写完成状态前再次逐条对照计划状态表，发现 abandoned 且仍有 moves 时也应允许复盘；补为 Replay + Return/Leave，不把文档中的“若有记录”遗漏掉。replay/table state 两份 30 项测试和 lint 先行通过。
+2. 新增 `INTERACTION_REDESIGN_IX06_VERIFICATION.md`，更新计划为 IX-06 完成、下一步 IX-07；同步 README、实时房间、棋谱/排行榜逻辑以及 IX-04A/04B/05/06A 后续状态。文档明确当前只保留一个 previousGameId，unlisted 没有公开回放 URL，也没有把桌内复盘扩大为分析/下载工具。
+3. 最终全量 `npm test` 为 17 个文件、170 个测试通过；`npm run lint`、`npm audit --omit=dev`（0 漏洞）和 `git diff --check` 通过。停止生产服务并确认 3050 无监听后，最终 build 的编译、TypeScript 和 11 页面生成成功。
+4. 最终生产服务上的 lobby UI、share-url、online-room、room-lifecycle、game-records、profile-records、profile-page、account、leaderboard 和 Presence smoke 全部通过。profile-page 首轮与多项注册 smoke 共用进程时触发既有同 IP 限流 429；没有放宽限流，重启独立服务/数据后单独复跑通过。
+
+### IX-06 提交与推送
+
+- 提交：`998833d feat: add in-table game replay`。
+- 提交范围：30 个文件，834 行新增、84 行删除；包含 previousGameId、成员鉴权 record lookup、当前/上一局主棋盘复盘、public Profile 入口、abandoned 有 moves 复盘、六语种/响应式、170 项测试、Chrome smoke、验证报告和计划/逻辑文档。
+- `git push origin main`：成功，`69e6e49..998833d`。
+- 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-07。
