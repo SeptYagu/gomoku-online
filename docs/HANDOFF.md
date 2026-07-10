@@ -4285,3 +4285,10 @@ b6faf9e
 - 本轮只新增/更新研究文档和 handoff，没有修改产品源码、测试、依赖或运行配置。
 - `git diff --check` 已在各产品记录完成后持续执行，写入 handoff 前通过。
 - `.codex/` 是已有未跟踪的本地元数据，不纳入本轮提交。
+
+### 研究文档提交与推送
+
+- 提交：`7ecb32c docs: compare competitor interaction models`。
+- `git push origin main`：成功，`fb976ac..7ecb32c`。
+- 推送后 `main` 与 `origin/main` 同步，工作树只剩已有未跟踪 `.codex/`。
+- 下一阶段应先根据竞品文档产出页面状态规格和低保真布局，再开始修改产品交互代码。
