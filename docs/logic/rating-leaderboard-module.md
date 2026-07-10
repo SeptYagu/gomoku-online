@@ -483,6 +483,34 @@ Game 增加：
 仍保留到后续小步：
 
 - 正式邮箱/密码/OAuth 登录。
+
+## 2026-07-10 服务端权威终局持久化补强
+
+本轮修正“服务端已经判定终局，但排行榜仍依赖双方客户端提交”的结算缺口：
+
+- `RoomStore.captureFinishedGame()` 在房间进入 `finished` / `abandoned` 且已有 `finishReason` 时，立即调用 `GameRecordStore.recordAuthoritative()`。
+- 权威终局第一次写入即保存为 `authoritative=true`、`recordStatus=verified`，因此认输、五连、平局和断线判负不再等待败方浏览器回传才能进入 Profile / Leaderboard。
+- `game-record:submit` 继续保留，用于记录双方客户端的一致性审计、重复提交和冲突原因。
+- 客户端提交与权威快照冲突时，保存 `conflicts[]`，但不把权威记录从 verified 降为 conflicted；客户端不能否决服务端结算。
+- 移除了 `RoomStore.finalizedGames` 终局内存副本；客户端后续审计直接读取已经持久化的权威记录，避免每盘完整棋局在进程内永久驻留。
+- 旧 JSONL 中没有 `authoritative` 字段的历史记录加载时按 `false` 兼容；既有 verified/partial/conflicted 状态保持原样。
+
+新增回归覆盖：
+
+- 终局产生后、零客户端提交时，权威记录已经持久化并进入排行榜。
+- 第一份客户端审计后记录仍为 verified。
+- 恶意客户端伪造 winner 时记录冲突，但权威 winner 和排行榜结果不变。
+- 双方后续提交仍能去重并保留 submissions 审计信息。
+
+## 2026-07-10 排行榜请求与计算缓存补强
+
+- 搜索输入和已应用搜索条件分离：输入文字不再逐键请求，提交搜索表单后才应用并回到第一页。
+- 浏览器每次排行榜请求都会取消上一请求，并用递增 request sequence 丢弃迟到响应，避免旧筛选结果覆盖新 UI。
+- 组件卸载时主动 abort 未完成请求。
+- `GameRecordStore` 使用内部 records revision 作为排行榜版本和缓存失效键。
+- 同一 records revision、同一服务端自然日内，Registered / Guests / All、Overall / Today / Streak、搜索和分页共享一次基础 ELO/胜负/连胜计算，再做筛选排序。
+- 跨服务端自然日时即使没有新棋谱，也会重新计算 `dailyWins`，避免 Today 榜沿用前一天缓存。
+- 新增回归覆盖同 revision 跨筛选版本一致，以及跨日 dailyWins 刷新。
 - 游客榜和注册用户榜隔离策略。
 - 账号改名、合并、注销和 token 轮换。
 

@@ -134,6 +134,49 @@ async function main(): Promise<void> {
 
       await waitForRoomAbsent(baseUrl, roomCode);
 
+      const registeredName = `Invite ${Date.now().toString(36)}`;
+
+      await clickButton(cdp, "Create room");
+      const registeredInviteRoomUrl = await waitForValue(async () => {
+        const href = await evaluate<string>(cdp, "window.location.href");
+
+        return new URL(href).searchParams.get("room") ? href : null;
+      }, STEP_TIMEOUT_MS);
+      const registeredInviteRoomCode = new URL(registeredInviteRoomUrl).searchParams.get("room") ?? "";
+      const registeredAccount = await registerAccount(baseUrl, registeredName);
+
+      await evaluate(
+        cdp,
+        `window.localStorage.setItem("gomoku-account-token", ${JSON.stringify(registeredAccount.token)})`
+      );
+
+      const registeredInviteTargetUrl = await openBrowserTarget(
+        port,
+        `${baseOrigin}/?room=${registeredInviteRoomCode}`
+      );
+      const registeredInviteCdp = await CdpClient.connect(registeredInviteTargetUrl);
+
+      try {
+        await registeredInviteCdp.send("Page.enable");
+        await registeredInviteCdp.send("Runtime.enable");
+        await waitForRuntime(registeredInviteCdp);
+        await waitForValue(async () => {
+          const bodyText = await evaluate<string>(registeredInviteCdp, "document.body.innerText");
+
+          return bodyText.includes(registeredInviteRoomCode) && bodyText.includes(`${registeredName} is in the room.`)
+            ? bodyText
+            : null;
+        }, STEP_TIMEOUT_MS);
+      } finally {
+        await registeredInviteCdp.send("Page.close").catch(() => undefined);
+        registeredInviteCdp.close();
+      }
+
+      await sleep(750);
+      await cdp.send("Page.bringToFront").catch(() => undefined);
+      await clickButton(cdp, "Leave");
+      await waitForRoomAbsent(baseUrl, registeredInviteRoomCode);
+
       console.log(`Share URL smoke: ${baseUrl}`);
       console.log(`PASS create room URL - ${roomCode}`);
       console.log("PASS create room locked while already in room");
@@ -141,6 +184,7 @@ async function main(): Promise<void> {
       console.log("PASS copy invite - copied current URL");
       console.log(`PASS leave room URL clear - ${clearedUrl}`);
       console.log(`PASS empty room closed after leave - ${roomCode}`);
+      console.log(`PASS registered account restored before invite auto join - ${registeredInviteRoomCode}`);
     } finally {
       cdp.close();
     }
@@ -149,6 +193,23 @@ async function main(): Promise<void> {
     await waitForProcessExit(chrome);
     await rm(userDataDir, { force: true, maxRetries: 10, recursive: true, retryDelay: 250 });
   }
+}
+
+async function registerAccount(baseUrl: string, displayName: string): Promise<{ token: string }> {
+  const response = await fetch(`${baseUrl}/api/account/register`, {
+    body: JSON.stringify({ displayName }),
+    headers: {
+      "accept": "application/json",
+      "content-type": "application/json"
+    },
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Account registration failed: ${response.status} ${await response.text()}`);
+  }
+
+  return (await response.json()) as { token: string };
 }
 
 class CdpClient {

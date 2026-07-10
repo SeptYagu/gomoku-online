@@ -810,7 +810,7 @@ function FriendRoomControls({
               <Wifi aria-hidden="true" focusable={false} />
               {labels.createRoom}
             </button>
-            <button className="mode-pill" onClick={room.joinRoom} type="button">
+            <button className="mode-pill" disabled={!room.canJoinRoom} onClick={room.joinRoom} type="button">
               <LogOut aria-hidden="true" focusable={false} />
               {labels.joinRoom}
             </button>
@@ -1166,10 +1166,12 @@ function LeaderboardPanel({
         className="room-leaderboard-search"
         onSubmit={(event) => {
           event.preventDefault();
-          room.refreshLeaderboard();
+          room.submitLeaderboardSearch();
         }}
       >
-        <Search aria-hidden="true" focusable={false} />
+        <button className="icon-button" title={labels.leaderboardSearchPlaceholder} type="submit">
+          <Search aria-hidden="true" focusable={false} />
+        </button>
         <input
           aria-label={labels.leaderboardSearchPlaceholder}
           maxLength={64}
@@ -1313,7 +1315,7 @@ function PublicChatPanel({
         />
         <button
           className="icon-button"
-          disabled={!room.publicChatText.trim()}
+          disabled={room.accountStatus === "loading" || !room.publicChatText.trim()}
           title={labels.sendMessage}
           type="submit"
         >
@@ -1427,7 +1429,11 @@ function RoomLobbyList({
                 </div>
                 <button
                   className="mode-pill"
-                  disabled={isCurrentRoom || (!lobbyRoom.canJoin && !lobbyRoom.canWatch)}
+                  disabled={
+                    room.accountStatus === "loading" ||
+                    isCurrentRoom ||
+                    (!lobbyRoom.canJoin && !lobbyRoom.canWatch)
+                  }
                   onClick={() => room.joinListedRoom(lobbyRoom.code)}
                   type="button"
                 >

@@ -20,12 +20,20 @@ export type AccountSession = AccountSnapshot & {
 export type AccountResult<T> = { ok: true; value: T } | { ok: false; error: AccountError };
 
 export type AccountError = {
-  code: "account-token-invalid" | "duplicate-name" | "invalid-player";
+  code: "account-token-invalid" | "duplicate-name" | "guest-session-invalid" | "invalid-player";
   message: string;
+};
+
+export type GuestSessionSnapshot = {
+  identity: "guest";
+  playerId: string;
+  playerName: string;
+  token: string;
 };
 
 type AccountStoreOptions = {
   filePath?: false | string;
+  lastSeenPersistIntervalMs?: number;
   now?: () => number;
 };
 
@@ -38,6 +46,14 @@ type StoredAccount = {
   updatedAt: number;
 };
 
+type StoredGuestSession = {
+  createdAt: number;
+  lastSeenAt: number;
+  playerId: string;
+  playerName: string;
+  tokenHash: string;
+};
+
 type PersistedAccountEntry = {
   account: StoredAccount;
   type: "account";
@@ -45,15 +61,25 @@ type PersistedAccountEntry = {
 };
 
 const ACCOUNT_ID_PREFIX = "acct";
+const ACCOUNT_LAST_SEEN_PERSIST_INTERVAL_MS = 60_000;
+const GUEST_SESSION_MAX_ENTRIES = 10_000;
+const GUEST_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_DISPLAY_NAME_LENGTH = 24;
+const MAX_PLAYER_ID_LENGTH = 128;
 
 export class AccountStore {
   private readonly accounts = new Map<string, StoredAccount>();
   private readonly filePath: false | string;
+  private readonly lastPersistedSeenAt = new Map<string, number>();
+  private readonly lastSeenPersistIntervalMs: number;
   private readonly now: () => number;
 
   constructor(options: AccountStoreOptions = {}) {
     this.filePath = options.filePath === undefined ? false : options.filePath === false ? false : resolve(options.filePath);
+    this.lastSeenPersistIntervalMs = Math.max(
+      0,
+      options.lastSeenPersistIntervalMs ?? ACCOUNT_LAST_SEEN_PERSIST_INTERVAL_MS
+    );
     this.now = options.now ?? Date.now;
 
     this.loadFromFile();
@@ -105,8 +131,14 @@ export class AccountStore {
       return null;
     }
 
-    account.lastSeenAt = this.now();
-    this.persist(account);
+    const now = this.now();
+
+    account.lastSeenAt = now;
+
+    if (now - (this.lastPersistedSeenAt.get(account.id) ?? 0) >= this.lastSeenPersistIntervalMs) {
+      account.updatedAt = now;
+      this.persist(account);
+    }
 
     return getAccountSnapshot(account);
   }
@@ -144,6 +176,7 @@ export class AccountStore {
 
         if (entry.type === "account" && entry.account?.id) {
           this.accounts.set(entry.account.id, entry.account);
+          this.lastPersistedSeenAt.set(entry.account.id, entry.account.lastSeenAt);
         }
       } catch {
         // Ignore corrupt historical lines; the next valid line for an account wins.
@@ -166,13 +199,116 @@ export class AccountStore {
       } satisfies PersistedAccountEntry)}\n`,
       "utf8"
     );
+    this.lastPersistedSeenAt.set(account.id, account.lastSeenAt);
+  }
+}
+
+export class GuestSessionStore {
+  private readonly maxEntries: number;
+  private readonly now: () => number;
+  private readonly sessionsByPlayerId = new Map<string, StoredGuestSession>();
+  private readonly ttlMs: number;
+  private readonly playerIdByTokenHash = new Map<string, string>();
+
+  constructor(options: { maxEntries?: number; now?: () => number; ttlMs?: number } = {}) {
+    this.maxEntries = Math.max(1, Math.floor(options.maxEntries ?? GUEST_SESSION_MAX_ENTRIES));
+    this.now = options.now ?? Date.now;
+    this.ttlMs = Math.max(1, options.ttlMs ?? GUEST_SESSION_TTL_MS);
+  }
+
+  createSession(input: { playerId: string; playerName: string }): AccountResult<GuestSessionSnapshot> {
+    this.pruneExpiredSessions();
+    const playerId = normalizePlayerId(input.playerId);
+    const playerName = normalizeDisplayName(input.playerName);
+
+    if (!playerId || !playerName) {
+      return failure("invalid-player", "Player id and name are required.");
+    }
+
+    if (this.sessionsByPlayerId.has(playerId)) {
+      return failure("guest-session-invalid", "This guest identity requires its session token.");
+    }
+
+    this.evictOldestSessions();
+
+    const token = randomTokenPart(32);
+    const now = this.now();
+    const session: StoredGuestSession = {
+      createdAt: now,
+      lastSeenAt: now,
+      playerId,
+      playerName,
+      tokenHash: hashToken(token)
+    };
+
+    this.sessionsByPlayerId.set(playerId, session);
+    this.playerIdByTokenHash.set(session.tokenHash, playerId);
+
+    return success(getGuestSessionSnapshot(session, token));
+  }
+
+  authenticate(token: string, playerName?: string): GuestSessionSnapshot | null {
+    this.pruneExpiredSessions();
+    const normalizedToken = token.trim();
+
+    if (!normalizedToken) {
+      return null;
+    }
+
+    const tokenHash = hashToken(normalizedToken);
+    const playerId = this.playerIdByTokenHash.get(tokenHash);
+    const session = playerId ? this.sessionsByPlayerId.get(playerId) : null;
+
+    if (!session || session.tokenHash !== tokenHash) {
+      return null;
+    }
+
+    const normalizedName = normalizeDisplayName(playerName ?? session.playerName);
+
+    if (normalizedName) {
+      session.playerName = normalizedName;
+    }
+
+    session.lastSeenAt = this.now();
+
+    return getGuestSessionSnapshot(session, normalizedToken);
+  }
+
+  private evictOldestSessions(): void {
+    while (this.sessionsByPlayerId.size >= this.maxEntries) {
+      const oldest = [...this.sessionsByPlayerId.values()].sort(
+        (left, right) => left.lastSeenAt - right.lastSeenAt || left.createdAt - right.createdAt
+      )[0];
+
+      if (!oldest) {
+        return;
+      }
+
+      this.deleteSession(oldest);
+    }
+  }
+
+  private pruneExpiredSessions(): void {
+    const cutoff = this.now() - this.ttlMs;
+
+    for (const session of this.sessionsByPlayerId.values()) {
+      if (session.lastSeenAt < cutoff) {
+        this.deleteSession(session);
+      }
+    }
+  }
+
+  private deleteSession(session: StoredGuestSession): void {
+    this.sessionsByPlayerId.delete(session.playerId);
+    this.playerIdByTokenHash.delete(session.tokenHash);
   }
 }
 
 export function resolvePlayerIdentity(
-  input: { accountToken?: null | string; playerId: string; playerName: string },
-  accountStore: AccountStore
-): AccountResult<{ identity: PlayerIdentityKind; playerId: string; playerName: string }> {
+  input: { accountToken?: null | string; guestToken?: null | string; playerId: string; playerName: string },
+  accountStore: AccountStore,
+  guestSessionStore: GuestSessionStore
+): AccountResult<{ guestToken?: string; identity: PlayerIdentityKind; playerId: string; playerName: string }> {
   const accountToken = input.accountToken?.trim();
 
   if (accountToken) {
@@ -189,17 +325,34 @@ export function resolvePlayerIdentity(
     });
   }
 
-  const playerId = input.playerId.trim();
-  const playerName = normalizeDisplayName(input.playerName);
+  const guestToken = input.guestToken?.trim();
 
-  if (!playerId || !playerName) {
-    return failure("invalid-player", "Player id and name are required.");
+  if (guestToken) {
+    const guestSession = guestSessionStore.authenticate(guestToken, input.playerName);
+
+    if (!guestSession) {
+      return failure("guest-session-invalid", "Guest session is invalid. Start a new guest session.");
+    }
+
+    return success({
+      guestToken: guestSession.token,
+      identity: "guest",
+      playerId: guestSession.playerId,
+      playerName: guestSession.playerName
+    });
+  }
+
+  const guestSession = guestSessionStore.createSession(input);
+
+  if (!guestSession.ok) {
+    return guestSession;
   }
 
   return success({
+    guestToken: guestSession.value.token,
     identity: "guest",
-    playerId,
-    playerName
+    playerId: guestSession.value.playerId,
+    playerName: guestSession.value.playerName
   });
 }
 
@@ -214,6 +367,15 @@ function getAccountSnapshot(account: StoredAccount): AccountSnapshot {
   };
 }
 
+function getGuestSessionSnapshot(session: StoredGuestSession, token: string): GuestSessionSnapshot {
+  return {
+    identity: "guest",
+    playerId: session.playerId,
+    playerName: session.playerName,
+    token
+  };
+}
+
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -224,6 +386,10 @@ function randomTokenPart(byteLength: number): string {
 
 function normalizeDisplayName(displayName: string): string {
   return displayName.trim().replace(/\s+/g, " ").slice(0, MAX_DISPLAY_NAME_LENGTH);
+}
+
+function normalizePlayerId(playerId: string): string {
+  return playerId.trim().slice(0, MAX_PLAYER_ID_LENGTH);
 }
 
 function namesMatch(first: string, second: string): boolean {

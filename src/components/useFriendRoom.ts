@@ -29,6 +29,7 @@ import type {
   UserPresenceSnapshot
 } from "@/server/rooms";
 import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
+import { isAccountIdentityReady } from "./account-identity";
 
 type RoomSocket = {
   disconnect: () => void;
@@ -38,6 +39,7 @@ type RoomSocket = {
 
 type StoredRoomSession = {
   accountToken?: string;
+  guestToken?: string;
   playerId: string;
   playerName: string;
   roomCode: string;
@@ -45,6 +47,7 @@ type StoredRoomSession = {
 
 type PlayerAuthPayload = {
   accountToken?: string;
+  guestToken?: string;
   playerId: string;
   playerName: string;
 };
@@ -55,6 +58,7 @@ export type FriendRoomController = {
   canCancelMatch: boolean;
   canCreateRoom: boolean;
   canFindMatch: boolean;
+  canJoinRoom: boolean;
   canPlay: boolean;
   canReady: boolean;
   canResign: boolean;
@@ -116,6 +120,7 @@ export type FriendRoomController = {
   setPublicChatText: (value: string) => void;
   findMatch: () => void;
   sitRoom: () => void;
+  submitLeaderboardSearch: () => void;
   toggleReady: () => void;
   undoMove: () => void;
 };
@@ -124,10 +129,13 @@ const PLAYER_ID_STORAGE_KEY = "gomoku-room-player-id";
 const PLAYER_NAME_STORAGE_KEY = "gomoku-room-player-name";
 const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
 const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
+const GUEST_TOKEN_STORAGE_KEY = "gomoku-guest-token";
 const LEADERBOARD_PAGE_SIZE = 10;
 
 export function useFriendRoom(): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
+  const leaderboardAbortControllerRef = useRef<AbortController | null>(null);
+  const leaderboardRequestSeqRef = useRef(0);
   const submittedGameRecordsRef = useRef<Set<string>>(new Set());
   const [connectionStatus, setConnectionStatus] = useState<FriendRoomController["connectionStatus"]>("idle");
   const [room, setRoom] = useState<RoomClientState | null>(null);
@@ -151,6 +159,7 @@ export function useFriendRoom(): FriendRoomController {
   const [leaderboardIdentity, setLeaderboardIdentityState] = useState<LeaderboardIdentity>("registered");
   const [leaderboardOffset, setLeaderboardOffset] = useState(0);
   const [leaderboardSearch, setLeaderboardSearchState] = useState("");
+  const [leaderboardAppliedSearch, setLeaderboardAppliedSearch] = useState("");
   const [leaderboardScope, setLeaderboardScopeState] = useState<LeaderboardScope>("overall");
   const [leaderboardStatus, setLeaderboardStatus] = useState<FriendRoomController["leaderboardStatus"]>("idle");
   const [matchmakingStatus, setMatchmakingStatus] = useState<FriendRoomController["matchmakingStatus"]>("idle");
@@ -170,8 +179,10 @@ export function useFriendRoom(): FriendRoomController {
   const canResign = isPlayer && room?.snapshot.status === "playing";
   const canRestart = isPlayer && room?.snapshot.status === "finished" && room.seat === room.snapshot.hostSeat;
   const canSit = room?.role === "spectator" && hasOpenPlayerSeat(room.snapshot);
-  const canCreateRoom = !room && !isCreatingRoom && matchmakingStatus !== "searching";
-  const canFindMatch = !room && matchmakingStatus !== "searching";
+  const identityReady = isAccountIdentityReady(accountStatus);
+  const canCreateRoom = identityReady && !room && !isCreatingRoom && matchmakingStatus !== "searching";
+  const canFindMatch = identityReady && !room && matchmakingStatus !== "searching";
+  const canJoinRoom = identityReady && !room && matchmakingStatus !== "searching";
   const canCancelMatch =
     matchmakingStatus !== "searching" &&
     isPlayer &&
@@ -201,6 +212,7 @@ export function useFriendRoom(): FriendRoomController {
     }
 
     return {
+      guestToken: readGuestToken() ?? undefined,
       playerId: getOrCreatePlayerId(),
       playerName: normalizePlayerName(playerName)
     };
@@ -298,10 +310,14 @@ export function useFriendRoom(): FriendRoomController {
     syncRoomUrl(response.value.snapshot.code);
     persistRoomSession({
       accountToken: response.value.identity === "registered" ? account?.token ?? readAccountToken() ?? undefined : undefined,
+      guestToken: response.value.guestToken,
       playerId: response.value.playerId,
       playerName: acknowledgedPlayerName,
       roomCode: response.value.snapshot.code
     });
+    if (response.value.guestToken) {
+      persistGuestToken(response.value.guestToken);
+    }
   }, [account]);
 
   const createRoom = useCallback(() => {
@@ -324,6 +340,10 @@ export function useFriendRoom(): FriendRoomController {
   }, [applyRoomAck, canCreateRoom, ensureSocket, getActivePlayer]);
 
   const joinRoomByCode = useCallback((roomCode: string, retryWithFreshIdentity = true) => {
+    if (!identityReady) {
+      return;
+    }
+
     const socket = ensureSocket();
     let player = getActivePlayer();
     const nextRoomCode = normalizeRoomCode(roomCode);
@@ -344,8 +364,11 @@ export function useFriendRoom(): FriendRoomController {
           !response.ok &&
           !player.accountToken &&
           retryWithFreshIdentity &&
-          (response.error.code === "duplicate-player" || response.error.code === "duplicate-name")
+          (response.error.code === "duplicate-player" ||
+            response.error.code === "duplicate-name" ||
+            response.error.code === "guest-session-invalid")
         ) {
+          clearGuestToken();
           player = {
             playerId: createAndPersistPlayerId(),
             playerName: createGuestPlayerName()
@@ -363,7 +386,7 @@ export function useFriendRoom(): FriendRoomController {
         applyRoomAck(response);
       }
     );
-  }, [applyRoomAck, ensureSocket, getActivePlayer]);
+  }, [applyRoomAck, ensureSocket, getActivePlayer, identityReady]);
 
   const joinRoom = useCallback(() => {
     joinRoomByCode(joinCode);
@@ -441,6 +464,10 @@ export function useFriendRoom(): FriendRoomController {
   }, [ensureSocket]);
 
   const refreshPresence = useCallback(() => {
+    if (!identityReady) {
+      return;
+    }
+
     const player = getActivePlayer();
 
     setPresenceStatus("loading");
@@ -463,7 +490,7 @@ export function useFriendRoom(): FriendRoomController {
         setPresenceStatus("ready");
       }
     );
-  }, [ensureSocket, getActivePlayer]);
+  }, [ensureSocket, getActivePlayer, identityReady]);
 
   const refreshLeaderboard = useCallback(() => {
     const params = new URLSearchParams({
@@ -472,17 +499,24 @@ export function useFriendRoom(): FriendRoomController {
       offset: String(leaderboardOffset),
       scope: leaderboardScope
     });
-    const search = leaderboardSearch.trim();
+    const search = leaderboardAppliedSearch;
 
     if (search) {
       params.set("search", search);
     }
 
+    leaderboardAbortControllerRef.current?.abort();
+    const controller = new AbortController();
+    const requestSeq = leaderboardRequestSeqRef.current + 1;
+
+    leaderboardAbortControllerRef.current = controller;
+    leaderboardRequestSeqRef.current = requestSeq;
     setLeaderboardStatus("loading");
     void fetch(`/api/leaderboard?${params.toString()}`, {
       headers: {
         "accept": "application/json"
-      }
+      },
+      signal: controller.signal
     })
       .then(async (response) => {
         if (!response.ok) {
@@ -492,16 +526,33 @@ export function useFriendRoom(): FriendRoomController {
         return (await response.json()) as LeaderboardSnapshot;
       })
       .then((snapshot) => {
+        if (leaderboardRequestSeqRef.current !== requestSeq) {
+          return;
+        }
+
         setLeaderboard(snapshot);
         setLeaderboardStatus("ready");
       })
       .catch((leaderboardError: unknown) => {
+        if (isAbortError(leaderboardError) || leaderboardRequestSeqRef.current !== requestSeq) {
+          return;
+        }
+
         setLeaderboardStatus("error");
         setError(leaderboardError instanceof Error ? leaderboardError.message : "Leaderboard request failed.");
+      })
+      .finally(() => {
+        if (leaderboardAbortControllerRef.current === controller) {
+          leaderboardAbortControllerRef.current = null;
+        }
       });
-  }, [leaderboardIdentity, leaderboardOffset, leaderboardScope, leaderboardSearch]);
+  }, [leaderboardAppliedSearch, leaderboardIdentity, leaderboardOffset, leaderboardScope]);
 
   const refreshProfile = useCallback(() => {
+    if (!identityReady) {
+      return;
+    }
+
     const player = getActivePlayer();
     const params = new URLSearchParams({
       limit: "10",
@@ -535,7 +586,7 @@ export function useFriendRoom(): FriendRoomController {
         setProfileStatus("error");
         setError(profileError instanceof Error ? profileError.message : "Profile request failed.");
       });
-  }, [getActivePlayer]);
+  }, [getActivePlayer, identityReady]);
 
   const toggleReady = useCallback(() => {
     if (!room) {
@@ -628,6 +679,10 @@ export function useFriendRoom(): FriendRoomController {
   }, [applyRoomAck, chatText, ensureSocket, room]);
 
   const sendPublicChatMessage = useCallback(() => {
+    if (!identityReady) {
+      return;
+    }
+
     const text = publicChatText.trim();
 
     if (!text) {
@@ -653,7 +708,7 @@ export function useFriendRoom(): FriendRoomController {
         setError(null);
       }
     );
-  }, [ensureSocket, getActivePlayer, publicChatText]);
+  }, [ensureSocket, getActivePlayer, identityReady, publicChatText]);
 
   const leaveRoom = useCallback(() => {
     if (!room) {
@@ -739,6 +794,7 @@ export function useFriendRoom(): FriendRoomController {
 
   const signOutAccount = useCallback(() => {
     clearAccountToken();
+    clearGuestToken();
     setAccount(null);
     setAccountStatus("guest");
     createAndPersistPlayerId();
@@ -766,8 +822,19 @@ export function useFriendRoom(): FriendRoomController {
 
   const setLeaderboardSearch = useCallback((value: string) => {
     setLeaderboardSearchState(value);
-    setLeaderboardOffset(0);
   }, []);
+
+  const submitLeaderboardSearch = useCallback(() => {
+    const nextSearch = leaderboardSearch.trim();
+
+    setLeaderboardOffset(0);
+    if (nextSearch === leaderboardAppliedSearch) {
+      refreshLeaderboard();
+      return;
+    }
+
+    setLeaderboardAppliedSearch(nextSearch);
+  }, [leaderboardAppliedSearch, leaderboardSearch, refreshLeaderboard]);
 
   const nextLeaderboardPage = useCallback(() => {
     setLeaderboardOffset((currentOffset) => {
@@ -820,6 +887,10 @@ export function useFriendRoom(): FriendRoomController {
   }, []);
 
   useEffect(() => {
+    if (!identityReady) {
+      return;
+    }
+
     const storedSession = readRoomSession();
     const roomCodeFromUrl = getRoomCodeFromCurrentUrl();
 
@@ -837,6 +908,11 @@ export function useFriendRoom(): FriendRoomController {
             return;
           }
 
+          if (response.error.code === "guest-session-invalid") {
+            clearGuestToken();
+            createAndPersistPlayerId();
+          }
+
           window.setTimeout(() => joinRoomByCode(roomCodeFromUrl, true), 0);
         });
         return;
@@ -852,8 +928,23 @@ export function useFriendRoom(): FriendRoomController {
       return;
     }
 
-    ensureSocket().emit("room:rejoin", storedSession, applyRoomAck);
-  }, [applyRoomAck, ensureSocket, joinRoomByCode, room]);
+    ensureSocket().emit("room:rejoin", storedSession, (response: RoomAck) => {
+      if (response.ok) {
+        applyRoomAck(response);
+        return;
+      }
+
+      if (response.error.code === "guest-session-invalid") {
+        clearGuestToken();
+        createAndPersistPlayerId();
+        clearRoomSession();
+        window.setTimeout(() => joinRoomByCode(storedSession.roomCode, true), 0);
+        return;
+      }
+
+      applyRoomAck(response);
+    });
+  }, [applyRoomAck, ensureSocket, identityReady, joinRoomByCode, room]);
 
   useEffect(() => {
     const snapshot = room?.snapshot;
@@ -898,6 +989,8 @@ export function useFriendRoom(): FriendRoomController {
 
   useEffect(() => {
     return () => {
+      leaderboardAbortControllerRef.current?.abort();
+      leaderboardAbortControllerRef.current = null;
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
@@ -919,6 +1012,7 @@ export function useFriendRoom(): FriendRoomController {
     canCancelMatch,
     canCreateRoom,
     canFindMatch,
+    canJoinRoom,
     canPlay,
     canReady,
     canResign,
@@ -980,6 +1074,7 @@ export function useFriendRoom(): FriendRoomController {
     setPublicChatText,
     findMatch,
     sitRoom,
+    submitLeaderboardSearch,
     toggleReady,
     undoMove
   };
@@ -1003,6 +1098,10 @@ function hasOpenPlayerSeat(snapshot: RoomSnapshot): boolean {
 
 function isRoomErrorLike(value: unknown): value is { message: string } {
   return typeof value === "object" && value !== null && "message" in value && typeof value.message === "string";
+}
+
+function isAbortError(value: unknown): boolean {
+  return value instanceof Error && value.name === "AbortError";
 }
 
 function isRoomSnapshot(value: unknown): value is RoomSnapshot {
@@ -1188,6 +1287,22 @@ function readAccountToken(): string | null {
 
 function clearAccountToken() {
   window.localStorage.removeItem(ACCOUNT_TOKEN_STORAGE_KEY);
+}
+
+function persistGuestToken(guestToken: string) {
+  window.sessionStorage.setItem(GUEST_TOKEN_STORAGE_KEY, guestToken);
+}
+
+function readGuestToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.sessionStorage.getItem(GUEST_TOKEN_STORAGE_KEY) ?? readRoomSession()?.guestToken ?? null;
+}
+
+function clearGuestToken() {
+  window.sessionStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
 }
 
 function persistRoomSession(session: StoredRoomSession) {

@@ -1,4 +1,4 @@
-import { AccountStore } from "./accounts";
+import { AccountStore, GuestSessionStore } from "./accounts";
 import { GameRecordStore } from "./game-records";
 import { RoomStore } from "./rooms";
 
@@ -8,6 +8,8 @@ const gameRecordFilePath = process.env.GOMOKU_GAME_RECORDS_PATH ?? "data/game-re
 export const accountStore = new AccountStore({
   filePath: accountFilePath
 });
+
+export const guestSessionStore = new GuestSessionStore();
 
 export const roomStore = new RoomStore({
   gameRecordStore: new GameRecordStore({

@@ -393,6 +393,7 @@ describe("room socket handlers", () => {
         (event) => event.code === firstRoomCode
       );
       const secondAck = await emitAck(secondSocket, "room:create", {
+        guestToken: firstAck.value.guestToken,
         playerId: "shared-player",
         playerName: "Shared"
       });
@@ -401,6 +402,118 @@ describe("room socket handlers", () => {
       expect(secondAck.ok ? secondAck.value.snapshot.code : firstRoomCode).not.toBe(firstRoomCode);
       expect(await firstSocketSawClosed).toMatchObject({ code: firstRoomCode });
       expect(await lobbySawFirstDelete).toMatchObject({ code: firstRoomCode });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("requires the server-issued guest token before another socket can rejoin a seat", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const host = await harness.connectClient();
+      const attacker = await harness.connectClient();
+      const created = await emitAck(host, "room:create", {
+        playerId: "protected-guest",
+        playerName: "Protected"
+      });
+
+      if (!created.ok) {
+        throw new Error(created.error.message);
+      }
+
+      expect(created.value.guestToken).toEqual(expect.any(String));
+      expect(
+        await emitAck(attacker, "room:rejoin", {
+          playerId: "protected-guest",
+          playerName: "Attacker",
+          roomCode: created.value.snapshot.code
+        })
+      ).toMatchObject({
+        ok: false,
+        error: { code: "guest-session-invalid" }
+      });
+      expect(
+        await emitAck(attacker, "room:rejoin", {
+          guestToken: created.value.guestToken,
+          playerId: "protected-guest",
+          playerName: "Protected",
+          roomCode: created.value.snapshot.code
+        })
+      ).toMatchObject({
+        ok: true,
+        value: {
+          playerId: "protected-guest",
+          snapshot: {
+            players: [expect.objectContaining({ name: "Protected", seat: "black" })]
+          }
+        }
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("keeps a player connected while another authenticated socket remains bound", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const host = await harness.connectClient();
+      const mirror = await harness.connectClient();
+      const guest = await harness.connectClient();
+      const created = await emitAck(host, "room:create", {
+        playerId: "multi-host",
+        playerName: "Host"
+      });
+
+      if (!created.ok) {
+        throw new Error(created.error.message);
+      }
+
+      const roomCode = created.value.snapshot.code;
+
+      expect(await emitAck(guest, "room:join", { playerId: "multi-guest", playerName: "Guest", roomCode }))
+        .toMatchObject({ ok: true });
+      expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(
+        await emitAck(mirror, "room:rejoin", {
+          guestToken: created.value.guestToken,
+          playerId: "multi-host",
+          playerName: "Host",
+          roomCode
+        })
+      ).toMatchObject({ ok: true });
+
+      host.disconnect();
+
+      const moveAck = await emitAck(mirror, "game:move", {
+        expectedMoveSeq: 0,
+        point: { col: 7, row: 7 },
+        roomCode
+      });
+
+      expect(moveAck).toMatchObject({
+        ok: true,
+        value: {
+          snapshot: {
+            players: [expect.objectContaining({ connected: true, seat: "black" }), expect.any(Object)]
+          }
+        }
+      });
+
+      const guestSawLastDisconnect = waitForEventMatching<RoomSnapshot>(
+        guest,
+        "room:state",
+        (snapshot) => snapshot.players.some((player) => player.seat === "black" && !player.connected)
+      );
+
+      mirror.disconnect();
+
+      expect(await guestSawLastDisconnect).toMatchObject({
+        status: "playing",
+        players: [expect.objectContaining({ connected: false, seat: "black" }), expect.any(Object)]
+      });
     } finally {
       await harness.close();
     }
@@ -701,8 +814,9 @@ describe("room socket handlers", () => {
         value: {
           duplicate: false,
           record: {
+            authoritative: true,
             finishReason: "resign",
-            recordStatus: "partial",
+            recordStatus: "verified",
             winner: "white"
           }
         }

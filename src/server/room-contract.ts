@@ -11,6 +11,7 @@ import type {
 } from "./rooms";
 
 export type RoomClientState = {
+  guestToken?: string;
   identity: PlayerIdentityKind;
   name: string;
   playerId: string;

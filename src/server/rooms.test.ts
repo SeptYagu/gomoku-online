@@ -145,6 +145,30 @@ describe("RoomStore", () => {
     );
   });
 
+  it("expires offline presence entries and bounds retained transient identities", () => {
+    let now = 1_780_000_000_000;
+    const store = createTimedRoomStore({
+      now: () => now,
+      presenceRetentionMs: 100,
+      transientIdentityLimit: 2
+    });
+
+    for (const playerId of ["presence-1", "presence-2", "presence-3"]) {
+      expectOk(store.connectPresence({ playerId, playerName: playerId }));
+      store.disconnectPresence(playerId);
+      now += 10;
+    }
+
+    expect(store.listPresence({ includeOffline: true }).users.map((user) => user.playerId)).toEqual([
+      "presence-3",
+      "presence-2"
+    ]);
+
+    now += 101;
+
+    expect(store.listPresence({ includeOffline: true }).users).toEqual([]);
+  });
+
   it("puts third and later room members into spectator seats", () => {
     const store = createTestRoomStore(["ROOM01"]);
     const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
@@ -258,14 +282,30 @@ describe("RoomStore", () => {
   it("deduplicates online game record submissions against the server-authoritative final game", () => {
     const { room, store } = createStartedRoom();
     const finished = expectOk(store.resignGame(room.code, "player-1"));
-    const firstSubmission = createGameRecordSubmission(finished, "player-1");
-    const partial = expectOk(store.submitGameRecord(firstSubmission));
+    const savedAtFinish = store.listGameRecords();
 
-    expect(partial.duplicate).toBe(false);
-    expect(partial.record.recordStatus).toBe("partial");
-    expect(partial.record.submissions).toHaveLength(1);
-    expect(partial.record.finishReason).toBe("resign");
-    expect(partial.record.winner).toBe("white");
+    expect(savedAtFinish).toEqual([
+      expect.objectContaining({
+        authoritative: true,
+        gameId: finished.gameId,
+        recordStatus: "verified",
+        submissions: []
+      })
+    ]);
+    expect(store.getLeaderboard({ identity: "guest" }).entries[0]).toMatchObject({
+      displayName: "Bob",
+      wins: 1
+    });
+
+    const firstSubmission = createGameRecordSubmission(finished, "player-1");
+    const audited = expectOk(store.submitGameRecord(firstSubmission));
+
+    expect(audited.duplicate).toBe(false);
+    expect(audited.record.authoritative).toBe(true);
+    expect(audited.record.recordStatus).toBe("verified");
+    expect(audited.record.submissions).toHaveLength(1);
+    expect(audited.record.finishReason).toBe("resign");
+    expect(audited.record.winner).toBe("white");
 
     const duplicate = expectOk(store.submitGameRecord(firstSubmission));
 
@@ -331,7 +371,8 @@ describe("RoomStore", () => {
       })
     );
 
-    expect(conflicted.record.recordStatus).toBe("conflicted");
+    expect(conflicted.record.authoritative).toBe(true);
+    expect(conflicted.record.recordStatus).toBe("verified");
     expect(conflicted.record.conflicts).toEqual([
       expect.objectContaining({
         playerId: "player-1",
@@ -340,6 +381,10 @@ describe("RoomStore", () => {
     ]);
     expect(conflicted.record.winner).toBe("white");
     expect(conflicted.record.moves).toEqual(finished.moves);
+    expect(store.getLeaderboard({ identity: "guest" }).entries[0]).toMatchObject({
+      displayName: "Bob",
+      wins: 1
+    });
   });
 
   it("blocks spectators from player-only actions while keeping them connected to snapshots", () => {

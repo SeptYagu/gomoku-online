@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 
 import type { GameRecordAck, RoomAck } from "../src/server/room-contract";
+import type { LeaderboardSnapshot } from "../src/server/game-records";
 import type { RoomSnapshot } from "../src/server/rooms";
 
 type SmokeSocket = {
@@ -60,14 +61,25 @@ async function main(): Promise<void> {
 
     await guestSawFinished;
 
+    const leaderboardBeforeAudit = await fetchLeaderboard(baseUrl, `record-guest-${suffix}`);
+
+    assert(
+      leaderboardBeforeAudit.entries.some(
+        (entry) => entry.playerId === `record-guest-${suffix}` && entry.wins >= 1
+      ),
+      "server-authoritative finish should enter the leaderboard before either client audit"
+    );
+    console.log(`PASS authoritative record ranked before client audits - ${finished.gameId}`);
+
     const hostRecord = requireRecordOk(
       await emitAck<GameRecordAck>(host, "game-record:submit", createGameRecordPayload(finished)),
       "host game-record:submit"
     );
 
-    assert(hostRecord.record.recordStatus === "partial", "first submission should create a partial record");
-    assert(hostRecord.record.submissions.length === 1, "partial record should have one submission");
-    console.log(`PASS first submit partial - ${finished.gameId}`);
+    assert(hostRecord.record.authoritative, "finished game should already be server-authoritative");
+    assert(hostRecord.record.recordStatus === "verified", "first audit should keep the authoritative record verified");
+    assert(hostRecord.record.submissions.length === 1, "first audit should add one submission");
+    console.log(`PASS authoritative record after first audit - ${finished.gameId}`);
 
     const guestRecord = requireRecordOk(
       await emitAck<GameRecordAck>(guest, "game-record:submit", createGameRecordPayload(finished)),
@@ -90,6 +102,19 @@ async function main(): Promise<void> {
     host.disconnect();
     guest.disconnect();
   }
+}
+
+async function fetchLeaderboard(baseUrl: string, search: string): Promise<LeaderboardSnapshot> {
+  const params = new URLSearchParams({ identity: "guest", search });
+  const response = await fetch(`${baseUrl}/api/leaderboard?${params.toString()}`, {
+    headers: {
+      "accept": "application/json"
+    }
+  });
+
+  assert(response.ok, `GET /api/leaderboard should succeed, got ${response.status}`);
+
+  return (await response.json()) as LeaderboardSnapshot;
 }
 
 function normalizeBaseUrl(input: string): string {

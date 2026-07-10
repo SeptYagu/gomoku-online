@@ -36,6 +36,35 @@ describe("GameRecordStore", () => {
     }
   });
 
+  it("persists a server-authoritative terminal record before any client audit submission", () => {
+    const store = new GameRecordStore({ now: createClock() });
+    const authoritative = createAuthoritativeGameRecord();
+    const saved = store.recordAuthoritative(authoritative);
+
+    expect(saved).toMatchObject({
+      authoritative: true,
+      gameId: authoritative.gameId,
+      recordStatus: "verified",
+      submissions: []
+    });
+    expect(store.getLeaderboard({ identity: "guest" }).entries).toHaveLength(2);
+
+    const conflicted = store.submit(authoritative, {
+      ...createSubmission(authoritative, "player-1"),
+      winner: "black"
+    });
+
+    expect(conflicted.record).toMatchObject({
+      authoritative: true,
+      recordStatus: "verified",
+      winner: "white"
+    });
+    expect(conflicted.record.conflicts).toEqual([
+      expect.objectContaining({ playerId: "player-1", reason: "winner-mismatch" })
+    ]);
+    expect(store.getLeaderboard({ identity: "guest" }).entries).toHaveLength(2);
+  });
+
   it("builds player profile stats and recent game summaries", () => {
     const store = new GameRecordStore({ now: createClock() });
     const authoritative = createAuthoritativeGameRecord();
@@ -192,6 +221,27 @@ describe("GameRecordStore", () => {
       displayName: "Delta",
       playerId: "player-4",
       rank: 1
+    });
+  });
+
+  it("reuses one leaderboard revision across filters and refreshes daily values at the next day", () => {
+    let now = 1_780_000_002_000;
+    const store = new GameRecordStore({ now: () => now });
+    const authoritative = createAuthoritativeGameRecord({ finishedAt: now - 1_000 });
+
+    store.recordAuthoritative(authoritative);
+
+    const overall = store.getLeaderboard({ identity: "guest", scope: "overall" });
+    const daily = store.getLeaderboard({ identity: "guest", search: "Bob", scope: "daily" });
+
+    expect(daily.version).toBe(overall.version);
+    expect(daily.entries[0]).toMatchObject({ dailyWins: 1, displayName: "Bob" });
+
+    now += 24 * 60 * 60 * 1000;
+
+    expect(store.getLeaderboard({ identity: "guest", scope: "daily" }).entries[0]).toMatchObject({
+      dailyWins: 0,
+      displayName: "Bob"
     });
   });
 });

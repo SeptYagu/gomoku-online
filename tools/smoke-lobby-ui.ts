@@ -71,6 +71,7 @@ async function main(): Promise<void> {
       await cdp.send("Runtime.enable");
       await waitForRuntime(cdp);
       await clickButton(cdp, "Friend room");
+      await assertLeaderboardSearchSubmit(cdp);
 
       await waitForBodyText(cdp, preparedRooms.waitingCode);
       await assertLobbyRowContains(cdp, preparedRooms.waitingCode, "Join room");
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
       await waitForBodyText(cdp, "Spectator");
 
       console.log(`Lobby UI smoke: ${baseUrl}`);
+      console.log("PASS leaderboard search has an explicit submit button");
       console.log(`PASS lobby waiting row join - ${preparedRooms.waitingCode}`);
       console.log(`PASS lobby playing row watch - ${preparedRooms.playingCode}`);
     } finally {
@@ -97,6 +99,17 @@ async function main(): Promise<void> {
     await waitForProcessExit(chrome);
     await rm(userDataDir, { force: true, maxRetries: 10, recursive: true, retryDelay: 250 });
   }
+}
+
+async function assertLeaderboardSearchSubmit(cdp: CdpClient): Promise<void> {
+  await waitForValue(async () => {
+    const hasSubmit = await evaluate<boolean>(
+      cdp,
+      `Boolean(document.querySelector('.room-leaderboard-search input[type="search"]') && document.querySelector('.room-leaderboard-search button[type="submit"]'))`
+    );
+
+    return hasSubmit ? true : null;
+  }, STEP_TIMEOUT_MS);
 }
 
 class CdpClient {

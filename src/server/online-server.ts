@@ -4,14 +4,19 @@ import { Server } from "socket.io";
 import type { AccountSession } from "./accounts";
 import type { LeaderboardQuery } from "./game-records";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
-import { accountStore, roomStore } from "./room-store";
+import { accountStore, guestSessionStore, roomStore } from "./room-store";
 import type { PresenceListQuery, RoomListQuery } from "./rooms";
+import { FixedWindowRateLimiter } from "./rate-limit";
 
 const dev = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
+const accountRegistrationLimiter = new FixedWindowRateLimiter({
+  limit: 5,
+  windowMs: 10 * 60 * 1000
+});
 
 await app.prepare();
 
@@ -42,7 +47,7 @@ const io = new Server(httpServer, {
   path: "/socket.io"
 });
 
-registerRoomSocketHandlers(io as RoomSocketServer, roomStore, { accountStore });
+registerRoomSocketHandlers(io as RoomSocketServer, roomStore, { accountStore, guestSessionStore });
 
 httpServer.listen(port, hostname, () => {
   console.log(`Gomoku Online listening at http://${hostname}:${port} (${dev ? "development" : "production"})`);
@@ -66,6 +71,18 @@ async function processAccountApiRequest(request: IncomingMessage, response: Serv
   if (url.pathname === "/api/account/register") {
     if (request.method !== "POST") {
       writeJson(response, 405, { error: "Method not allowed" }, { allow: "POST" });
+      return;
+    }
+
+    const rateLimit = accountRegistrationLimiter.consume(getRequestClientKey(request));
+
+    if (!rateLimit.allowed) {
+      writeJson(
+        response,
+        429,
+        { error: "Too many account registrations. Try again later." },
+        { "retry-after": String(Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000))) }
+      );
       return;
     }
 
@@ -191,6 +208,22 @@ function getBearerToken(request: IncomingMessage): string {
   const match = /^Bearer\s+(.+)$/i.exec(Array.isArray(authorization) ? authorization[0] : authorization);
 
   return match?.[1]?.trim() ?? "";
+}
+
+function getRequestClientKey(request: IncomingMessage): string {
+  const remoteAddress = request.socket.remoteAddress ?? "unknown";
+
+  if (remoteAddress === "127.0.0.1" || remoteAddress === "::1" || remoteAddress === "::ffff:127.0.0.1") {
+    const forwardedFor = request.headers["x-forwarded-for"];
+    const forwardedValue = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
+    const forwardedClient = forwardedValue?.split(",").at(-1)?.trim();
+
+    if (forwardedClient) {
+      return forwardedClient;
+    }
+  }
+
+  return remoteAddress;
 }
 
 function readJsonBody<T>(request: IncomingMessage): Promise<T | null> {

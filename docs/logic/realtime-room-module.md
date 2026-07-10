@@ -283,13 +283,14 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `game:undo-request` / `game:undo-respond` 已实现：只允许最后一手落子者请求悔棋；对手确认后回退，拒绝或 10 秒超时后保留局面；每人每局 3 次请求机会，同一局面被拒后不能连续重发。
 - `game:resign` 的核心状态操作已实现：对局中认输后直接 finished，胜方为对手。
 - `game:restart` 已实现：只允许房主在 finished 后重置房间，双方需重新 ready；每次重开都会切换下一局先手，房主权限不随先手变化。
-- 断线/重连的核心连接状态标记已实现；刷新恢复通过 sessionStorage `playerId` + `roomCode` 完成，并兼容读取旧 localStorage 记录。
+- 断线/重连的核心连接状态标记已实现；刷新恢复通过 sessionStorage `playerId` + `roomCode` + 服务器签发的 `guestToken` 完成，并兼容读取旧 localStorage 记录。
 - 显式 `room:leave`、同一 socket 创建新房、同一 socket 加入其他房间都会释放非 `playing` 旧座位；房间没有玩家和观战者时立即关闭。
 - `room:create` 前端增加同步 in-flight 锁，防止创建 ack 返回前连点发出多个创建请求。
 - Socket.IO 进房前会清理没有任何 socket 仍在房间频道里的僵尸房；即使服务端还残留房间记录，只要真实房间里没人，也会广播 `room:closed` 并从大厅列表移除。
 - 断线宽限期和超时判负已完成基础版：`playing` 中断线会设置 `disconnectDeadline`，默认宽限期 60 秒，宽限期内可重连，超时后在线对手胜；双方均无在线玩家则 abandoned，并在无人状态下清理房间。
 - 邀请链接已支持根路径保留房间参数：`/?room=ABC123` 会重定向为 `/en?room=ABC123`，前端加载后自动加入房间。
-- 正式 reconnect token 仍未做。
+- Guest reconnect token 已完成：公开 playerId 不能直接重连；registered 用户继续使用 account token。Token 当前随单进程房间生命周期存在，多实例共享 session 留给 Redis/正式账号基础设施。
+- 同一已认证玩家可以有多个活动 socket；只有最后一个房间 socket 断开才把座位标记为 disconnected，避免刷新/多标签旧连接误触发判负。
 - 多实例上线前接 Redis Adapter。
 
 ## 测试清单
@@ -309,7 +310,7 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - Socket.IO 双客户端创建、加入、ready 自动开局、落子广播、悔棋请求确认、非法连走、断线提示和断线超时广播。已覆盖：`src/server/room-socket.test.ts`。
 - Socket.IO 三客户端观战：第三人进入观战席、不能执行玩家动作、能收到落子广播。已覆盖：`src/server/room-socket.test.ts` 和 `tools/smoke-online-room.ts`。
 - 浏览器双上下文创建、邀请 URL 加入、实时落子、非当前回合禁点、刷新恢复和断线提示。已手动验证。
-- 断线宽限期内可恢复。基础刷新恢复和 deadline 已覆盖；正式 reconnect token 未实现。
+- 断线宽限期内可恢复。Guest token、registered account token、同玩家多 socket 和最后连接断开语义已由 `src/server/accounts.test.ts`、`src/server/room-socket.test.ts` 覆盖。
 - 宽限期后按规则处理。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`。
 - 重复创建房间会释放旧房；空 waiting 房立即关闭；没有 socket 成员的僵尸房会在下一次进房前关闭；根路径邀请链接可自动进房。已覆盖：`src/server/rooms.test.ts`、`src/server/room-socket.test.ts`、`tools/smoke-room-lifecycle.ts`、`tools/smoke-share-url.ts`。
 

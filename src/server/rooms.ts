@@ -4,7 +4,6 @@ import type { Board, GameStatus, Move, Point, Stone } from "../game/types";
 import type { PlayerIdentityKind } from "./accounts";
 import {
   GameRecordStore,
-  type AuthoritativeGameRecord,
   type GameRecordClientSubmission,
   type GameRecordFinishReason,
   type GameRecordSubmitResult,
@@ -180,6 +179,7 @@ export type RoomErrorCode =
   | "game-record-invalid"
   | "game-record-not-finished"
   | "game-record-not-found"
+  | "guest-session-invalid"
   | "invalid-player"
   | "invalid-room-code"
   | "not-room-host"
@@ -279,6 +279,8 @@ type RoomStoreOptions = {
   emptyRoomTtlMs?: number;
   gameRecordStore?: GameRecordStore;
   now?: () => number;
+  presenceRetentionMs?: number;
+  transientIdentityLimit?: number;
   roomTtlMs?: number;
 };
 
@@ -291,6 +293,9 @@ const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
 const MAX_ROOM_CHAT_MESSAGES = 50;
 const MAX_ROOM_CHAT_TEXT_LENGTH = 160;
 const MAX_ROOM_LIST_LIMIT = 100;
+const MAX_TRANSIENT_IDENTITIES = 10_000;
+const PRESENCE_RETENTION_MS = 6 * 60 * 60 * 1000;
+const PUBLIC_CHAT_RATE_LIMIT_RETENTION_MS = 60_000;
 const ROOM_CHAT_COOLDOWN_MS = 800;
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000;
 const UNDO_REQUEST_LIMIT = 3;
@@ -305,20 +310,23 @@ type RoomLifecycleLimits = {
 
 export class RoomStore {
   private readonly codeGenerator: () => string;
-  private readonly finalizedGames = new Map<string, AuthoritativeGameRecord>();
   private readonly gameRecordStore: GameRecordStore;
   private readonly lifecycleLimits: RoomLifecycleLimits;
   private lobbyVersion = 0;
   private nextPublicChatMessageId = 1;
   private readonly now: () => number;
+  private readonly presenceRetentionMs: number;
   private readonly presences = new Map<string, PresenceEntry>();
   private presenceVersion = 0;
   private readonly publicChatLastSentAt = new Map<string, number>();
   private readonly publicChatMessages: PublicChatMessage[] = [];
   private readonly rooms = new Map<string, RoomState>();
+  private readonly transientIdentityLimit: number;
 
   constructor(options: RoomStoreOptions = {}) {
     this.now = options.now ?? Date.now;
+    this.presenceRetentionMs = Math.max(1, options.presenceRetentionMs ?? PRESENCE_RETENTION_MS);
+    this.transientIdentityLimit = Math.max(1, Math.floor(options.transientIdentityLimit ?? MAX_TRANSIENT_IDENTITIES));
     this.gameRecordStore = options.gameRecordStore ?? new GameRecordStore({ now: this.now });
     this.lifecycleLimits = {
       completedRoomTtlMs: Math.max(1, options.completedRoomTtlMs ?? COMPLETED_ROOM_TTL_MS),
@@ -1061,6 +1069,7 @@ export class RoomStore {
     }
 
     const now = this.now();
+    this.pruneTransientIdentityState(now);
     const entry =
       this.presences.get(player.id) ??
       ({
@@ -1089,6 +1098,7 @@ export class RoomStore {
     }
 
     const now = this.now();
+    this.pruneTransientIdentityState(now);
     const entry =
       this.presences.get(player.id) ??
       ({
@@ -1125,6 +1135,7 @@ export class RoomStore {
 
   listPresence(query: PresenceListQuery = {}): PresenceSnapshot {
     const now = this.now();
+    this.pruneTransientIdentityState(now);
     const limit = clampPresenceListLimit(query.limit);
     const users = [...this.presences.values()]
       .map((entry) => getPresenceSnapshotForEntry(entry, [...this.rooms.values()]))
@@ -1157,6 +1168,7 @@ export class RoomStore {
     }
 
     const now = this.now();
+    this.pruneTransientIdentityState(now);
     const lastSentAt = this.publicChatLastSentAt.get(player.id);
 
     if (lastSentAt !== undefined && now - lastSentAt < ROOM_CHAT_COOLDOWN_MS) {
@@ -1180,7 +1192,7 @@ export class RoomStore {
   }
 
   submitGameRecord(input: GameRecordClientSubmission): RoomResult<GameRecordSubmitResult> {
-    const game = this.finalizedGames.get(input.gameId);
+    const game = this.gameRecordStore.getRecord(input.gameId);
 
     if (!game) {
       return failure("game-record-not-found", "Finished game record is no longer available.");
@@ -1512,7 +1524,7 @@ export class RoomStore {
       return;
     }
 
-    this.finalizedGames.set(room.gameId, {
+    this.gameRecordStore.recordAuthoritative({
       board: room.board,
       createdAt: room.createdAt,
       finishReason: room.finishReason,
@@ -1541,6 +1553,32 @@ export class RoomStore {
   private nextPresenceVersion(): number {
     this.presenceVersion += 1;
     return this.presenceVersion;
+  }
+
+  private pruneTransientIdentityState(now: number): void {
+    const presenceCutoff = now - this.presenceRetentionMs;
+
+    for (const [playerId, entry] of this.presences) {
+      if (entry.connectionCount === 0 && entry.lastSeenAt < presenceCutoff) {
+        this.presences.delete(playerId);
+      }
+    }
+
+    const chatRateLimitCutoff = now - PUBLIC_CHAT_RATE_LIMIT_RETENTION_MS;
+
+    for (const [playerId, lastSentAt] of this.publicChatLastSentAt) {
+      if (lastSentAt < chatRateLimitCutoff) {
+        this.publicChatLastSentAt.delete(playerId);
+      }
+    }
+
+    evictOldestMapEntries(
+      this.presences,
+      this.transientIdentityLimit,
+      (entry) => entry.connectionCount === 0,
+      (entry) => entry.lastSeenAt
+    );
+    evictOldestMapEntries(this.publicChatLastSentAt, this.transientIdentityLimit, () => true, (lastSentAt) => lastSentAt);
   }
 }
 
@@ -2007,4 +2045,27 @@ function success<T>(value: T): RoomResult<T> {
 
 function failure(code: RoomErrorCode, message: string): RoomResult<never> {
   return { ok: false, error: { code, message } };
+}
+
+function evictOldestMapEntries<K, V>(
+  entries: Map<K, V>,
+  limit: number,
+  canEvict: (value: V) => boolean,
+  getUpdatedAt: (value: V) => number
+): void {
+  if (entries.size <= limit) {
+    return;
+  }
+
+  const candidates = [...entries.entries()]
+    .filter(([, value]) => canEvict(value))
+    .sort((left, right) => getUpdatedAt(left[1]) - getUpdatedAt(right[1]));
+
+  for (const [key] of candidates) {
+    if (entries.size <= limit) {
+      return;
+    }
+
+    entries.delete(key);
+  }
 }

@@ -1,6 +1,6 @@
 import { io } from "socket.io-client";
 
-import type { RoomAck } from "../src/server/room-contract";
+import type { RoomAck, RoomClientState } from "../src/server/room-contract";
 import type { LobbyRoomDeletedEvent, RoomListSnapshot, RoomSnapshot } from "../src/server/rooms";
 
 type SmokeSocket = {
@@ -37,9 +37,9 @@ async function main(): Promise<void> {
     console.log(`PASS connect spectator - ${spectator.io.engine.transport.name}`);
     console.log(`PASS connect mirror - ${mirror.io.engine.transport.name}`);
 
-    await verifyRepeatedCreateReusesCurrentRoom(baseUrl, host, suffix);
-    await verifySamePlayerCreateClosesPreviousRoom(baseUrl, host, mirror, suffix);
-    await verifySameGuestNameCreateClosesPreviousRoom(baseUrl, host, mirror, suffix);
+    const currentHost = await verifyRepeatedCreateReusesCurrentRoom(baseUrl, host, suffix);
+    await verifySamePlayerCreateClosesPreviousRoom(baseUrl, host, mirror, currentHost);
+    await verifySameGuestNameCreateClosesPreviousRoom(baseUrl, suffix);
     await verifyWaitingRoomClosesAfterCreatorDisconnects(baseUrl, suffix);
     await verifySpectatorCanSitInOpenSeat(host, guest, spectator, suffix);
     await verifyDisconnectTimeoutForfeit(host, guest, suffix);
@@ -55,14 +55,15 @@ async function verifyRepeatedCreateReusesCurrentRoom(
   baseUrl: string,
   host: SmokeSocket,
   suffix: string
-): Promise<void> {
-  const first = requireOk(
+): Promise<RoomClientState> {
+  const firstState = requireOk(
     await emitAck(host, "room:create", {
       playerId: `lifecycle-host-${suffix}`,
       playerName: `Lifecycle Host ${suffix}`
     }),
     "first room:create"
-  ).snapshot;
+  );
+  const first = firstState.snapshot;
   const second = requireOk(
     await emitAck(host, "room:create", {
       playerId: `lifecycle-host-${suffix}`,
@@ -77,26 +78,23 @@ async function verifyRepeatedCreateReusesCurrentRoom(
 
   assert(rooms.rooms.filter((room) => room.code === first.code).length === 1, "current room should remain listed once");
   console.log(`PASS repeated create reuses current room - ${first.code}`);
+
+  return firstState;
 }
 
 async function verifySamePlayerCreateClosesPreviousRoom(
   baseUrl: string,
   firstSocket: SmokeSocket,
   secondSocket: SmokeSocket,
-  suffix: string
+  currentHost: RoomClientState
 ): Promise<void> {
-  const first = requireOk(
-    await emitAck(firstSocket, "room:create", {
-      playerId: `mirror-host-${suffix}`,
-      playerName: `Mirror Host ${suffix}`
-    }),
-    "mirror first room:create"
-  ).snapshot;
+  const first = currentHost.snapshot;
   const firstClosed = waitForRoomClosed(firstSocket, first.code);
   const second = requireOk(
     await emitAck(secondSocket, "room:create", {
-      playerId: `mirror-host-${suffix}`,
-      playerName: `Mirror Host ${suffix}`
+      guestToken: currentHost.guestToken,
+      playerId: currentHost.playerId,
+      playerName: currentHost.name
     }),
     "mirror second room:create"
   ).snapshot;
@@ -113,34 +111,40 @@ async function verifySamePlayerCreateClosesPreviousRoom(
 
 async function verifySameGuestNameCreateClosesPreviousRoom(
   baseUrl: string,
-  firstSocket: SmokeSocket,
-  secondSocket: SmokeSocket,
   suffix: string
 ): Promise<void> {
-  const first = requireOk(
-    await emitAck(firstSocket, "room:create", {
-      playerId: `name-tab-a-${suffix}`,
-      playerName: `Name Shared ${suffix}`
-    }),
-    "same-name first room:create"
-  ).snapshot;
-  const firstClosed = waitForRoomClosed(firstSocket, first.code);
-  const second = requireOk(
-    await emitAck(secondSocket, "room:create", {
-      playerId: `name-tab-b-${suffix}`,
-      playerName: `Name Shared ${suffix}`
-    }),
-    "same-name second room:create"
-  ).snapshot;
+  const firstSocket = await connectClient(baseUrl);
+  const secondSocket = await connectClient(baseUrl);
 
-  await firstClosed;
-  assert(first.code !== second.code, "same guest name on another socket should allocate a new room");
+  try {
+    const first = requireOk(
+      await emitAck(firstSocket, "room:create", {
+        playerId: `name-tab-a-${suffix}`,
+        playerName: `Name Shared ${suffix}`
+      }),
+      "same-name first room:create"
+    ).snapshot;
+    const firstClosed = waitForRoomClosed(firstSocket, first.code);
+    const second = requireOk(
+      await emitAck(secondSocket, "room:create", {
+        playerId: `name-tab-b-${suffix}`,
+        playerName: `Name Shared ${suffix}`
+      }),
+      "same-name second room:create"
+    ).snapshot;
 
-  const rooms = await fetchRoomList(baseUrl);
+    await firstClosed;
+    assert(first.code !== second.code, "same guest name on another socket should allocate a new room");
 
-  assert(!rooms.rooms.some((room) => room.code === first.code), "first same-name room should be closed");
-  assert(rooms.rooms.some((room) => room.code === second.code), "second same-name room should remain listed");
-  console.log(`PASS same guest name create closes previous room - ${first.code} -> ${second.code}`);
+    const rooms = await fetchRoomList(baseUrl);
+
+    assert(!rooms.rooms.some((room) => room.code === first.code), "first same-name room should be closed");
+    assert(rooms.rooms.some((room) => room.code === second.code), "second same-name room should remain listed");
+    console.log(`PASS same guest name create closes previous room - ${first.code} -> ${second.code}`);
+  } finally {
+    firstSocket.disconnect();
+    secondSocket.disconnect();
+  }
 }
 
 async function verifyWaitingRoomClosesAfterCreatorDisconnects(baseUrl: string, suffix: string): Promise<void> {

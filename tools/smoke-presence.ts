@@ -24,6 +24,10 @@ const TIMEOUT_MS = 10_000;
 async function main(): Promise<void> {
   const baseUrl = normalizeBaseUrl(process.argv[2] ?? DEFAULT_BASE_URL);
   const suffix = Date.now().toString(36);
+  const lobbyName = `P Lobby ${suffix}`;
+  const hostName = `P Host ${suffix}`;
+  const guestName = `P Guest ${suffix}`;
+  const spectatorName = `P Watch ${suffix}`;
   const lobby = await connectClient(baseUrl);
   const host = await connectClient(baseUrl);
   const guest = await connectClient(baseUrl);
@@ -39,25 +43,25 @@ async function main(): Promise<void> {
     const lobbyPresence = requirePresenceOk(
       await emitAck<PresenceAck>(lobby, "presence:join", {
         playerId: `presence-lobby-${suffix}`,
-        playerName: `Presence Lobby ${suffix}`
+        playerName: lobbyName
       }),
       "presence:join lobby"
     );
 
     assert(
-      lobbyPresence.users.some((user) => user.name === `Presence Lobby ${suffix}` && user.status === "online"),
+      lobbyPresence.users.some((user) => user.name === lobbyName && user.status === "online"),
       "lobby user should be online"
     );
     console.log("PASS presence lobby online");
 
     const lobbySawHost = waitForPresence(
       lobby,
-      (snapshot) => snapshot.users.some((user) => user.name === `Presence Host ${suffix}` && user.status === "in_room")
+      (snapshot) => snapshot.users.some((user) => user.name === hostName && user.status === "in_room")
     );
     const created = requireRoomOk(
       await emitAck<RoomAck>(host, "room:create", {
         playerId: `presence-host-${suffix}`,
-        playerName: `Presence Host ${suffix}`
+        playerName: hostName
       }),
       "room:create"
     ).snapshot;
@@ -69,15 +73,15 @@ async function main(): Promise<void> {
     const lobbySawPlaying = waitForPresence(
       lobby,
       (snapshot) =>
-        snapshot.users.some((user) => user.name === `Presence Host ${suffix}` && user.status === "playing") &&
-        snapshot.users.some((user) => user.name === `Presence Guest ${suffix}` && user.status === "playing") &&
-        snapshot.users.some((user) => user.name === `Presence Watcher ${suffix}` && user.status === "spectating")
+        snapshot.users.some((user) => user.name === hostName && user.status === "playing") &&
+        snapshot.users.some((user) => user.name === guestName && user.status === "playing") &&
+        snapshot.users.some((user) => user.name === spectatorName && user.status === "spectating")
     );
 
     requireRoomOk(
       await emitAck<RoomAck>(guest, "room:join", {
         playerId: `presence-guest-${suffix}`,
-        playerName: `Presence Guest ${suffix}`,
+        playerName: guestName,
         roomCode
       }),
       "room:join guest"
@@ -85,7 +89,7 @@ async function main(): Promise<void> {
     requireRoomOk(
       await emitAck<RoomAck>(spectator, "room:join", {
         playerId: `presence-watcher-${suffix}`,
-        playerName: `Presence Watcher ${suffix}`,
+        playerName: spectatorName,
         roomCode
       }),
       "room:join spectator"
@@ -96,7 +100,7 @@ async function main(): Promise<void> {
     const playingPresence = await lobbySawPlaying;
 
     assert(
-      playingPresence.users.some((user) => user.name === `Presence Watcher ${suffix}` && user.roomCode === roomCode),
+      playingPresence.users.some((user) => user.name === spectatorName && user.roomCode === roomCode),
       "spectator presence should include room code"
     );
     console.log("PASS presence playing and spectating");
@@ -104,11 +108,11 @@ async function main(): Promise<void> {
     const apiPresence = await fetchPresence(baseUrl);
 
     assert(
-      apiPresence.users.some((user) => user.name === `Presence Host ${suffix}` && user.status === "playing"),
+      apiPresence.users.some((user) => user.name === hostName && user.status === "playing"),
       "GET /api/presence should include playing host"
     );
     assert(
-      apiPresence.users.some((user) => user.name === `Presence Watcher ${suffix}` && user.status === "spectating"),
+      apiPresence.users.some((user) => user.name === spectatorName && user.status === "spectating"),
       "GET /api/presence should include spectating watcher"
     );
     console.log("PASS presence REST readback");
@@ -190,8 +194,11 @@ function waitForPresence(
   timeoutMs = TIMEOUT_MS
 ): Promise<PresenceSnapshot> {
   return new Promise((resolve, reject) => {
+    let latestSnapshot: PresenceSnapshot | null = null;
     const listener = (payload: unknown) => {
       const snapshot = payload as PresenceSnapshot;
+
+      latestSnapshot = snapshot;
 
       if (!predicate(snapshot)) {
         return;
@@ -203,7 +210,13 @@ function waitForPresence(
     };
     const timeout = setTimeout(() => {
       socket.off("presence:users", listener);
-      reject(new Error("Timed out waiting for presence:users"));
+      reject(
+        new Error(
+          `Timed out waiting for presence:users; latest=${JSON.stringify(
+            latestSnapshot?.users.map((user) => ({ name: user.name, roomCode: user.roomCode, status: user.status })) ?? []
+          )}`
+        )
+      );
     }, timeoutMs);
 
     socket.on("presence:users", listener);

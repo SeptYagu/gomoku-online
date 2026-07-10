@@ -54,6 +54,7 @@ export type GameRecordConflict = {
 };
 
 export type SavedGameRecord = AuthoritativeGameRecord & {
+  authoritative: boolean;
   firstSubmittedAt: number;
   id: string;
   recordStatus: GameRecordStatus;
@@ -155,8 +156,10 @@ type PersistedGameRecordEntry = {
 
 export class GameRecordStore {
   private readonly filePath: false | string;
+  private leaderboardCache: { dayStart: number; entries: LeaderboardEntry[]; revision: number } | null = null;
   private readonly now: () => number;
   private readonly records = new Map<string, SavedGameRecord>();
+  private recordsRevision = 0;
 
   constructor(options: GameRecordStoreOptions = {}) {
     this.filePath = options.filePath === undefined ? false : options.filePath === false ? false : resolve(options.filePath);
@@ -171,14 +174,63 @@ export class GameRecordStore {
       .slice(0, Math.max(1, Math.min(MAX_GAME_RECORD_LIST_LIMIT, Math.floor(limit))));
   }
 
+  getRecord(gameId: string): SavedGameRecord | null {
+    const record = this.records.get(gameId.trim());
+
+    return record ? cloneRecord(record) : null;
+  }
+
+  recordAuthoritative(authoritative: AuthoritativeGameRecord): SavedGameRecord {
+    const existing = this.records.get(authoritative.gameId);
+
+    if (existing?.authoritative) {
+      return cloneRecord(existing);
+    }
+
+    const now = this.now();
+    const record: SavedGameRecord = existing
+      ? {
+          ...cloneAuthoritative(authoritative),
+          authoritative: true,
+          conflicts: existing.conflicts.map((conflict) => ({ ...conflict })),
+          firstSubmittedAt: existing.firstSubmittedAt,
+          id: authoritative.gameId,
+          recordStatus: "verified",
+          submissions: existing.submissions.map((submission) => ({ ...submission })),
+          updatedAt: now
+        }
+      : createSavedGameRecord(authoritative, now, true);
+
+    this.records.set(record.id, cloneRecord(record));
+    this.recordsRevision += 1;
+    this.persist(record);
+
+    return cloneRecord(record);
+  }
+
   getLeaderboard(query: LeaderboardQuery = {}): LeaderboardSnapshot {
+    const now = this.now();
+    const dayStart = getLocalDayStart(now);
     const identity = normalizeLeaderboardIdentity(query.identity);
     const scope = normalizeLeaderboardScope(query.scope);
     const limit = clampLeaderboardLimit(query.limit);
     const offset = clampLeaderboardOffset(query.offset);
     const search = normalizeLeaderboardSearch(query.search);
+    const baseEntries =
+      this.leaderboardCache?.revision === this.recordsRevision && this.leaderboardCache.dayStart === dayStart
+        ? this.leaderboardCache.entries
+        : calculateLeaderboardEntries([...this.records.values()], now);
+
+    if (baseEntries !== this.leaderboardCache?.entries) {
+      this.leaderboardCache = {
+        dayStart,
+        entries: baseEntries,
+        revision: this.recordsRevision
+      };
+    }
+
     const entries = sortLeaderboardEntries(
-      calculateLeaderboardEntries([...this.records.values()], this.now()).filter(
+      baseEntries.filter(
         (entry) =>
           (identity === "all" || entry.identity === identity) &&
           (!search ||
@@ -196,14 +248,14 @@ export class GameRecordStore {
 
     return {
       entries: sortedEntries,
-      generatedAt: this.now(),
+      generatedAt: now,
       identity,
       limit,
       offset,
       search,
       scope,
       totalEntries: entries.length,
-      version: getLeaderboardVersion([...this.records.values()])
+      version: this.recordsRevision
     };
   }
 
@@ -299,13 +351,14 @@ export class GameRecordStore {
         reason: conflictReason,
         submittedAt: now
       });
-      record.recordStatus = "conflicted";
+      record.recordStatus = record.authoritative ? "verified" : "conflicted";
     } else if (record.recordStatus !== "conflicted" && record.submissions.length >= Math.min(2, authoritative.players.length)) {
       record.recordStatus = "verified";
     }
 
     record.updatedAt = now;
     this.records.set(record.id, cloneRecord(record));
+    this.recordsRevision += 1;
     this.persist(record);
 
     return {
@@ -330,7 +383,11 @@ export class GameRecordStore {
         const entry = JSON.parse(line) as PersistedGameRecordEntry;
 
         if (entry.type === "game-record" && entry.record?.id) {
-          this.records.set(entry.record.id, entry.record);
+          this.records.set(entry.record.id, {
+            ...entry.record,
+            authoritative: entry.record.authoritative === true
+          });
+          this.recordsRevision += 1;
         }
       } catch {
         // Ignore corrupt historical lines; the next valid line for a record wins.
@@ -356,13 +413,18 @@ export class GameRecordStore {
   }
 }
 
-function createSavedGameRecord(authoritative: AuthoritativeGameRecord, now: number): SavedGameRecord {
+function createSavedGameRecord(
+  authoritative: AuthoritativeGameRecord,
+  now: number,
+  authoritativeRecorded = false
+): SavedGameRecord {
   return {
     ...cloneAuthoritative(authoritative),
+    authoritative: authoritativeRecorded,
     conflicts: [],
     firstSubmittedAt: now,
     id: authoritative.gameId,
-    recordStatus: "partial",
+    recordStatus: authoritativeRecorded ? "verified" : "partial",
     submissions: [],
     updatedAt: now
   };
@@ -632,10 +694,6 @@ function getLocalDayStart(now: number): number {
   date.setHours(0, 0, 0, 0);
 
   return date.getTime();
-}
-
-function getLeaderboardVersion(records: SavedGameRecord[]): number {
-  return records.reduce((version, record) => Math.max(version, record.updatedAt), records.length);
 }
 
 function stableStringify(value: unknown): string {

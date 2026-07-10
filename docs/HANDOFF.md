@@ -3742,3 +3742,458 @@ b6faf9e
 下一步：
 
 - 阶段 3 继续推进账号完整化、排行榜增量事件、opening analysis 候选接入 arena 筛线和运行时开局库转换，以及后续 PlayOK 式用户功能。
+
+## 74. 2026-07-10 当前代码审核、风险复现与修复启动
+
+本轮目标：
+
+- 审核当前 `main` 的实现和阶段进度，不以既有测试通过代替人工检查。
+- 把审核发现、复现证据、修复顺序和每一步结果持续追加到本文件。
+- 先修复身份安全、服务端权威结算和断线恢复，再处理前端竞态、长期状态增长和排行榜请求压力。
+
+审核基线：
+
+- 当前分支：`main`。
+- 当前提交：`e8b0771 Record leaderboard paging online verification`。
+- `main` 与 `origin/main` 同步。
+- 真实服务器只读检查显示版本 `e8b0771`，页面、Socket.IO polling 和 WebSocket 均通过。
+- `npm test`：通过，11 个测试文件、99 个测试用例。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- `npm audit --omit=dev`：0 个已知漏洞。
+- `git diff --check`：通过。
+- 本轮审核没有修改跟踪代码；工作区存在 Codex 环境生成的未跟踪文件 `.codex/environments/environment.toml`，不纳入项目提交。
+
+当前进度判断：
+
+- 阶段 0、阶段 1 和阶段 2 已完成；本地/AI 对弈、六语言、主题、Worker AI、开局库和好友房权威状态机均已落地。
+- 阶段 3 已完成小步 1-19，并通过真实服务器验证：分享链接、观战、大厅、聊天、随机匹配、棋谱、Presence、轻账号、Profile、回放/SGF、排行榜、搜索分页和开局分析均已有第一版。
+- 阶段 3 整体尚未结束；现有文档列出的后续仍包括账号完整化、排行榜增量事件、opening analysis 接入 arena/运行时开局库，以及更多平台能力。
+- 当前生产形态仍是单进程内存房间状态与 JSONL 账号/棋谱持久化，尚未进入 Redis、多实例共享状态和正式数据库形态。
+- `README.md` 顶部状态摘要仍停留在好友房 MVP，未完整反映阶段 3；`docs/M3_PUBLIC_TEST_LOG.md` 也残留已被后续部署覆盖但未关闭的旧 open 项。
+
+审核发现与复现证据：
+
+1. P1：游客身份可被接管。
+   - `resolvePlayerIdentity()` 在没有账号 token 时直接信任客户端 `playerId`。
+   - Presence 和排行榜对外返回公开 `playerId`，Presence 同时返回 `roomCode`。
+   - `room:rejoin` 只按 `playerId` 查找既有成员，没有服务器签发的 guest/reconnect secret，也不要求原连接已经断开。
+   - 本地无写入复现输出：公开读取 `guest-victim` / `ROOM01` 后，以昵称 `Attacker` 调用重连成功，输出 `takeoverOk=true`、`takeoverName=Attacker`。
+   - 影响：攻击者可冒用游客座位执行落子、认输、悔棋响应和房间聊天；公开排行榜/Presence 中的 ID 不能继续充当凭证。
+
+2. P1：排行榜结果可被败方阻止进入 verified。
+   - 服务端已经持有权威终局，但只把它暂存在内存 `finalizedGames`。
+   - `GameRecordStore.submit()` 只有收到双方客户端提交才把记录从 `partial` 改为 `verified`。
+   - 排行榜只统计 `verified` 记录；断线败者或主动关闭页面的败者不会提交，胜者记录不能进入榜单。
+   - 本地无写入复现输出：胜者单方提交后 `recordStatus=partial`、`submissions=1`、`rankedEntries=0`。
+   - 影响：断线胜、败方拒绝提交、页面在 effect 执行前关闭都会造成排行漏记；服务端权威结算原则没有贯彻到持久化和评分入口。
+
+3. P1：刷新或多标签页可能把仍在线玩家标记为断线。
+   - `room:rejoin` 可以让多个 socket 绑定同一玩家，但房间成员只保存一个 `connected` 布尔值。
+   - 任意绑定 socket 的 `disconnect` 都会直接调用 `markDisconnected()`，不检查是否还有其他活动 socket。
+   - 本地状态复现：新连接完成重连后模拟旧连接断开，玩家立即变为 `connected=false` 且写入断线截止时间，对局仍处于 `playing`。
+   - 影响：刷新竞态或多标签页关闭可能触发错误的 60 秒判负。
+
+4. P2：注册账号恢复与邀请链接自动加入存在竞态。
+   - 页面加载时账号 session 通过异步 HTTP 请求恢复。
+   - URL 中有新 room code 且没有该房间历史 session 时，自动加入 effect 会先使用尚未恢复的 `account=null`，从而创建游客身份。
+   - 账号稍后恢复不会把当前房间身份从 guest 升级为 registered。
+   - 影响：注册用户通过新邀请链接进入房间时，棋谱和排行可能错误归入游客身份。
+
+5. P2：服务端长期状态和 JSONL 存储无界增长。
+   - `finalizedGames` 保存每局完整终局，未发现 delete、TTL 或容量上限。
+   - `presences` 与 `publicChatLastSentAt` 对历史 playerId 没有淘汰。
+   - 注册接口没有服务端频率限制；攻击者可用随机昵称持续创建账号。
+   - `AccountStore.authenticate()` 每次认证都会同步追加完整账号 JSONL，登录检查和带 token 的 socket 行为会持续扩大文件并阻塞事件循环。
+
+6. P2：排行榜搜索存在请求竞态和全量计算压力。
+   - 搜索文本每次按键都会改变 `refreshLeaderboard` 回调，并由 effect 立即发起请求。
+   - 请求没有 debounce、AbortController 或 request sequence，旧响应可能覆盖新筛选条件。
+   - 服务端每个请求都从全部 verified 棋谱重算 ELO、筛选并排序，数据量增长后成本会随每次按键放大。
+
+修复顺序与验收标准：
+
+1. 身份与连接：增加服务器签发、不可公开的 guest session/reconnect token；房间动作绑定经过验证的会话；按玩家追踪活动 socket，最后一个 socket 断开时才启动宽限期。
+2. 权威棋谱：终局时立即以服务端快照持久化权威记录；客户端提交仅用于一致性审计，不能成为排行榜是否记分的否决权；终局缓存必须有淘汰策略。
+3. 账号前端竞态：账号恢复完成前不执行会决定身份的自动入房/匹配/建房操作，并覆盖新邀请链接场景。
+4. 长期稳定性：给内存状态和账号写入增加 TTL/容量/节流或压缩边界，注册与聊天增加不能被任意 playerId 绕过的限流。
+5. 排行榜：搜索改为明确提交或 debounce；前端丢弃过期响应；服务端避免每次请求重复全量计算。
+6. 每一小步都补自动化测试并追加本 handoff；最终运行 `npm test`、`npm run lint`、`npm run build`、`npm audit --omit=dev`、`git diff --check` 和与身份/房间相关的本地生产冒烟。
+
+当前状态：
+
+- 审核发现已经写入 handoff。
+- 下一步开始修复游客会话接管和多 socket 断线模型。
+
+### 小步 A：游客 session token 与多 socket 连接跟踪
+
+状态：实现完成，定向测试和 lint 通过；完整门禁留到全部修复收口时运行。
+
+目标：
+
+- 公开 `playerId` 不再能直接用于游客重连或跨 socket 冒用。
+- 同一玩家允许已认证的刷新/多标签连接并存；只有最后一个活动 socket 断开时才进入断线宽限期。
+- 尽量保持现有首次游客创建/加入、测试脚本和房间状态机接口兼容。
+
+实现：
+
+- `src/server/accounts.ts`
+  - 新增内存 `GuestSessionStore`。
+  - 首次游客身份声明时签发 32-byte 随机 token，服务端只保存 token hash。
+  - 同一 `playerId` 再次从新 socket 使用时必须携带有效 guest token；公开 ID 本身不再是凭证。
+  - 有效 token 可以更新当前游客昵称；无效 token 返回 `guest-session-invalid`。
+- `src/server/room-store.ts`
+  - 在线服务共享单例 `guestSessionStore`。
+- `src/server/room-contract.ts`、`src/server/rooms.ts`
+  - `RoomClientState` 增加仅随当前连接 ack 返回的可选 `guestToken`。
+  - 房间错误码增加 `guest-session-invalid`。
+- `src/server/room-socket.ts`
+  - 所有需要声明身份的 socket 入口统一经过账号 token 或 guest token 解析。
+  - `room:rejoin` 禁止创建新的 guest session，必须使用已签发 token 或 registered account token。
+  - 新增 `RoomConnectionTracker`，按 `roomCode + playerId` 跟踪活动 socket 集合。
+  - 一个 socket 断开但同玩家仍有其他房间连接时，不调用 `RoomStore.markDisconnected()`。
+  - 显式离房、取消匹配或切换房间时同步清理连接绑定，避免留下错误引用。
+- `src/components/useFriendRoom.ts`
+  - room session 和独立 sessionStorage 保存 guest token，之后的身份请求和 `room:rejoin` 自动携带。
+  - 服务器重启或 token 失效时清除旧 token、创建新 guest ID，并回退到普通加入流程。
+  - Sign out 会同时清除旧 guest token，避免新 guest ID 被旧 token 覆盖。
+- `src/server/accounts.test.ts`
+  - 覆盖首次签发 token、无 token 冒用同一 ID 被拒绝、有效 token 恢复并改名。
+- `src/server/room-socket.test.ts`
+  - 新增“另一 socket 无 token 不能 rejoin，携带 token 才能恢复座位”。
+  - 新增“旧 socket 断开时还有已认证镜像连接，玩家保持 connected；最后连接断开后才进入断线状态”。
+  - 同玩家跨 socket 创建新房的既有测试改为显式传递首次 ack 返回的 guest token。
+
+实现期间失败与处理：
+
+- 首轮定向测试：2 个测试文件中 4 项失败。
+  - guest session 创建结果内部字段名为 `token`，`resolvePlayerIdentity()` 未映射为协议字段 `guestToken`。
+  - 因首次 ack 没带回 token，同 socket 第二次创建和公共聊天被错误识别为新身份。
+  - 跨 socket 同玩家测试没有携带新要求的 token。
+- 修复：统一映射 `guestToken`，让 socket 保存已解析 token，并更新跨 socket 测试传递首次 ack token。
+- 第二轮定向测试：通过，2 个测试文件、17 个测试用例。
+
+验证：
+
+- `npx vitest run src/server/accounts.test.ts src/server/room-socket.test.ts`：通过，2 个测试文件、17 个测试用例。
+- `npm run lint`：通过，0 warning、0 error。
+
+当前边界：
+
+- GuestSessionStore 与房间状态一样仍是单进程内存状态；服务重启后旧房间本身也不存在，客户端会在 token 失效时换新 guest ID。
+- Token 不进入公开 RoomSnapshot、Presence 或 Leaderboard，只随当前 socket 的成功 RoomAck 返回并保存在当前浏览器 sessionStorage。
+- 完整测试、build 和真实浏览器刷新恢复仍需在本轮全部修复完成后统一回归。
+
+下一步：
+
+- 把服务端权威终局直接持久化为可计分记录，取消败方客户端对 verified/ranking 的否决能力，并为 finalized game cache 增加淘汰。
+
+### 小步 B：服务端权威终局持久化与排行榜结算
+
+状态：实现完成，全量单测和 lint 通过；完整 build/生产冒烟留到最终收口。
+
+目标：
+
+- 房间服务端判定终局后立即保存可计分权威棋谱，不等待双方浏览器 effect。
+- 败方断线、关页或拒绝提交不能阻止胜者进入排行榜。
+- 客户端提交保留为审计证据，不能覆盖或否决服务端 winner/board/moves。
+- 删除无界增长的完整终局内存缓存。
+
+实现：
+
+- `src/server/game-records.ts`
+  - `SavedGameRecord` 增加 `authoritative` 标志。
+  - 新增 `getRecord(gameId)`，返回持久化记录的深拷贝。
+  - 新增幂等 `recordAuthoritative()`：首次服务端终局直接写为 `authoritative=true`、`recordStatus=verified`、零 submissions。
+  - 如果已有旧 partial/client 记录，权威写入会覆盖棋盘/胜负等事实，保留已有 submissions/conflicts 并升级为 verified。
+  - 权威记录收到冲突客户端提交时仍记录 `conflicts[]`，但保持 verified；非权威旧流程继续保留 partial/verified/conflicted 兼容语义。
+  - 加载旧 JSONL 时，没有 `authoritative` 的历史行按 false 兼容。
+- `src/server/rooms.ts`
+  - 删除 `finalizedGames` Map。
+  - `captureFinishedGame()` 直接调用 `gameRecordStore.recordAuthoritative()` 持久化终局。
+  - `submitGameRecord()` 从持久化权威记录读取审计基线，不再依赖房间进程内终局副本。
+- `src/server/game-records.test.ts`
+  - 新增零客户端提交时权威记录已 verified、已进入排行榜的覆盖。
+  - 新增客户端伪造 winner 只产生冲突审计、不改变权威 winner 和榜单的覆盖。
+- `src/server/rooms.test.ts`
+  - 终局后立即检查 `authoritative=true`、verified、零 submissions 和胜方榜单。
+  - 第一方/第二方提交只增加审计信息；冲突提交不再把权威记录降级。
+- `src/server/room-socket.test.ts`、`tools/smoke-game-records.ts`
+  - 更新第一份提交断言：从“创建 partial”改为“审计已有 authoritative verified 记录”。
+- `src/server/game-record-export.test.ts`、`src/server/game-record-opening-analysis.test.ts`
+  - 测试 fixture 补齐 `authoritative` 字段。
+- `docs/logic/rating-leaderboard-module.md`
+  - 记录权威终局写入、客户端审计边界和兼容策略。
+
+实现期间失败与处理：
+
+- 首轮定向测试有 3 项旧断言失败：既有测试仍预期第一份提交为 partial、冲突提交把记录降为 conflicted。
+- 这些失败与新权威结算语义一致，不是实现异常；已把断言升级为终局即 verified、冲突只做审计，并增加“零提交已进榜”覆盖。
+- 第一次全量 lint 发现 `AuthoritativeGameRecord` 旧 import 不再使用；删除后 lint 无 warning。
+
+验证：
+
+- `npx vitest run src/server/game-records.test.ts src/server/rooms.test.ts src/server/room-socket.test.ts`：通过，3 个测试文件、55 个测试用例。
+- `npm test`：通过，11 个测试文件、102 个测试用例。
+- `npm run lint`：通过，0 warning、0 error。
+
+行为变化：
+
+- 新终局在双方客户端尚未提交时已经出现在 Profile 和相应身份排行榜。
+- `partial` 仍用于直接调用旧 `GameRecordStore.submit()`、导入的历史/非权威记录等兼容场景；在线 RoomStore 终局不再经过 partial gate。
+- 客户端 submissions/conflicts 仍保留，可用于后续反作弊与一致性分析。
+
+下一步：
+
+- 修复注册账号 session 恢复和新邀请链接自动加入的竞态，保证已有账号 token 的用户不会先以 guest 身份进房。
+
+### 小步 C：账号恢复与邀请链接自动加入身份门禁
+
+状态：实现完成，定向测试和 lint 通过；真实浏览器新邀请链接场景留到最终本地生产验证。
+
+目标：
+
+- 浏览器已有 account token 时，在 `/api/account/session` 完成前不执行会锁定身份的房间操作。
+- 有效 token 必须先恢复为 registered，再创建、加入、匹配或自动加入邀请房。
+- 无效 token 必须先清除并切换为 guest，再开始新游客 session。
+
+实现：
+
+- `src/components/account-identity.ts`
+  - 新增 `isAccountIdentityReady()`，把 `loading` 明确定义为禁止房间身份动作的状态。
+- `src/components/account-identity.test.ts`
+  - 覆盖 loading 阻塞，以及 registered/guest/error 已完成身份决策时放行。
+- `src/components/useFriendRoom.ts`
+  - `identityReady` 统一驱动 Create、Find Match、Join 的可用状态。
+  - `joinRoomByCode()` 在账号仍 loading 时不发 socket 请求。
+  - Presence、当前 Profile 和公共聊天身份请求在 loading 时不声明 guest；账号状态变化后 callback/effect 会自动以最终身份重跑。
+  - URL 自动入房与历史 room session 重连 effect 在 identityReady 前直接等待，并把 `accountStatus` 纳入依赖。
+  - 控制器新增 `canJoinRoom`，避免 UI 在账号恢复中发出手动 Join。
+- `src/components/GameShell.tsx`
+  - Join 按钮、列表 Join/Watch 和公共聊天发送在账号 loading 时禁用。
+
+竞态修复后的顺序：
+
+1. 页面读取本地 account token，初始化为 `accountStatus=loading`。
+2. 房间身份相关 effect 和按钮保持等待。
+3. `/api/account/session` 成功：设置 registered account，随后自动入房使用 account token，服务端忽略客户端 guest ID/name。
+4. `/api/account/session` 失败：清除 account token，设置 guest，随后自动入房创建/恢复受 guest token 保护的游客身份。
+
+验证：
+
+- `npx vitest run src/components/account-identity.test.ts src/server/accounts.test.ts src/server/room-socket.test.ts`：通过，3 个测试文件、18 个测试用例。
+- `npm run lint`：通过，0 warning、0 error。
+
+下一步：
+
+- 处理剩余 P2 稳定性问题：账号注册/认证写入节流与内存状态淘汰；排行榜搜索 debounce、过期响应保护和服务端结果缓存。
+
+### 小步 D1：账号写入节流、注册限流与临时身份状态淘汰
+
+状态：实现完成，定向测试通过；完整 lint/build 留到 D2 与最终收口。
+
+实现：
+
+- `src/server/accounts.ts`
+  - `AccountStore` 新增 `lastSeenPersistIntervalMs`，默认 60 秒。
+  - 每次有效认证仍在内存更新 `lastSeenAt`，但只在距离上次落盘达到间隔时更新 `updatedAt` 并追加 JSONL；不再让每次 session 检查/带 token 身份解析都同步写文件。
+  - `GuestSessionStore` 默认 TTL 6 小时、最多 10,000 条。
+  - create/authenticate 前淘汰过期 session；达到容量时按 `lastSeenAt/createdAt` 淘汰最旧 session，并同步删除 token hash 索引。
+- `src/server/rooms.ts`
+  - 离线 Presence 默认保留 6 小时后删除。
+  - Presence 和公共聊天限流身份键默认最多各 10,000 条；超限按最旧更新时间淘汰，活动 Presence 不参与容量淘汰。
+  - 公共聊天限流键超过 60 秒无使用即清理，避免任意 guest ID 长期占用 Map。
+  - `RoomStoreOptions` 暴露 `presenceRetentionMs` / `transientIdentityLimit` 供测试和后续部署调优。
+- `src/server/rate-limit.ts`
+  - 新增有容量上限的固定窗口限流器，返回 allowed、remaining 和 retryAfterMs。
+- `src/server/online-server.ts`
+  - `POST /api/account/register` 增加每客户端来源 10 分钟最多 5 次的限流。
+  - 超限返回 HTTP 429 和 `Retry-After`。
+  - 在本机反向代理连接下读取 `X-Forwarded-For` 最后一跳；直接连接使用 socket remoteAddress。
+- 测试：
+  - `src/server/accounts.test.ts` 覆盖多次认证只写一次、达到时间间隔后才追加，以及 guest session TTL/容量淘汰。
+  - `src/server/rooms.test.ts` 覆盖离线 Presence 容量淘汰与 TTL 清理。
+  - `src/server/rate-limit.test.ts` 覆盖单 key 超限、其他 key 不受影响和窗口重置。
+
+验证：
+
+- `npx vitest run src/server/accounts.test.ts src/server/rate-limit.test.ts src/server/rooms.test.ts`：通过，3 个测试文件、40 个测试用例。
+
+当前边界：
+
+- 限流仍是单实例内存状态；多实例部署需要把注册/聊天限流迁移到 Redis 或等价共享存储。
+- 账号 JSONL 仍是 append-only，当前先通过 last-seen 节流控制增长；正式数据库/压缩迁移仍属于账号完整化。
+
+下一步：
+
+- D2：排行榜搜索改为显式提交，加入 AbortController/request sequence 防止旧响应覆盖，并缓存服务端基础排行榜计算。
+
+### 小步 D2：排行榜显式搜索、过期响应保护与服务端缓存
+
+状态：实现完成，全量单测和 lint 通过；build 和本地生产冒烟留到最终收口。
+
+实现：
+
+- `src/components/useFriendRoom.ts`
+  - 分离 `leaderboardSearch` 输入值和 `leaderboardAppliedSearch` 已应用查询。
+  - 输入变化只更新文本，不再改变 `refreshLeaderboard` callback，因此不会逐键请求。
+  - 新增 `submitLeaderboardSearch()`：搜索表单提交后 trim 查询、回到第一页并触发新请求；同一查询重复提交执行显式刷新。
+  - 每次请求先 abort 上一个 `AbortController`。
+  - 使用递增 `leaderboardRequestSeqRef`，只有当前最新请求可以更新 entries/status/error；迟到响应和 AbortError 被忽略。
+  - hook 卸载时取消未完成排行榜请求。
+- `src/components/GameShell.tsx`
+  - 排行榜搜索表单改为调用 `submitLeaderboardSearch()`；按 Enter 后才应用搜索。
+- `src/server/game-records.ts`
+  - 新增内部 `recordsRevision`，权威终局、有效客户端审计或 JSONL 加载会推进 revision。
+  - LeaderboardSnapshot.version 改用 revision，避免同毫秒更新时间导致缓存版本碰撞。
+  - 新增基础排行榜缓存，键为 `recordsRevision + server local day start`。
+  - 同 revision/同自然日内，不同 identity、scope、search、offset/limit 复用一次 ELO、胜负、连胜和 dailyWins 基础计算，再进行筛选排序。
+  - 自然日变化会自动重算 dailyWins，即使没有新棋谱。
+- `src/server/game-records.test.ts`
+  - 新增同 revision 跨筛选 version 一致和次日 dailyWins 归零的回归测试。
+- `docs/logic/rating-leaderboard-module.md`
+  - 记录显式搜索、请求竞态保护和服务端缓存边界。
+
+验证：
+
+- `npm test`：通过，13 个测试文件、108 个测试用例。
+- `npm run lint`：通过，0 warning、0 error。
+
+当前状态：
+
+- 本轮审核发现的 3 个 P1 和 3 个 P2 已完成对应代码修复。
+- 下一步进入完整门禁、本地生产服务与关键 smoke/browser 回归；发现问题时继续按本 handoff 追加失败和返工记录。
+
+### 最终验证中间记录 1：房间生命周期 smoke 需要适配 guest token
+
+状态：实现门禁通过；4 个本地生产 smoke 中 3 个通过、1 个失败，正在返工测试脚本。
+
+已通过：
+
+- `npm test`：13 个测试文件、108 个测试用例通过。
+- `npm run lint`：通过。
+- `npm run build`：通过。
+- `npm audit --omit=dev`：0 个已知漏洞。
+- `git diff --check`：通过，仅有工作区 LF/CRLF 提示。
+- 隔离数据路径本地生产服务：`http://127.0.0.1:3210`。
+- `npm run smoke:account -- http://127.0.0.1:3210`：通过。
+- `npm run smoke:game-records -- http://127.0.0.1:3210`：通过；首份客户端审计时已有 authoritative verified 记录。
+- `npm run smoke:leaderboard -- http://127.0.0.1:3210`：通过；真实创建的权威棋谱进入榜单，搜索和分页通过。
+
+失败：
+
+- `npm run smoke:room-lifecycle -- http://127.0.0.1:3210`：失败。
+- 已通过重复创建复用当前房检查，随后等待 `room:closed` 超时。
+- 原因：脚本的 mirror socket 在模拟“同一玩家跨 socket 创建新房”时仍只发送公开 `playerId`，没有携带首次 RoomAck 新增的 `guestToken`。服务端按本轮安全设计拒绝冒用，因此旧房不会被关闭，脚本继续等待事件后超时。
+- 判断：产品安全行为正确，smoke fixture 未适配新身份协议；不能直接忽略，必须更新脚本并复测完整生命周期。
+
+返工范围：
+
+- `tools/smoke-room-lifecycle.ts` 从首次创建 ack 保存 guest token。
+- mirror socket 需要代表同一玩家时显式传递该 token。
+- 复测必须重新覆盖：同连接重复创建、同玩家跨 socket 关闭旧房、同名不同 guest session 关闭 disposable waiting room、空房断线关闭、观战补位、断线超时判负。
+
+### 最终验证中间记录 2：Presence smoke 复用 socket 换 ID 不再成立
+
+房间生命周期返工复测：
+
+- `tools/smoke-room-lifecycle.ts` 已让同玩家 mirror socket 携带首次 RoomAck 的 guest token。
+- “同名但不同 guest session”场景改用两个新 socket，避免已有 socket 的受保护身份干扰 fixture。
+- `npm run smoke:room-lifecycle -- http://127.0.0.1:3210`：通过。
+  - 同连接重复创建复用当前房：通过。
+  - 同玩家携带 token 跨 socket 创建新房并关闭旧房：通过。
+  - 同名不同 guest session 关闭旧 disposable waiting room：通过。
+  - 空 waiting 房断线关闭：通过。
+  - 观战者补位：通过。
+  - 真实等待 60 秒断线超时判负：通过。
+
+继续回归结果：
+
+- `npm run smoke:online-room -- http://127.0.0.1:3210`：通过，三局、观战、落子、悔棋允许/拒绝、重开换先和认输全部通过。
+- `npm run smoke:public-chat -- http://127.0.0.1:3210`：通过，广播、频率限制、空消息和超长消息拒绝通过。
+- `npm run smoke:presence -- http://127.0.0.1:3210`：失败。
+  - 已通过 lobby online 和 host in-room。
+  - 后续等待 `presence:users` 超时。
+  - 初步判断：脚本在同一 socket 生命周期里使用多个不同公开 playerId；新协议会把 socket 保持绑定到首次签发的 guest session，后续 payload playerId 不再能替换该身份。
+
+返工范围：
+
+- 检查 `tools/smoke-presence.ts` 的参与者/socket 复用顺序。
+- 每个逻辑用户保持稳定 guest session；确需新身份时使用新 socket，确需同一身份跨 socket 时传 guest token。
+- 复测 online、in_room、playing、spectating 和 disconnect/offline 广播全路径。
+
+### 最终验证更正记录：Presence 超时实际由 24 字符昵称截断导致
+
+对上一条“同 socket 换 ID”的初步判断进行更正：
+
+- 为 `waitForPresence()` 增加超时时最近一份 PresenceSnapshot 摘要后，事件中实际已经同时存在：
+  - host：`playing`。
+  - guest：`playing`。
+  - watcher：`spectating`。
+  - lobby user：`online`。
+- 真正差异是 watcher 测试名 `Presence Watcher {suffix}` 超过服务端 `MAX_DISPLAY_NAME_LENGTH=24`，由 GuestSessionStore 规范化后比脚本期望少最后一个字符。
+- 因此状态广播和 guest session 绑定均正常，失败来自 smoke 使用了超出正式 UI `maxLength=24` 的 fixture 名称并做严格全字符串比较。
+
+返工：
+
+- `tools/smoke-presence.ts` 改用长度明确小于 24 的 `P Lobby` / `P Host` / `P Guest` / `P Watch` 名称。
+- `waitForPresence()` 超时时保留最近 users 的 name/roomCode/status 摘要，后续失败可以直接看到实际事件而不是只有 timeout。
+
+复测：
+
+- `npm run smoke:presence -- http://127.0.0.1:3210`：通过。
+  - lobby online：通过。
+  - host in room：通过。
+  - host/guest playing + watcher spectating：通过。
+  - `/api/presence` REST 读回：通过。
+
+### 最终本地收口记录：全部审核项已修复并通过门禁
+
+状态：本轮审核发现的 3 个 P1、3 个 P2 均已完成修复；最终提交前本地验证通过。
+
+最后两项收口调整：
+
+- `src/server/rate-limit.ts` 在达到容量上限时保护当前正在消费的 key，防止该 key 被淘汰后窗口计数归零；`src/server/rate-limit.test.ts` 新增容量已满时仍无法绕过限制的回归测试。
+- `src/components/GameShell.tsx` 为排行榜搜索增加可见的提交按钮，保留 Enter 提交；`tools/smoke-lobby-ui.ts` 增加显式提交控件检查。
+
+最终门禁：
+
+- `npm test`：通过，13 个测试文件、109 个测试用例。
+- `npm run lint`：通过，0 warning、0 error。
+- `npm run build`：通过；Next.js 生产构建、TypeScript 和 11 个静态页面生成均成功。
+- `npm audit --omit=dev`：0 个已知漏洞。
+- `git diff --check`：通过，仅有 Windows 工作区 LF/CRLF 提示。
+
+隔离数据路径本地生产回归：
+
+- `smoke:account`：通过。
+- `smoke:game-records`：通过；双方均未提交客户端审计前，服务端权威终局已经进入排行榜。
+- `smoke:leaderboard`：通过；权威棋谱、搜索和分页通过。
+- `smoke:room-lifecycle`：通过；包含 guest token 跨 socket、同名不同 session、空房关闭、观战补位和真实 60 秒断线判负。
+- `smoke:online-room`：通过；三局、观战、落子、悔棋、重开换先和认输通过。
+- `smoke:public-chat`：通过；广播、频率限制和非法消息拒绝通过。
+- `smoke:presence`：通过；online、in_room、playing、spectating、offline 和 REST 读回通过。
+- `smoke:share-url`：通过；注册账号在全新邀请页先恢复账号身份，再自动加入房间。
+- `smoke:lobby-ui`：通过；账号加载门控和排行榜显式搜索提交通过。
+- `smoke:profile-page`：通过。
+- 注册限流真实 HTTP 检查：窗口内首次请求返回 200，超过阈值后返回 429，并带 `Retry-After`。
+
+文档同步：
+
+- README 已从 Stage 2 更新到当前 Stage 3 能力和后续路线。
+- `docs/M3_PUBLIC_TEST_LOG.md` 已把本轮重新验证的 M3-001、M3-005 更新为 verified，并追加证据。
+- 实时房间与积分排行榜逻辑文档已记录 guest session、同玩家多 socket、权威终局与缓存边界。
+
+清理与提交边界：
+
+- 所有临时本地服务已停止，`.tmp/fix-validation-final` 等隔离验证数据已删除。
+- `.codex/` 是现有未跟踪的本地 Codex 环境元数据，不属于产品修复，本轮明确不暂存、不提交。
+- 下一步只暂存上述源码、测试、工具和文档，执行 staged diff 检查后提交并推送；随后等待部署并做线上只读版本检查与关键路径 smoke。
+
+### 提交前暂存检查
+
+- 仅暂存本轮 29 个源码、测试、工具和文档文件；`.codex/` 保持未跟踪且不进入提交。
+- staged diff：1,716 行新增、147 行删除。
+- `git diff --cached --check`：通过。
+- staged diff 疑似密钥扫描：未发现匹配项。
+- 下一步创建实现提交并推送 `main`，随后以该提交 hash 检查自动部署。

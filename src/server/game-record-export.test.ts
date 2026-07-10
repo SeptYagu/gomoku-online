@@ -46,6 +46,7 @@ function createRecord(overrides: Partial<SavedGameRecord> = {}): SavedGameRecord
   ];
 
   return {
+    authoritative: true,
     board: replayBoardAtMove(moves, moves.length),
     conflicts: [],
     createdAt: 1_766_666_000_000,

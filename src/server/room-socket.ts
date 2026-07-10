@@ -1,5 +1,5 @@
 import type { Point } from "../game/types";
-import { AccountStore, resolvePlayerIdentity } from "./accounts";
+import { AccountStore, GuestSessionStore, resolvePlayerIdentity } from "./accounts";
 import type { GameRecordAck, PresenceAck, PublicChatAck, RoomAck, RoomListAck } from "./room-contract";
 import type { GameRecordClientSubmission } from "./game-records";
 import {
@@ -23,6 +23,7 @@ const PUBLIC_CHAT_ROOM = "public-chat";
 
 type PlayerAuthPayload = {
   accountToken?: null | string;
+  guestToken?: null | string;
   playerId: string;
   playerName: string;
 };
@@ -91,6 +92,7 @@ export type ServerToClientEvents = {
 };
 
 type SocketData = {
+  guestToken?: string;
   playerId?: string;
   presencePlayerId?: string;
   roomCode?: string;
@@ -113,6 +115,7 @@ export type RoomSocketServer = {
 
 type RegisterRoomSocketOptions = {
   accountStore?: AccountStore;
+  guestSessionStore?: GuestSessionStore;
   lifecycleIntervalMs?: false | number;
 };
 
@@ -142,7 +145,9 @@ export function registerRoomSocketHandlers(
   options: RegisterRoomSocketOptions = {}
 ) {
   const accountStore = options.accountStore ?? new AccountStore({ filePath: false });
+  const guestSessionStore = options.guestSessionStore ?? new GuestSessionStore();
   const lifecycleIntervalMs = options.lifecycleIntervalMs ?? 10_000;
+  const connections = new RoomConnectionTracker();
 
   if (lifecycleIntervalMs !== false) {
     const interval = setInterval(() => broadcastLifecycleSweep(io, roomStore), lifecycleIntervalMs);
@@ -152,7 +157,7 @@ export function registerRoomSocketHandlers(
 
   io.on("connection", (socket) => {
     socket.on("room:create", (payload, ack) => {
-      const player = resolvePlayerIdentity(payload, accountStore);
+      const player = resolveSocketPlayer(socket, payload, accountStore, guestSessionStore);
 
       if (!player.ok) {
         acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
@@ -162,66 +167,70 @@ export function registerRoomSocketHandlers(
       const currentWaitingRoom = getCurrentDisposableWaitingRoom(socket, roomStore, player.value.playerId);
 
       if (currentWaitingRoom) {
-        const response = handleJoinedRoom(socket, roomStore, currentWaitingRoom, player.value.playerId);
+        const response = handleJoinedRoom(socket, roomStore, connections, currentWaitingRoom, player.value);
         acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, player.value);
-      const response = handleJoinedRoom(socket, roomStore, roomStore.createRoom(player.value), player.value.playerId);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value);
+      const response = handleJoinedRoom(socket, roomStore, connections, roomStore.createRoom(player.value), player.value);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("room:join", (payload, ack) => {
-      const player = resolvePlayerIdentity(payload, accountStore);
+      const player = resolveSocketPlayer(socket, payload, accountStore, guestSessionStore);
 
       if (!player.ok) {
         acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, player.value, payload.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
+        connections,
         roomStore.joinRoom(payload.roomCode, player.value),
-        player.value.playerId
+        player.value
       );
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("room:rejoin", (payload, ack) => {
-      const player = resolvePlayerIdentity(payload, accountStore);
+      const player = resolveSocketPlayer(socket, payload, accountStore, guestSessionStore, false);
 
       if (!player.ok) {
         acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, player.value, payload.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
+        connections,
         roomStore.reconnectRoom(payload.roomCode, player.value),
-        player.value.playerId
+        player.value
       );
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("matchmaking:find", (payload, ack) => {
-      const player = resolvePlayerIdentity(payload, accountStore);
+      const player = resolveSocketPlayer(socket, payload, accountStore, guestSessionStore);
 
       if (!player.ok) {
         acknowledgeAndBroadcast(io, socket, roomStore, player, ack);
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, player.value);
-      const response = handleJoinedRoom(socket, roomStore, roomStore.findMatch(player.value), player.value.playerId);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value);
+      const response = handleJoinedRoom(socket, roomStore, connections, roomStore.findMatch(player.value), player.value);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
 
     socket.on("matchmaking:cancel", (payload, ack) => {
+      const playerId = socket.data.playerId;
+      const roomCode = payload.roomCode.trim().toUpperCase();
       acknowledgeAndBroadcast(
         io,
         socket,
@@ -231,6 +240,9 @@ export function registerRoomSocketHandlers(
         ),
         ack
       );
+      if (playerId) {
+        connections.clearParticipant(roomCode, playerId);
+      }
       socket.leave(payload.roomCode.trim().toUpperCase());
       socket.data.roomCode = undefined;
     });
@@ -250,7 +262,7 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("presence:join", (payload, ack) => {
-      const player = resolvePlayerIdentity(payload, accountStore);
+      const player = resolveSocketPlayer(socket, payload, accountStore, guestSessionStore);
 
       if (!player.ok) {
         acknowledgePresence(player, ack);
@@ -283,7 +295,7 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("public-chat:send", (payload, ack) => {
-      const player = resolvePlayerIdentity(payload, accountStore);
+      const player = resolveSocketPlayer(socket, payload, accountStore, guestSessionStore);
 
       if (!player.ok) {
         acknowledgeAndBroadcastPublicChat(io, socket, player, ack);
@@ -427,6 +439,8 @@ export function registerRoomSocketHandlers(
     });
 
     socket.on("room:leave", (payload, ack) => {
+      const playerId = socket.data.playerId;
+      const roomCode = payload.roomCode.trim().toUpperCase();
       acknowledgeAndBroadcast(
         io,
         socket,
@@ -436,6 +450,9 @@ export function registerRoomSocketHandlers(
         ),
         ack
       );
+      if (playerId) {
+        connections.clearParticipant(roomCode, playerId);
+      }
       socket.leave(payload.roomCode.trim().toUpperCase());
       socket.data.roomCode = undefined;
     });
@@ -444,6 +461,14 @@ export function registerRoomSocketHandlers(
       const { playerId, roomCode } = socket.data;
 
       if (!playerId || !roomCode) {
+        releaseSocketPresence(socket, roomStore);
+        broadcastPresence(io, roomStore);
+        return;
+      }
+
+      const hasAnotherConnection = connections.unbind(socket);
+
+      if (hasAnotherConnection) {
         releaseSocketPresence(socket, roomStore);
         broadcastPresence(io, roomStore);
         return;
@@ -461,10 +486,110 @@ export function registerRoomSocketHandlers(
   });
 }
 
+function resolveSocketPlayer(
+  socket: RoomSocket,
+  payload: PlayerAuthPayload,
+  accountStore: AccountStore,
+  guestSessionStore: GuestSessionStore,
+  allowGuestSessionCreation = true
+) {
+  const accountToken = payload.accountToken?.trim();
+  const guestToken = payload.guestToken?.trim() || socket.data.guestToken;
+
+  if (!accountToken && !guestToken && !allowGuestSessionCreation) {
+    return {
+      ok: false as const,
+      error: {
+        code: "guest-session-invalid" as const,
+        message: "Guest session is required to reconnect."
+      }
+    };
+  }
+
+  const player = resolvePlayerIdentity(
+    {
+      ...payload,
+      guestToken
+    },
+    accountStore,
+    guestSessionStore
+  );
+
+  if (player.ok) {
+    socket.data.guestToken = player.value.guestToken;
+  }
+
+  return player;
+}
+
+class RoomConnectionTracker {
+  private readonly bindings = new Map<RoomSocket, { playerId: string; roomCode: string }>();
+  private readonly socketsByParticipant = new Map<string, Set<RoomSocket>>();
+
+  bind(socket: RoomSocket, roomCode: string, playerId: string): void {
+    this.unbind(socket);
+    const key = getParticipantConnectionKey(roomCode, playerId);
+    const sockets = this.socketsByParticipant.get(key) ?? new Set<RoomSocket>();
+
+    sockets.add(socket);
+    this.socketsByParticipant.set(key, sockets);
+    this.bindings.set(socket, { playerId, roomCode });
+  }
+
+  unbind(socket: RoomSocket): boolean {
+    const binding = this.bindings.get(socket);
+
+    if (!binding) {
+      return false;
+    }
+
+    const key = getParticipantConnectionKey(binding.roomCode, binding.playerId);
+    const sockets = this.socketsByParticipant.get(key);
+
+    sockets?.delete(socket);
+    this.bindings.delete(socket);
+
+    if (!sockets || sockets.size === 0) {
+      this.socketsByParticipant.delete(key);
+      return false;
+    }
+
+    return true;
+  }
+
+  clearParticipant(roomCode: string, playerId: string): void {
+    const key = getParticipantConnectionKey(roomCode, playerId);
+    const sockets = this.socketsByParticipant.get(key);
+
+    if (!sockets) {
+      return;
+    }
+
+    for (const socket of sockets) {
+      this.bindings.delete(socket);
+    }
+
+    this.socketsByParticipant.delete(key);
+  }
+
+  clearParticipantOutsideRoom(playerId: string, keepRoomCode?: string): void {
+    for (const binding of [...this.bindings.values()]) {
+      if (binding.playerId === playerId && binding.roomCode !== keepRoomCode) {
+        this.clearParticipant(binding.roomCode, playerId);
+      }
+    }
+  }
+}
+
+function getParticipantConnectionKey(roomCode: string, playerId: string): string {
+  return `${roomCode.trim().toUpperCase()}\u0000${playerId}`;
+}
+
 function leaveRoomsBeforeEntry(
   io: RoomSocketServer,
   socket: RoomSocket,
   roomStore: RoomStore,
+  connections: RoomConnectionTracker,
   nextPlayer: { playerId: string; playerName: string },
   nextRoomCode?: string
 ) {
@@ -475,6 +600,7 @@ function leaveRoomsBeforeEntry(
   closeRoomsWithoutSocketMembers(io, roomStore);
 
   for (const playerId of playerIds) {
+    connections.clearParticipantOutsideRoom(playerId, normalizedNextRoomCode);
     broadcastRoomCleanup(io, roomStore, roomStore.leaveParticipantRooms(playerId, normalizedNextRoomCode));
   }
 
@@ -577,15 +703,16 @@ function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
 function handleJoinedRoom(
   socket: RoomSocket,
   roomStore: RoomStore,
+  connections: RoomConnectionTracker,
   result: RoomResult<RoomSnapshot>,
-  playerId: string
+  player: { guestToken?: string; playerId: string }
 ): RoomAck {
   if (!result.ok) {
     return result;
   }
 
   const roomCode = result.value.code;
-  const participant = roomStore.getParticipantRole(roomCode, playerId);
+  const participant = roomStore.getParticipantRole(roomCode, player.playerId);
 
   if (!participant) {
     return { ok: false, error: { code: "not-room-member", message: "Player is not in this room." } };
@@ -593,18 +720,20 @@ function handleJoinedRoom(
 
   identifySocketPresence(socket, roomStore, {
     identity: participant.identity,
-    playerId,
+    playerId: player.playerId,
     playerName: participant.name
   });
-  socket.data.playerId = playerId;
+  socket.data.playerId = player.playerId;
   socket.data.roomCode = roomCode;
   socket.join(roomCode);
+  connections.bind(socket, roomCode, player.playerId);
 
   return {
     ok: true,
     value: {
+      guestToken: player.guestToken,
       identity: participant.identity,
-      playerId,
+      playerId: player.playerId,
       name: participant.name,
       role: participant.role,
       seat: participant.seat,
