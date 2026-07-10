@@ -4760,3 +4760,49 @@ b6faf9e
 - 提交范围：15 个文件，937 行新增、115 行删除；包含桌边栏/页签/聊天组件、响应式与 RTL 样式、两份 UI smoke 更新、六语种文案、验证报告与计划同步。
 - `git push origin main`：成功，`dd74769..14c95f9`。
 - 本段作为单独 handoff 记录提交后再次推送；持续目标继续进入 IX-04。
+
+## 2026-07-10 IX-04 在线大厅入口与低活跃降级
+
+### 步骤 1：上下文压缩后重读计划与当前实现
+
+1. 上下文压缩后先停止编辑，重新读取计划中的当前进度、IX-04/04A/04B/05 边界、handoff 最新记录、`git status`、当前大厅、牌桌动作模型、controller 能力、模式切换入口、相关样式和六语种字典；当前分支仍与 `origin/main` 同步，只有 `.codex/` 本地验证证据未跟踪。
+2. 计划再次确认 IX-04 只整理已有大厅能力：快速匹配成为主动作；朋友流程按需展开；Join/Watch 分组；空列表提供匹配、创建朋友桌和 AI 三个真实出口；身份、Profile、排行榜和社区信息下沉；不提前实现 IX-04A 的 handle/统一目标或 IX-04B 的 unlisted/邀请授权。
+3. 当前 `OnlineLobbyView` 把昵称、房间码、账户、快速匹配、创建、加入、公共聊天、在线用户、Profile、排行榜和房间列表全部顺序展开；快速匹配、创建和加入同级，仍未形成竞品研究要求的任务优先级。
+4. 当前 `findMatch` ack 成功后立即设置 `room` 并切换到在线牌桌；因此大厅内按 `canCancelMatch` 渲染的 Cancel Match 分支在正常流程中不可达。controller 的 `canCancelMatch` 实际只会在“当前为玩家、waiting、只有一名玩家”时成立，正适合接入牌桌的单人等待态。
+5. 当前 `seated-waiting-opponent` 动作只有 Copy invite 和通用 Leave。IX-04 将新增明确的“取消等待”任务动作并调用已有 `cancelMatch`；保持总动作不超过 4，不新增 socket 事件或修改 RoomStore 语义。
+6. 当前房间列表已保留真实 `waiting`/`playing` 状态和 `canJoin`/`canWatch` 权限，但把所有桌混在同一列表。IX-04 只按这些服务端字段分组并保持每行一个上下文动作；满员 waiting 桌进入可观战组但仍显示“等待中”，不伪装为“进行中”。
+7. 当前空列表只显示“暂无房间”。IX-04 将复用真实 `findMatch`、`createRoom` 和 `GameShell` 的 AI 模式切换；不会显示静态在线人数或把分页房间/Presence 样本冒充全站统计。
+
+### 步骤 2：重排大厅入口与接通取消等待
+
+1. `OnlineLobbyView` 现在把快速匹配置为唯一的大型首屏主动作；游客昵称/账号只在“编辑身份”后挂载，朋友创建/按码加入只在“和朋友玩”后挂载，公共聊天/Presence 与 Profile/排行榜分别成为房间列表之后的次级展开区。
+2. 朋友区明确提示当前创建房会出现在公开大厅；没有使用 private/unlisted 文案，也没有修改房间创建 payload、加入语法、URL 或服务端列表策略。
+3. 房间列表按现有 `canJoin` 和 `canWatch` 分为可加入/可观战两组，每行只有一个动作；状态文案继续直接读取真实 `waiting`/`playing`，因此满员 waiting 桌可进入观战组但仍显示等待中。
+4. 空大厅新增随机匹配、创建房间和切换 AI 三个真实出口；AI 出口由 `GameShell.handleModeChange("ai")` 驱动，没有伪造活跃度或添加静态用户数字。
+5. `TableActionCapabilities` 接入既有 `canCancelMatch`；单人 waiting 状态现在显示任务动作 `cancel-wait` 和工具动作 Copy invite，不再同时陈列语义重复的通用 Leave。动作调用已有 `matchmaking:cancel`，无新 socket 事件；能力不成立时仍回退 Copy invite + Leave。
+6. 六语种补齐“和朋友玩、公开房提示、编辑身份、可加入/可观战、取消等待”文案；新增大厅主次层级、折叠面板、分组和移动端样式，保持逻辑方向属性和 RTL 自然顺序。
+7. `GameShell` 只新增从空大厅到 AI 的回调；IX-05 的局中模式切换保护仍未提前实现。
+
+### 步骤 3：第一轮静态与真实浏览器验证
+
+1. `npm run lint`、定向 `table-ui-state` 28 个测试、`git diff --check` 通过；`npm run build` 编译、TypeScript 和 11 个页面生成通过。
+2. 扩展 Chrome/CDP `smoke:lobby-ui` 并通过：先在无房间状态确认快速匹配为一次点击主动作、朋友/身份/社区/战绩默认不挂载、空状态存在三个出口；实际点击快速匹配进入单人 waiting，任务栏显示 Cancel waiting，点击后清理 URL 并回大厅。
+3. smoke 随后动态创建 waiting/playing 两桌，确认它们分别位于 joinable/watchable 分组，再完整回归 Ready、落子、非阻塞悔棋、桌边栏、1440×900/1280×720/390×844 和阿拉伯语 RTL；最终 RTL 大厅同时验证主动作 -> 朋友 -> 房间列表 -> 次级入口顺序、关键目标尺寸和无根级横向溢出。
+4. 人工检查 `lobby-rtl-390x844.png` 与 `undo-1280x720.png`，主次入口、牌桌与桌边栏视觉层级符合本阶段目标，没有发现新横向滚动或遮挡。
+5. 首次 `smoke:share-url` 在旧文本断言 `Leave` 处失败；新单人等待态按设计只显示 `Cancel waiting`。将测试改为按稳定 `data-table-action` 接受 cancel-wait/leave 两种合法退出态后，创建链接、自动加入、复制邀请、清 URL、空房关闭和注册身份恢复全流程通过；没有把首次失败隐藏为成功。
+
+### 步骤 4：补强手动朋友路径、同步文档与最终门禁
+
+1. 将 lobby UI smoke 的 waiting 房加入从列表点击改为真实朋友流程：确认该桌属于 joinable 组 -> 展开朋友区一次 -> 写入房间码一次 -> 点击 Join room 一次；随后完整牌桌流程继续通过。
+2. 串行协议回归全部通过：`smoke:lobby`、`smoke:matchmaking`、`smoke:online-room`、`smoke:room-lifecycle`、`smoke:public-chat`、`smoke:room-chat`、`smoke:presence`、`smoke:account`、`smoke:leaderboard`。
+3. 全量 `npm test` 为 15 个文件、144 个测试通过；`npm audit --omit=dev` 为 0 个漏洞；最终 `npm run lint` 和 `git diff --check` 通过。
+4. 更新交互计划为 IX-04 完成、下一步 IX-04B；新增 `INTERACTION_REDESIGN_IX04_VERIFICATION.md`，同步大厅/匹配逻辑和 README。验证报告明确未实现 unlisted、邀请授权、handle、精确汇总、IX-05/06/06A 或后续比赛能力。
+5. 停止本轮单一 3050 服务并确认无监听后执行最终 `npm run build`；编译、TypeScript 和 11 个页面生成通过，没有遇到 `.next` 锁冲突。
+6. `.codex/validation/ix04` 五张截图继续作为未跟踪本地证据排除在 Git 之外。
+
+### IX-04 提交与推送
+
+- 提交：`a5989d9 feat: simplify online lobby entry`。
+- 提交范围：14 个文件，869 行新增、129 行删除；包含大厅分层、Join/Watch 分组、空状态、取消等待动作、六语种文案、两份 Chrome smoke、IX-04 验证报告及计划/逻辑文档同步。
+- `git push origin main`：成功，`3f43cb8..a5989d9`。
+- 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-04B。
