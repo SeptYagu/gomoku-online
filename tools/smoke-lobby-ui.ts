@@ -105,6 +105,8 @@ async function main(): Promise<void> {
         }),
         "waiting host move"
       ).snapshot;
+      await waitForTableState(cdp, "playing-my-turn");
+      await assertPlayableAtLowHeight(cdp);
       requireOk(
         await emitAck(preparedRooms.waitingHost, "game:undo-request", {
           roomCode: movedRoom.code
@@ -113,6 +115,7 @@ async function main(): Promise<void> {
       );
       await waitForTableState(cdp, "undo-response-required");
       await assertTableTaskModel(cdp, "undo-response-required", ["Reject", "Allow"]);
+      await assertSidebarTabs(cdp, preparedRooms.waitingCode);
       await assertUndoLayoutAtTargetViewports(cdp);
       await clickButton(cdp, "Allow");
       await waitForTableState(cdp, "playing-opponent-turn");
@@ -130,6 +133,9 @@ async function main(): Promise<void> {
       await waitForBodyText(cdp, "Spectator");
       await waitForTableState(cdp, "spectating");
       await assertTableTaskModel(cdp, "spectating", []);
+      await navigateToLocaleTable(cdp, baseUrl, "ar", preparedRooms.playingCode);
+      await waitForTableState(cdp, "spectating");
+      await assertRtlMobileTable(cdp);
 
       console.log(`Lobby UI smoke: ${baseUrl}`);
       console.log("PASS local and AI workspaces do not create a realtime connection");
@@ -139,6 +145,7 @@ async function main(): Promise<void> {
       console.log("PASS online lobby and table are mutually exclusive");
       console.log("PASS table tasks are state-driven, non-blocking, and limited to four actions");
       console.log("PASS undo decisions and board remain visible at 1440x900, 1280x720, and 390x844");
+      console.log("PASS 1280x720 can play without scrolling and 390x844 Arabic preserves RTL table order");
     } finally {
       cdp.close();
     }
@@ -266,6 +273,46 @@ async function assertTableTaskModel(cdp: CdpClient, expectedState: string, expec
   }
 }
 
+async function assertSidebarTabs(cdp: CdpClient, roomCode: string): Promise<void> {
+  await clickSidebarTab(cdp, "history");
+  await waitForValue(async () => {
+    const moveCount = await evaluate<number>(cdp, `document.querySelectorAll('.table-move-history li').length`);
+
+    return moveCount === 1 ? moveCount : null;
+  }, STEP_TIMEOUT_MS);
+
+  await clickSidebarTab(cdp, "info");
+  await waitForValue(async () => {
+    const info = await evaluate<string | null>(cdp, `document.querySelector('.table-room-info')?.textContent ?? null`);
+
+    return info?.includes(roomCode) ? info : null;
+  }, STEP_TIMEOUT_MS);
+
+  await clickSidebarTab(cdp, "chat");
+  await waitForValue(async () => {
+    const hasChat = await evaluate<boolean>(cdp, `Boolean(document.querySelector('.table-room-chat'))`);
+
+    return hasChat ? true : null;
+  }, STEP_TIMEOUT_MS);
+}
+
+async function clickSidebarTab(cdp: CdpClient, tab: "chat" | "history" | "info"): Promise<void> {
+  const result = await evaluate<{ count: number; ok: boolean }>(
+    cdp,
+    `(() => {
+      const tabs = Array.from(document.querySelectorAll('[data-table-sidebar-tab="${tab}"]'));
+      if (tabs.length === 1) {
+        tabs[0].click();
+      }
+      return { count: tabs.length, ok: tabs.length === 1 };
+    })()`
+  );
+
+  if (!result.ok) {
+    throw new Error(`Sidebar tab ${tab} was not unique: ${result.count}`);
+  }
+}
+
 async function assertUndoLayoutAtTargetViewports(cdp: CdpClient): Promise<void> {
   const captureDir = process.env.GOMOKU_SMOKE_CAPTURE_DIR;
   const viewports = [
@@ -279,16 +326,15 @@ async function assertUndoLayoutAtTargetViewports(cdp: CdpClient): Promise<void> 
       await cdp.send("Emulation.setDeviceMetricsOverride", {
         deviceScaleFactor: 1,
         height: viewport.height,
-        mobile: viewport.width <= 640,
+        mobile: false,
         width: viewport.width
       });
-      await evaluate<void>(
-        cdp,
-        `document.querySelector('.table-task-bar')?.scrollIntoView({ block: 'start' })`
-      );
+      await evaluate<void>(cdp, `window.scrollTo(0, 0)`);
       const layout = await waitForValue(async () => {
         const current = await evaluate<{
           board: { bottom: number; top: number } | null;
+          sidePanel: { bottom: number; top: number } | null;
+          sidebarPlayersVisible: boolean;
           task: { bottom: number; top: number } | null;
           taskButtonsVisible: boolean;
           viewport: { height: number; width: number };
@@ -297,11 +343,19 @@ async function assertUndoLayoutAtTargetViewports(cdp: CdpClient): Promise<void> 
           `(() => {
             const task = document.querySelector('.table-task-bar');
             const board = document.querySelector('.play-area .board-wrap');
+            const sidePanel = document.querySelector('.table-side-panel');
             const taskRect = task?.getBoundingClientRect();
             const boardRect = board?.getBoundingClientRect();
+            const sidePanelRect = sidePanel?.getBoundingClientRect();
             const taskButtons = Array.from(document.querySelectorAll('.table-task-actions button'));
+            const playerCards = Array.from(document.querySelectorAll('.table-sidebar .room-player')).slice(0, 2);
             return {
               board: boardRect ? { bottom: boardRect.bottom, top: boardRect.top } : null,
+              sidePanel: sidePanelRect ? { bottom: sidePanelRect.bottom, top: sidePanelRect.top } : null,
+              sidebarPlayersVisible: playerCards.length === 2 && playerCards.every((card) => {
+                const rect = card.getBoundingClientRect();
+                return rect.top >= 0 && rect.bottom <= window.innerHeight;
+              }),
               task: taskRect ? { bottom: taskRect.bottom, top: taskRect.top } : null,
               taskButtonsVisible: taskButtons.length === 2 && taskButtons.every((button) => {
                 const rect = button.getBoundingClientRect();
@@ -317,11 +371,15 @@ async function assertUndoLayoutAtTargetViewports(cdp: CdpClient): Promise<void> 
       const isVisible =
         layout.task !== null &&
         layout.board !== null &&
+        layout.sidePanel !== null &&
         layout.task.top >= 0 &&
         layout.task.bottom <= viewport.height &&
         layout.board.top >= layout.task.bottom &&
         layout.board.bottom <= viewport.height &&
-        layout.taskButtonsVisible;
+        layout.taskButtonsVisible &&
+        (viewport.width > 900
+          ? layout.sidePanel.top >= 0 && layout.sidePanel.bottom <= viewport.height && layout.sidebarPlayersVisible
+          : layout.sidePanel.top >= layout.board.bottom);
 
       if (!isVisible) {
         throw new Error(`Undo layout failed at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
@@ -342,6 +400,153 @@ async function assertUndoLayoutAtTargetViewports(cdp: CdpClient): Promise<void> 
           path.join(captureDir, `undo-${viewport.width}x${viewport.height}.png`),
           Buffer.from(screenshot.data, "base64")
         );
+      }
+    }
+  } finally {
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
+  }
+}
+
+async function assertPlayableAtLowHeight(cdp: CdpClient): Promise<void> {
+  try {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 720,
+      mobile: false,
+      width: 1280
+    });
+    await evaluate<void>(cdp, `window.scrollTo(0, 0)`);
+    const layout = await waitForValue(async () => {
+      const current = await evaluate<{
+        actionBottom: number | null;
+        boardBottom: number | null;
+        enabledPointVisible: boolean;
+        scrollY: number;
+        taskTop: number | null;
+        viewport: { height: number; width: number };
+      }>(
+        cdp,
+        `(() => {
+          const actionBar = document.querySelector('.table-action-bar');
+          const board = document.querySelector('.play-area .board-wrap');
+          const point = document.querySelector('.board-point:not(:disabled)');
+          const task = document.querySelector('.table-task-bar');
+          const pointRect = point?.getBoundingClientRect();
+          return {
+            actionBottom: actionBar?.getBoundingClientRect().bottom ?? null,
+            boardBottom: board?.getBoundingClientRect().bottom ?? null,
+            enabledPointVisible: Boolean(pointRect && pointRect.top >= 0 && pointRect.bottom <= window.innerHeight),
+            scrollY: window.scrollY,
+            taskTop: task?.getBoundingClientRect().top ?? null,
+            viewport: { height: window.innerHeight, width: window.innerWidth }
+          };
+        })()`
+      );
+
+      return current.viewport.width === 1280 && current.viewport.height === 720 ? current : null;
+    }, STEP_TIMEOUT_MS);
+    const isPlayable =
+      layout.scrollY === 0 &&
+      layout.taskTop !== null &&
+      layout.taskTop >= 0 &&
+      layout.boardBottom !== null &&
+      layout.boardBottom <= 720 &&
+      layout.actionBottom !== null &&
+      layout.actionBottom <= 720 &&
+      layout.enabledPointVisible;
+
+    if (!isPlayable) {
+      throw new Error(`Playable layout failed at 1280x720: ${JSON.stringify(layout)}`);
+    }
+  } finally {
+    await cdp.send("Emulation.clearDeviceMetricsOverride");
+  }
+}
+
+async function navigateToLocaleTable(cdp: CdpClient, baseUrl: string, locale: string, roomCode: string): Promise<void> {
+  const url = new URL(`/${locale}?room=${encodeURIComponent(roomCode)}`, `${baseUrl}/`).toString();
+
+  await cdp.send("Page.navigate", { url });
+  await waitForValue(async () => {
+    const ready = await evaluate<boolean>(
+      cdp,
+      `document.readyState === 'complete' && window.location.pathname.endsWith(${JSON.stringify(`/${locale}`)})`
+    );
+
+    return ready ? true : null;
+  }, START_TIMEOUT_MS);
+}
+
+async function assertRtlMobileTable(cdp: CdpClient): Promise<void> {
+  try {
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      deviceScaleFactor: 1,
+      height: 844,
+      mobile: false,
+      width: 390
+    });
+    await evaluate<void>(cdp, `window.scrollTo(0, 0)`);
+    const layout = await waitForValue(async () => {
+      const current = await evaluate<{
+        boardTop: number | null;
+        direction: string;
+        noHorizontalOverflow: boolean;
+        overflowing: string[];
+        sidePanelTop: number | null;
+        tabTargetsLargeEnough: boolean;
+        taskTop: number | null;
+        viewport: { height: number; width: number };
+      }>(
+        cdp,
+        `(() => {
+          const tabs = Array.from(document.querySelectorAll('.table-sidebar-tab-list button'));
+          return {
+            boardTop: document.querySelector('.play-area .board-wrap')?.getBoundingClientRect().top ?? null,
+            direction: document.documentElement.dir,
+            noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+            overflowing: Array.from(document.body.querySelectorAll('*'))
+              .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+              .filter(({ rect }) => rect.left < -1 || rect.right > window.innerWidth + 1)
+              .slice(0, 8)
+              .map(({ element, rect }) => element.tagName.toLowerCase() + '.' + (element.className || '') + '[' + Math.round(rect.left) + ',' + Math.round(rect.right) + ']'),
+            sidePanelTop: document.querySelector('.table-side-panel')?.getBoundingClientRect().top ?? null,
+            tabTargetsLargeEnough: tabs.length === 3 && tabs.every((tab) => {
+              const rect = tab.getBoundingClientRect();
+              return rect.width >= 32 && rect.height >= 40;
+            }),
+            taskTop: document.querySelector('.table-task-bar')?.getBoundingClientRect().top ?? null,
+            viewport: { height: window.innerHeight, width: window.innerWidth }
+          };
+        })()`
+      );
+
+      return current.viewport.width === 390 && current.viewport.height === 844 ? current : null;
+    }, STEP_TIMEOUT_MS);
+    const isValid =
+      layout.direction === "rtl" &&
+      layout.noHorizontalOverflow &&
+      layout.taskTop !== null &&
+      layout.boardTop !== null &&
+      layout.sidePanelTop !== null &&
+      layout.taskTop < layout.boardTop &&
+      layout.boardTop < layout.sidePanelTop &&
+      layout.tabTargetsLargeEnough;
+
+    if (!isValid) {
+      throw new Error(`RTL mobile table layout failed: ${JSON.stringify(layout)}`);
+    }
+
+    const captureDir = process.env.GOMOKU_SMOKE_CAPTURE_DIR;
+
+    if (captureDir) {
+      await mkdir(captureDir, { recursive: true });
+      const screenshot = (await cdp.send("Page.captureScreenshot", {
+        format: "png",
+        fromSurface: true
+      })) as { data?: string };
+
+      if (screenshot.data) {
+        await writeFile(path.join(captureDir, "table-rtl-390x844.png"), Buffer.from(screenshot.data, "base64"));
       }
     }
   } finally {

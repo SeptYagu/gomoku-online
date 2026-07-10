@@ -92,9 +92,13 @@ async function main(): Promise<void> {
         await waitForValue(async () => {
           const href = await evaluate<string>(inviteCdp, "window.location.href");
           const bodyText = await evaluate<string>(inviteCdp, "document.body.innerText");
+          const hasTable = await evaluate<boolean>(
+            inviteCdp,
+            `Boolean(document.querySelector('[data-online-view="table"]'))`
+          );
           const url = new URL(href);
 
-          return url.searchParams.get("room") === roomCode && bodyText.includes(roomCode) && bodyText.includes("Your seat")
+          return url.searchParams.get("room") === roomCode && bodyText.includes(roomCode) && hasTable
             ? href
             : null;
         }, STEP_TIMEOUT_MS);
@@ -105,6 +109,7 @@ async function main(): Promise<void> {
 
       await sleep(750);
       await cdp.send("Page.bringToFront").catch(() => undefined);
+      await clickTableSidebarInfo(cdp);
       await clickButton(cdp, "Copy invite");
       const copyState = await waitForValue(async () => {
         const bodyText = await evaluate<string>(cdp, "document.body.innerText");
@@ -162,8 +167,12 @@ async function main(): Promise<void> {
         await waitForRuntime(registeredInviteCdp);
         await waitForValue(async () => {
           const bodyText = await evaluate<string>(registeredInviteCdp, "document.body.innerText");
+          const hasTable = await evaluate<boolean>(
+            registeredInviteCdp,
+            `Boolean(document.querySelector('[data-online-view="table"]'))`
+          );
 
-          return bodyText.includes(registeredInviteRoomCode) && bodyText.includes(`${registeredName} is in the room.`)
+          return hasTable && bodyText.includes(registeredInviteRoomCode) && bodyText.includes(registeredName)
             ? bodyText
             : null;
         }, STEP_TIMEOUT_MS);
@@ -309,6 +318,28 @@ async function clickButton(cdp: CdpClient, text: string): Promise<void> {
 
   if (!result.ok) {
     throw new Error(`Could not find button "${text}". Buttons: ${result.detail}`);
+  }
+}
+
+async function clickTableSidebarInfo(cdp: CdpClient): Promise<void> {
+  const result = await waitForValue(
+    async () =>
+      evaluate<ClickResult>(
+        cdp,
+        `(() => {
+          const buttons = Array.from(document.querySelectorAll('[data-table-sidebar-tab="info"]'));
+          if (buttons.length !== 1) {
+            return { ok: false, detail: String(buttons.length) };
+          }
+          buttons[0].click();
+          return { ok: true, detail: 'info' };
+        })()`
+      ),
+    STEP_TIMEOUT_MS
+  );
+
+  if (!result.ok) {
+    throw new Error(`Could not open room info tab: ${result.detail}`);
   }
 }
 

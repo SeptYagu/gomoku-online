@@ -1,12 +1,10 @@
 "use client";
 
-import { Send } from "lucide-react";
 import type { Board, Move, Point, Stone } from "@/game/types";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import { GomokuBoard } from "../GomokuBoard";
 import type { FriendRoomController } from "../useFriendRoom";
 import { TableActionBar } from "./TableActionBar";
-import { TablePlayers } from "./TablePlayers";
 import { TableTaskBar } from "./TableTaskBar";
 import { deriveTableUiState, getTableActions, type TableActionId } from "./table-ui-state";
 
@@ -98,46 +96,7 @@ export function GameTableView({
   }
 
   return (
-    <section data-online-view="table" data-table-state={tableUiState}>
-      <div className="room-panel" aria-label={labels.panelLabel}>
-        <div className="room-summary">
-          <div>
-            <p className="metric-label">{labels.roomCode}</p>
-            <strong>{snapshot.code}</strong>
-          </div>
-          <div>
-            <p className="metric-label">{labels.yourSeat}</p>
-            <strong>
-              {clientState.role === "spectator"
-                ? labels.spectatorSeat
-                : clientState.seat === "black"
-                  ? labels.blackSeat
-                  : labels.whiteSeat}
-            </strong>
-          </div>
-          <div>
-            <p className="metric-label">{labels.spectators}</p>
-            <strong>{snapshot.spectators.length}</strong>
-          </div>
-          <div>
-            <p className="metric-label">{labels.connection}</p>
-            <strong>{room.connectionStatus === "connected" ? labels.connected : labels.disconnected}</strong>
-          </div>
-        </div>
-
-        <TablePlayers dictionary={dictionary} room={clientState} />
-
-        <RoomChatPanel dictionary={dictionary} room={room} />
-
-        <p className="room-message">
-          {(clientState.role === "spectator" ? labels.spectatorStatus : labels.selfStatus).replace(
-            "{name}",
-            playerName
-          )}
-        </p>
-        {room.error ? <p className="room-error">{room.error}</p> : null}
-      </div>
-
+    <section className="online-table-workspace" data-online-view="table" data-table-state={tableUiState}>
       <div className="table-play-stack">
         <TableTaskBar
           actions={actions}
@@ -176,64 +135,6 @@ export function GameTableView({
       </div>
     </section>
   );
-}
-
-function RoomChatPanel({ dictionary, room }: { dictionary: GameDictionary; room: FriendRoomController }) {
-  const labels = dictionary.room;
-  const messages = room.room?.snapshot.chatMessages ?? [];
-
-  return (
-    <section aria-label={labels.roomChat} className="room-chat">
-      <div className="room-chat-header">
-        <p className="metric-label">{labels.roomChat}</p>
-      </div>
-      <div aria-live="polite" className="room-chat-list" role="log">
-        {messages.length > 0 ? (
-          messages.map((message) => (
-            <div className="room-chat-message" key={message.id}>
-              <div className="room-chat-meta">
-                <strong>{message.name}</strong>
-                <span>{formatChatMessageTime(message.sentAt)}</span>
-              </div>
-              <p>{message.text}</p>
-            </div>
-          ))
-        ) : (
-          <p className="room-message">{labels.noMessages}</p>
-        )}
-      </div>
-      <form
-        className="room-chat-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          room.sendChatMessage();
-        }}
-      >
-        <input
-          maxLength={160}
-          onChange={(event) => room.setChatText(event.target.value)}
-          placeholder={labels.chatPlaceholder}
-          type="text"
-          value={room.chatText}
-        />
-        <button
-          className="icon-button"
-          disabled={!room.chatText.trim()}
-          title={labels.sendMessage}
-          type="submit"
-        >
-          <Send aria-hidden="true" focusable={false} />
-        </button>
-      </form>
-    </section>
-  );
-}
-
-function formatChatMessageTime(sentAt: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(sentAt));
 }
 
 function getTableResultText(

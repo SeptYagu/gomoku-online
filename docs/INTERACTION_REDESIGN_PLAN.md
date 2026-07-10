@@ -2,7 +2,7 @@
 
 更新日期：2026-07-10
 
-状态：实施中；`IX-00 + IX-01 + IX-02` 已完成本地验证，下一步为 `IX-03`
+状态：实施中；`IX-00 + IX-01 + IX-02 + IX-03` 已完成本地验证，下一步为 `IX-04`
 
 文档性质：竞品研究、现有代码对照、实施顺序与当前进度的统一计划
 
@@ -12,6 +12,8 @@
 
 牌桌任务栏验证：`docs/INTERACTION_REDESIGN_IX02_VERIFICATION.md`
 
+牌桌布局验证：`docs/INTERACTION_REDESIGN_IX03_VERIFICATION.md`
+
 ## 当前实施进度
 
 | 任务 | 状态 | 2026-07-10 结果 |
@@ -19,9 +21,10 @@
 | `IX-00` | 完成 | 建立 workspace 与 13 类 `TableUiState` 纯函数基线；新增 21 个表驱动测试；固定 1440×900、1280×720、390×844 三个后续验收视口；关键在线协议 smoke 未改变业务期望 |
 | `IX-01` | 完成 | `GameShell` 拆为 Local、AI、OnlineLobby、OnlineJoining、GameTable 互斥工作区；在线模式外不自动 rejoin；邀请/恢复加入期间显示 joining gate；URL、session 和 socket 事件保持不变 |
 | `IX-02` | 完成 | 新增纯 `getTableActions`、`TableTaskBar`、`TableActionBar`、`TablePlayers`；当前任务最多 2 个决策、总动作最多 3 个；旧 disabled 动作排和阻塞式悔棋 modal 已删除；三目标视口的悔棋/棋盘同屏验证通过 |
-| `IX-03` | 下一步 | 把玩家、聊天、历史/房间信息重排到桌边栏，完成桌面首屏与移动端优先级、RTL 和触摸目标验收 |
+| `IX-03` | 完成 | 在线牌桌接管 280–320px 右栏；玩家优先，聊天/当前局步骤/房间信息页签化；移动端 task→board→actions→players→tabs；1280×720 可落子、390×844 RTL 和三视口截图通过 |
+| `IX-04` | 下一步 | 简化在线大厅入口：快速匹配主动作、朋友流程渐进展开、房间列表 Join/Watch 分层、空大厅真实降级和 Profile/排行榜下沉 |
 
-当前实施没有新增 public handle、unlisted、双方再战、activity summary、`matchConfig`、挑战或赛事协议。牌桌任务和动作逻辑已经收敛，但房间摘要、玩家和聊天仍位于棋盘上方，桌边栏、移动端完整优先级与 RTL 视觉验收仍属于 `IX-03`，没有伪装成已解决。
+当前实施没有新增 public handle、unlisted、双方再战、activity summary、`matchConfig`、挑战或赛事协议。在线牌桌的工作区、状态动作和桌面/移动布局已经收敛；下一阶段只整理在线大厅入口，不把 IX-04A/04B 的新服务端身份或可见性能力提前混入。
 
 ## 结论先行
 

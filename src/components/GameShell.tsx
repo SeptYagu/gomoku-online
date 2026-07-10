@@ -18,6 +18,7 @@ import { LocaleSwitcher } from "./LocaleSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { GameTableView } from "./online/GameTableView";
 import { OnlineJoiningView, OnlineLobbyView } from "./online/OnlineLobbyView";
+import { TableSidebar } from "./online/TableSidebar";
 import { deriveGameWorkspace, isOnlineWorkspaceEnabled, type GameMode } from "./online/workspace-state";
 import { AiGameView, type FirstPlayer } from "./play/AiGameView";
 import { LocalGameView } from "./play/LocalGameView";
@@ -396,7 +397,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
   return (
     <>
-      <main className="app-shell">
+      <main className={`app-shell ${workspace === "online-table" ? "table-shell" : ""}`}>
         <section className="game-stage" aria-label={dictionary.appName}>
         <header className="top-bar">
           <div>
@@ -502,7 +503,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         ) : null}
       </section>
 
-      <aside className="side-panel" aria-label={dictionary.status.panelLabel}>
+      {workspace === "online-table" ? (
+        <aside className="side-panel table-side-panel" aria-label={dictionary.room.panelLabel}>
+          <TableSidebar dictionary={dictionary} room={friendRoom} />
+        </aside>
+      ) : (
+        <aside className="side-panel" aria-label={dictionary.status.panelLabel}>
         <div className="status-card">
           <div className="status-title">
             <CircleDot aria-hidden="true" focusable={false} />
@@ -547,6 +553,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
           {dictionary.ads.placeholder}
         </div>
         </aside>
+      )}
       </main>
       <footer className="app-version">version: {APP_VERSION}</footer>
     </>

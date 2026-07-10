@@ -78,7 +78,9 @@ export type GameDictionary = {
     lobbyPlaying: string;
     lobbyWaiting: string;
     matchmakingSearching: string;
+    moveHistory: string;
     noGameRecords: string;
+    noMoves: string;
     noOnlineUsers: string;
     noRooms: string;
     noMessages: string;
@@ -122,6 +124,7 @@ export type GameDictionary = {
     roomClosed: string;
     roomCode: string;
     roomCodePlaceholder: string;
+    roomInfo: string;
     selfStatus: string;
     sendMessage: string;
     signOutAccount: string;
@@ -259,7 +262,9 @@ const en = {
       lobbyPlaying: "Playing",
       lobbyWaiting: "Waiting",
       matchmakingSearching: "Finding match",
+      moveHistory: "Move history",
       noGameRecords: "No records yet",
+      noMoves: "No moves yet",
       noOnlineUsers: "No users online",
       noRooms: "No rooms open",
       noMessages: "No messages yet",
@@ -303,6 +308,7 @@ const en = {
       roomClosed: "Room closed",
       roomCode: "Room code",
       roomCodePlaceholder: "Random code",
+      roomInfo: "Room info",
       selfStatus: "{name} is in the room.",
       sendMessage: "Send",
       signOutAccount: "Sign out",
@@ -436,7 +442,9 @@ const zh = {
       lobbyPlaying: "对局中",
       lobbyWaiting: "等待中",
       matchmakingSearching: "匹配中",
+      moveHistory: "行棋记录",
       noGameRecords: "暂无棋谱",
+      noMoves: "暂无落子",
       noOnlineUsers: "暂无在线用户",
       noRooms: "暂无房间",
       noMessages: "暂无消息",
@@ -480,6 +488,7 @@ const zh = {
       roomClosed: "房间已关闭",
       roomCode: "房间码",
       roomCodePlaceholder: "随机房间码",
+      roomInfo: "房间信息",
       selfStatus: "{name} 已在房间中。",
       sendMessage: "发送",
       signOutAccount: "退出账号",
@@ -613,7 +622,9 @@ const fr = {
       lobbyPlaying: "En jeu",
       lobbyWaiting: "En attente",
       matchmakingSearching: "Recherche en cours",
+      moveHistory: "Historique",
       noGameRecords: "Aucune partie",
+      noMoves: "Aucun coup pour le moment",
       noOnlineUsers: "Aucun utilisateur en ligne",
       noRooms: "Aucun salon ouvert",
       noMessages: "Aucun message",
@@ -657,6 +668,7 @@ const fr = {
       roomClosed: "Salon fermé",
       roomCode: "Code du salon",
       roomCodePlaceholder: "Code aléatoire",
+      roomInfo: "Infos du salon",
       selfStatus: "{name} est dans le salon.",
       sendMessage: "Envoyer",
       signOutAccount: "Déconnexion",
@@ -790,7 +802,9 @@ const es = {
       lobbyPlaying: "En juego",
       lobbyWaiting: "Esperando",
       matchmakingSearching: "Buscando partida",
+      moveHistory: "Historial de jugadas",
       noGameRecords: "Sin partidas",
+      noMoves: "Aún no hay jugadas",
       noOnlineUsers: "Sin usuarios en línea",
       noRooms: "No hay salas",
       noMessages: "Sin mensajes",
@@ -834,6 +848,7 @@ const es = {
       roomClosed: "Sala cerrada",
       roomCode: "Código",
       roomCodePlaceholder: "Código aleatorio",
+      roomInfo: "Información de la sala",
       selfStatus: "{name} está en la sala.",
       sendMessage: "Enviar",
       signOutAccount: "Salir",
@@ -967,7 +982,9 @@ const ru = {
       lobbyPlaying: "Идет игра",
       lobbyWaiting: "Ожидание",
       matchmakingSearching: "Поиск игры",
+      moveHistory: "История ходов",
       noGameRecords: "Нет партий",
+      noMoves: "Ходов пока нет",
       noOnlineUsers: "Нет пользователей онлайн",
       noRooms: "Нет открытых комнат",
       noMessages: "Сообщений пока нет",
@@ -1011,6 +1028,7 @@ const ru = {
       roomClosed: "Комната закрыта",
       roomCode: "Код комнаты",
       roomCodePlaceholder: "Случайный код",
+      roomInfo: "Информация о комнате",
       selfStatus: "{name} в комнате.",
       sendMessage: "Отправить",
       signOutAccount: "Выйти",
@@ -1144,7 +1162,9 @@ const ar = {
       lobbyPlaying: "قيد اللعب",
       lobbyWaiting: "انتظار",
       matchmakingSearching: "جار البحث",
+      moveHistory: "سجل النقلات",
       noGameRecords: "لا توجد سجلات",
+      noMoves: "لا توجد نقلات بعد",
       noOnlineUsers: "لا يوجد مستخدمون متصلون",
       noRooms: "لا توجد غرف مفتوحة",
       noMessages: "لا توجد رسائل بعد",
@@ -1188,6 +1208,7 @@ const ar = {
       roomClosed: "الغرفة مغلقة",
       roomCode: "رمز الغرفة",
       roomCodePlaceholder: "رمز عشوائي",
+      roomInfo: "معلومات الغرفة",
       selfStatus: "{name} داخل الغرفة.",
       sendMessage: "إرسال",
       signOutAccount: "خروج",

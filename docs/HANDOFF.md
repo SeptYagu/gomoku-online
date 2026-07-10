@@ -4706,3 +4706,50 @@ b6faf9e
 - 提交范围：14 个文件，936 行新增、217 行删除；包含任务/动作/玩家组件、动作测试、三视口 Chrome smoke、六语种文案、验证报告与计划同步。
 - `git push origin main`：成功，`136b61a..59d1f8e`。
 - 本段作为单独 handoff 记录提交后再次推送；持续目标不结束，下一阶段进入 IX-03。
+
+## 2026-07-10 IX-03 桌边栏与移动端优先级
+
+### 步骤 1：重读计划与布局边界
+
+1. 重读 IX-03：桌面复用现有 280–320px 右栏，玩家优先；聊天/历史/房间信息进入页签；移动端顺序为任务 -> 棋盘 -> 动作 -> 玩家 -> 折叠次要信息；保留 78vh/76vh 棋盘约束并验证 RTL。
+2. 核对当前 `GameShell` 无论工作区都渲染通用状态/步数/广告右栏，而在线 `GameTableView` 仍把房间摘要、玩家和聊天置于任务栏/棋盘之前；这正是 IX-03 要消除的结构问题。
+3. 确认实现方案：在线牌桌时由 `TableSidebar` 接管 `side-panel`；`GameTableView` 只保留 task/board/actions；玩家始终位于 sidebar 顶部，聊天、当前局步骤和房间信息进入 `TableSidebarTabs`。900px 以下 sidebar 自然排在 game-stage 后，形成计划要求的移动顺序。
+4. 本阶段不实现完整复盘控制、跨局历史、模式切换确认或双方再战；历史页签只显示当前 `RoomSnapshot.moves` 的结构化摘要，完整复盘仍属于 IX-06。
+
+### 步骤 2：重排牌桌主区与桌边栏
+
+1. 新增 `TableSidebar`、`TableSidebarTabs`、`TableRoomChat`；`GameShell` 在 online-table 工作区让新 sidebar 接管原 280–320px 右栏，不再显示通用状态/步数/广告。
+2. `GameTableView` 删除棋盘前的 room panel，只保留 task -> board -> action；玩家/观战者固定在 sidebar 顶部，聊天、最近 20 手当前局步骤和房间信息进入三个页签。
+3. 900px 以下 app shell 单列后，DOM 顺序自然成为 task -> board -> actions -> sidebar players -> tabs；公共聊天和排行榜仍只存在在线大厅，不会进入牌桌移动首屏。
+4. 在线牌桌使用独立 `table-shell` 紧凑标题/模式栏和经剩余视口校准的 78vh/76vh 棋盘上限；桌面 sidebar sticky，移动端解除 sticky/max-height。
+5. 新增六语种 Move history / No moves / Room info 文案；新布局只使用 block/inline/end 和自然 flex/grid 顺序，没有硬编码 left/right。
+6. 390px 下牌桌语言切换器改为单行可横向容纳、三个模式按钮不换行；任务/动作和 sidebar tab 关键目标为 44px，其他卡片/按钮保持至少 32px。
+7. 扩展 `smoke-lobby-ui`：1280×720 我的回合无需滚动即可看到可落子点和动作栏；三视口检查桌边栏玩家；最终导航 `/ar?room=...` 验证 390×844 RTL 顺序、tab 目标和无横向溢出。
+8. 静态验证通过：`npm run lint`、15 文件/144 测试、`npm run build`（TypeScript 与 11 页面）。
+
+### 步骤 3：首次低高度浏览器验收与修正
+
+1. 首次扩展 smoke 在 1280×720 我的回合状态失败：task top 127.6px、board bottom 682.9px、可落子点可见且 scrollY=0，但 action bar bottom 为 734.9px，超出视口约 15px。
+2. 该失败证明棋盘本身可落子，但没有满足更严格的“主动作也留在首屏”目标；没有放宽测试，而是把桌面在线棋盘 `calc(100vh - 250px)` 收紧为 `calc(100vh - 270px)`，预留 20px 给动作栏。
+3. 需要重新 build/start 后复跑全部 IX-03 Chrome 断言和截图；本段不把首次失败记为通过。
+4. 收紧棋盘后，1280×720 可落子与动作栏断言通过；随后 390×844 在 CDP mobile device emulation 下 inner viewport 未稳定命中目标尺寸，改为只覆盖明确的 CSS viewport（`mobile: false`），避免把设备模拟差异混入响应式断言。
+5. 第二轮继续通过桌面/移动结构，但真实 `/ar` 返回 `dir=rtl` 的同时发现根页面横向溢出；定位优先检查移动牌桌顶部语言切换 flex 子项，新增 `min-width: 0` 和内部横向容纳约束，并给失败信息加入具体溢出元素列表后再复测。
+6. 复测前 lint 意外扫描到既有 `.codex/validation/ix00-01` Chrome profile 内的扩展脚本并处理超大第三方 JS；只终止该工作区 ESLint 进程，并把始终不提交的 `.codex/**` 加入 ESLint 全局 ignore，避免本地浏览器证据污染项目门禁。
+7. 给 table game-stage 增加 `minmax(0, 1fr)` 隐式列约束后，第三轮全部 smoke 通过：1280×720 可落子、三视口任务/棋盘/玩家、390×844 `/ar` RTL 顺序和无根级横向溢出。
+8. 人工检查四张截图发现桌边聊天 40px 网格列容纳 44px 发送按钮导致内部横向滚动条，且移动顶部主题按钮换到第二行；修正为 44px 列、panel 只纵向滚动、table top-actions 不换行，需最终重建截图确认。
+9. 一次重建遇到已知 `.next/server/app/ar.segments` EPERM；检查确认无本仓库 Node/3050 进程后，校验 `.next` 绝对路径位于工作区并只清理该构建目录，随后 build 通过。
+10. 最终 lobby UI/三视口/RTL smoke 通过；随后 share-url 回归在旧断言 `bodyText.includes("Your seat")` 超时。核对确认 seat 与 Copy invite 已按 IX-03 移入 Room info tab，因此更新 smoke 为等待 `data-online-view="table"`，再通过稳定 `data-table-sidebar-tab="info"` 打开信息页签后复制邀请；需要隔离重跑确认分享链路。
+
+### 步骤 4：最终浏览器与回归结果
+
+1. 最终 `smoke:lobby-ui` 通过：三 sidebar 页签可切换，history 显示当前一步，info 显示规范房间码，chat 恢复；三视口、低高度可落子和阿拉伯语 RTL 全部通过。
+2. 四张最终截图人工检查通过；桌边聊天横向滚动条消失，移动主题按钮与语言切换同排，桌面/移动信息优先级符合 IX-03。
+3. `smoke:online-room`、`smoke:room-chat` 和依赖审计通过。share-url 第二处旧断言 `{registeredName} is in the room.` 同样因 room message 移除而超时，改为 table + roomCode + registeredName 稳定信号后隔离重跑全流程通过。
+4. 诊断 share 卡住时发现此前多次 PTY Ctrl+C 只结束 npm 外壳、遗留多个命令行明确指向本仓库 `src/server/online-server.ts` 的子进程；停止这些本轮进程后用单一干净 3050 服务完成最终验证，未触碰其他 Node/Codex 进程。
+5. 新增 `INTERACTION_REDESIGN_IX03_VERIFICATION.md`；计划、实时房间逻辑和 README 更新为 IX-03 完成、下一步 IX-04。
+
+### 步骤 5：IX-03 最终门禁
+
+1. 最终 `npm run lint`、15 文件/144 测试、`npm audit --omit=dev`、`git diff --check` 全部通过。
+2. 停止并核对无本仓库 online-server 子进程后，按已验证的工作区路径清理 `.next`，最终 `npm run build` 编译、TypeScript 和 11 页面生成通过。
+3. `.codex/validation/ix03` 四张截图继续作为未跟踪证据排除；当前工作区下一步只应暂存 IX-03 代码、smoke 和文档。

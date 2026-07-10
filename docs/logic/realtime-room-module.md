@@ -213,6 +213,8 @@ Socket.IO room 只做投递通道，不做游戏状态来源。
 - `GameTableView` 通过 `TableTaskBar` / `TableActionBar` 承载 ready、undo、resign、restart、sit、leave；悔棋 Reject/Allow 和倒计时已从棋盘中央 modal 移到非阻塞任务栏，超时自动拒绝语义保持不变。
 - 新增状态与真实 Chrome smoke 覆盖视图互斥、local/AI 不建立 Socket.IO、Ready、Host 落子/发起悔棋、Guest Allow 和 spectator 状态；本批没有修改本节列出的任何房间/对局事件。
 - 终局仍沿用 host restart 兼容语义，双方再战属于后续 `IX-06A`；局中离桌确认属于 `IX-05`。
+- `IX-03` 后，`GameTableView` 只保留 task/board/actions；`TableSidebar` 接管既有 280–320px 右栏，玩家和连接状态优先，聊天、当前局最近步骤和房间信息进入页签。
+- 900px 以下 sidebar 排在 game-stage 后，移动顺序为任务、棋盘、动作、玩家、次要页签；390×844 阿拉伯语 RTL 已验证无根级横向溢出。当前步骤页签只读取 `RoomSnapshot.moves`，不替代 IX-06 的完整复盘。
 
 ## 推荐事件
 
