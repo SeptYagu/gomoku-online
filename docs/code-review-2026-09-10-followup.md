@@ -4,6 +4,7 @@
 - 范围：`aa9b142..f30e273` 三个修复提交（M1/M2、M3、M4/M5/m6/m7）+ 工作区未提交改动
 - 方式：diff 精读 + 调用链回溯 + 依赖源码核对（React 19.2.7 / socket.io-client 4.8.3）
 - 结论：**无 Critical**。M1/M2/M3 修复扎实且带测试；M4/M5/m6/m7 的修法引入了 **2 个新的 Major 级副作用**（R1 模式被 URL 反向改写、R2 聊天在途闸门可永久锁死），建议在下一迭代优先处理。
+- 当前状态（滚动）：R1/R2（`e14ec7e`）、R3/R4/R5 + R7（`5056016`）均已修复并通过变异复核；R6 为有意取舍（部分保留）；待办只剩 R8（连接/加入失败文案仍英文）与 R9（超时后的服务端/客户端短暂不一致）。
 
 ## 修复进展（滚动更新）
 
@@ -14,8 +15,22 @@
 | R3 超时文案硬编码英文 | ✅ 已修 | `GameShell` 将六语种 dictionary 中的聊天/离房超时文案注入 `useFriendRoom`，hook 保留英文默认值供独立调用 |
 | R4 超时后迟到 ack 与 `left=false` 冲突 | ✅ 已修 | 新增一次性 `leave-room-attempt`；只有首次 `settle()` 能应用 ack 副作用，超时后的迟到 ack 直接忽略 |
 | R5 leaveRoom 计时器无卸载清理 | ✅ 已修 | hook 卸载时 settle 当前离房尝试并清掉看门狗，同时清理两个聊天闸门 |
-| R6 启动快照缓存为模块级 `let` | ⏳ 未修（有意） | R1 的修法沿用同一模式：同一页面生命周期内只读一次，是刻意的；已补注释说明 |
-| R7 新代码零测试 | ✅ 已修 | 聊天闸门 4 条、离房尝试 3 条、boot mode 快照 3 条单测，覆盖重入、超时、迟到 ack、卸载清理和 URL 变更后的快照稳定性 |
+| R6 启动快照缓存为模块级 `let` | 🟡 部分（有意） | boot mode 已改成 `createBootGameModeReader()` 的实例闭包（可注入搜索串、可测）；`useFriendRoom` 里另外四个 `boot*Cache`（`:1446-1483`）仍是模块级 `let`，同一页面生命周期内只读一次是刻意取舍 |
+| R7 新代码零测试 | 🟡 已修（模块级） | 聊天闸门 4 条、离房尝试 3 条、boot mode 快照 3 条单测，覆盖重入、超时/迟到 ack、URL 变更后的快照稳定性。**注意**：覆盖的是三个纯函数模块自身的语义；hook 里的接线（谁调用 `settle()`、卸载时是否真的 settle）因仓库无 jsdom / testing-library 仍无测试 |
+| R8 连接/加入失败文案仍是英文 | ⏳ 未修 | `useFriendRoom.ts:464`、`:516` 与 `formatConnectionError()`（`:1700-1707`）的英文串同样渲染进 `room-error`（`OnlineLobbyView.tsx:56,257`）——R3 这次只覆盖了两条超时文案 |
+| R9 超时后「服务端已离开、客户端仍认为在房间」 | ⏳ 未修（取舍） | R4 改成忽略迟到 ack 之后，若丢的只是 ack 而服务端其实已处理，本地房间状态会滞留到用户再次点离开；重试会重新 emit 并自愈，期间 UI 与服务端短暂不一致 |
+
+### 复核（提交 `5056016`，2026-09-10）
+
+**复核方式：变异测试** —— 把每条修复逐条「改回坏的样子」，新测试必须失败，否则断言为空转。三处变异都在 `.tmp/` 里临时改一处源码、跑单测、再 `git checkout --` 还原（复核后 `git status` 干净）：
+
+| 变异 | 新测试 | 证据 |
+|---|---|---|
+| `client-boot-state.ts` 的 `cache ??=` 改回 `cache =`（退化成每次重读 URL） | ❌ 1 失败 / 3 | `keeps the first browser snapshot after the URL changes` → `expected 'local' to be 'room'` |
+| `chat-send-gate.ts` 不挂看门狗 | ❌ 2 失败 / 4 | `resets and reports the timeout once when the server never acks` 等 → `onTimeout` 被调用 0 次 |
+| `leave-room-attempt.ts` 去掉 `pending` 守卫（`settle()` 恒返回 true） | ❌ 2 失败 / 3 | `settles once when the ack arrives before the timeout` → `expected true to be false` |
+
+结论：**R1/R2/R3/R4/R5 的修法成立，无假修复、无新回归**；三处新测试在坏代码上确实会失败，不是空转断言。R4 的调用侧守卫还额外扛住了「迟到 ack 毒害下一次请求」——ack 回调同时校验 `leaveRoomRequestRef.current === request` 与 `settle()`，已被替换的旧请求不会改写新请求的状态。
 
 ### R1 修法说明
 
@@ -33,9 +48,11 @@
 
 | 项 | 结果 |
 |---|---|
-| `npx vitest run` | 20 文件 / **188 测试全通过**（包含本轮新增的离房与启动快照测试） |
-| `npx tsc --noEmit` | 未复跑（基线 8 条既有错误，本次改动未触及这些文件） |
-| 浏览器冒烟 | ⚠️ 仍无法执行（sandbox 阻止本机端口 / `next dev` 起不来）；R1、R2 需人工确认 |
+| `npx vitest run` | 20 文件 / **188 测试全通过**（复核时复现，6.5s） |
+| `npx tsc --noEmit` | ✅ 已复跑：**恰好 8 条基线错误**（`game-record-export.test.ts` 1 / `game-record-opening-analysis.test.ts` 1 / `room-socket.test.ts` 6），分布未变、无新增 |
+| `npx eslint`（本次改动的 8 个文件） | ✅ 退出码 0，无输出 |
+| 变异测试（见上一节） | ✅ 三处新测试在坏代码上均失败，无空转断言 |
+| 浏览器冒烟 | ⚠️ 仍无法执行（sandbox 阻止本机端口 / `next dev` 起不来），需人工确认：① `/?room=XXXXXX` 进房后点「离开房间」应留在联机大厅而非被丢到本地棋盘；② 断网发一条聊天，8s 内按钮自恢复且内容回填输入框；③ 断网点「离开房间」，8s 后应提示超时且**不**出现「房间已退但提示失败」的矛盾 |
 
 ---
 
