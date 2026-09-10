@@ -93,7 +93,13 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const aiWorkerTimeoutRef = useRef<number | null>(null);
   const aiRequestIdRef = useRef(0);
   const openingSeedRef = useRef(createOpeningSeed());
-  const friendRoom = useFriendRoom({ enabled: isOnlineWorkspaceEnabled(mode) });
+  const friendRoom = useFriendRoom({
+    enabled: isOnlineWorkspaceEnabled(mode),
+    messages: {
+      chatSendTimeout: dictionary.room.chatSendTimeout,
+      leaveRoomTimeout: dictionary.room.leaveRoomTimeout
+    }
+  });
 
   function resetGame({
     nextMode = mode,

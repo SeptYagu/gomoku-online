@@ -35,6 +35,7 @@ import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
 import { isAccountIdentityReady } from "./account-identity";
 import { subscribeToBootState } from "./client-boot-state";
 import { createChatSendGate, type ChatSendGate } from "./chat-send-gate";
+import { createLeaveRoomAttempt, type LeaveRoomAttempt } from "./leave-room-attempt";
 
 type RoomSocket = {
   disconnect: () => void;
@@ -140,6 +141,15 @@ export type FriendRoomController = {
 
 type UseFriendRoomOptions = {
   enabled?: boolean;
+  messages?: Partial<{
+    chatSendTimeout: string;
+    leaveRoomTimeout: string;
+  }>;
+};
+
+type LeaveRoomRequest = {
+  attempt: LeaveRoomAttempt;
+  completions: Set<(left: boolean) => void>;
 };
 
 const PLAYER_ID_STORAGE_KEY = "gomoku-room-player-id";
@@ -148,14 +158,12 @@ const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
 const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
 const GUEST_TOKEN_STORAGE_KEY = "gomoku-guest-token";
 const LEADERBOARD_PAGE_SIZE = 10;
-const LEAVE_ROOM_TIMEOUT_MS = 8_000;
-// 聊天 ack 一直不来（断线丢包、服务端重启）时的兜底提示。
-// 注意：本 hook 拿不到 dictionary（六语种文案在组件层），这里沿用既有的英文兜底风格。
-const CHAT_ACK_TIMEOUT_ERROR = "Message not sent: no response from the server. Please try again.";
+const DEFAULT_CHAT_SEND_TIMEOUT_ERROR = "Message not sent: no response from the server. Please try again.";
+const DEFAULT_LEAVE_ROOM_TIMEOUT_ERROR = "Leaving the room timed out. Please try again.";
 // 首屏默认展示名，必须与服务端渲染的结果一致（真实名字挂载后再从存储恢复）。
 const DEFAULT_PLAYER_NAME = "Player";
 
-export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): FriendRoomController {
+export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions = {}): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
   const leaderboardAbortControllerRef = useRef<AbortController | null>(null);
   const leaderboardRequestSeqRef = useRef(0);
@@ -220,6 +228,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   // 重入防线，且带 8s 看门狗 —— socket.io 断线时会静默丢弃普通 ack，没有兜底就会永久锁死。
   const chatSendGateRef = useRef<ChatSendGate | null>(null);
   const publicChatSendGateRef = useRef<ChatSendGate | null>(null);
+  const leaveRoomRequestRef = useRef<LeaveRoomRequest | null>(null);
   const hasConnectedOnceRef = useRef(false);
   const reconnectHandlerRef = useRef<(() => void) | null>(null);
 
@@ -827,7 +836,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       !gate.begin(() => {
         // 超时兜底：闸门已经放开，把内容放回输入框并提示，避免按钮永久禁用 + 内容丢失。
         setIsSendingChat(false);
-        setError(CHAT_ACK_TIMEOUT_ERROR);
+        setError(messages?.chatSendTimeout ?? DEFAULT_CHAT_SEND_TIMEOUT_ERROR);
         setChatText((current) => (current ? current : text));
       })
     ) {
@@ -848,7 +857,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
         setChatText((current) => (current ? current : text));
       }
     });
-  }, [applyRoomAck, chatText, ensureSocket, room]);
+  }, [applyRoomAck, chatText, ensureSocket, messages?.chatSendTimeout, room]);
 
   const sendPublicChatMessage = useCallback(() => {
     if (!identityReady) {
@@ -867,7 +876,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     if (
       !gate.begin(() => {
         setIsSendingPublicChat(false);
-        setError(CHAT_ACK_TIMEOUT_ERROR);
+        setError(messages?.chatSendTimeout ?? DEFAULT_CHAT_SEND_TIMEOUT_ERROR);
         setPublicChatText((current) => (current ? current : text));
       })
     ) {
@@ -897,7 +906,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
         setError(null);
       }
     );
-  }, [ensureSocket, getActivePlayer, identityReady, publicChatText]);
+  }, [ensureSocket, getActivePlayer, identityReady, messages?.chatSendTimeout, publicChatText]);
 
   const leaveRoom = useCallback((onComplete?: (left: boolean) => void) => {
     if (!room) {
@@ -906,36 +915,38 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       return;
     }
 
-    let settled = false;
-    let timeoutId: number | null = null;
-
-    // 离开房间必须给出确定结果：服务端不 ack 时超时兜底，
-    // 否则 GameShell 的 isTransitioning 会永久为 true，模式切换被锁死。
-    const finish = (left: boolean, message?: string) => {
-      if (settled) {
-        return;
+    if (leaveRoomRequestRef.current) {
+      if (onComplete) {
+        leaveRoomRequestRef.current.completions.add(onComplete);
       }
+      return;
+    }
 
-      settled = true;
+    const completions = new Set<(left: boolean) => void>();
+    if (onComplete) {
+      completions.add(onComplete);
+    }
 
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
+    const attempt = createLeaveRoomAttempt(() => {
+      if (leaveRoomRequestRef.current === request) {
+        leaveRoomRequestRef.current = null;
       }
-
-      if (message) {
-        setError(message);
-      }
-
-      onComplete?.(left);
-    };
-
-    timeoutId = window.setTimeout(() => finish(false, "Leaving the room timed out. Please try again."), LEAVE_ROOM_TIMEOUT_MS);
+      setError(messages?.leaveRoomTimeout ?? DEFAULT_LEAVE_ROOM_TIMEOUT_ERROR);
+      completions.forEach((complete) => complete(false));
+    });
+    const request = { attempt, completions };
+    leaveRoomRequestRef.current = request;
 
     ensureSocket().emit("room:leave", { roomCode: room.snapshot.code }, (response: RoomAck) => {
+      // 超时或卸载后到达的 ack 已不属于当前 UI 状态，不能再清房间或改写调用方结果。
+      if (leaveRoomRequestRef.current !== request || !attempt.settle()) {
+        return;
+      }
+      leaveRoomRequestRef.current = null;
+
       if (!response.ok) {
         setError(response.error.message);
-        finish(false);
+        completions.forEach((complete) => complete(false));
         return;
       }
 
@@ -946,9 +957,9 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       setChatText("");
       setMatchmakingStatus("idle");
       setError(null);
-      finish(true);
+      completions.forEach((complete) => complete(true));
     });
-  }, [ensureSocket, room]);
+  }, [ensureSocket, messages?.leaveRoomTimeout, room]);
 
   const copyInvite = useCallback(() => {
     if (!room || typeof window === "undefined") {
@@ -1259,6 +1270,10 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
 
   useEffect(() => {
     return () => {
+      chatSendGateRef.current?.settle();
+      publicChatSendGateRef.current?.settle();
+      leaveRoomRequestRef.current?.attempt.settle();
+      leaveRoomRequestRef.current = null;
       leaderboardAbortControllerRef.current?.abort();
       leaderboardAbortControllerRef.current = null;
       socketRef.current?.disconnect();

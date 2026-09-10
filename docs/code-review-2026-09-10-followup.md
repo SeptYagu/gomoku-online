@@ -11,11 +11,11 @@
 |---|---|---|
 | R1 模式快照被 URL 反向改写 | ✅ 已修 | `readGameModeFromUrl` 补 `bootGameModeCache ??=`，与另外四个 `boot*Cache` 对齐；「启动快照」真正只读一次，`clearRoomUrl()` 不再反向改模式 |
 | R2 聊天在途闸门可永久锁死 | ✅ 已修 | 新增 `src/components/chat-send-gate.ts`：同步闸门 + 8s 看门狗，房间聊天与公聊共用；配 4 条单测 |
-| R3 超时文案硬编码英文 | ⏳ 未修 | 根因是 `useFriendRoom` 拿不到 dictionary（六语种在组件层），需要先做「locale 注入 hook」；本轮新增的聊天超时文案也算在内 |
-| R4 超时后迟到 ack 与 `left=false` 冲突 | ⏳ 未修 | 下一迭代 |
-| R5 leaveRoom 计时器无卸载清理 | ⏳ 未修 | 低危 |
+| R3 超时文案硬编码英文 | ✅ 已修 | `GameShell` 将六语种 dictionary 中的聊天/离房超时文案注入 `useFriendRoom`，hook 保留英文默认值供独立调用 |
+| R4 超时后迟到 ack 与 `left=false` 冲突 | ✅ 已修 | 新增一次性 `leave-room-attempt`；只有首次 `settle()` 能应用 ack 副作用，超时后的迟到 ack 直接忽略 |
+| R5 leaveRoom 计时器无卸载清理 | ✅ 已修 | hook 卸载时 settle 当前离房尝试并清掉看门狗，同时清理两个聊天闸门 |
 | R6 启动快照缓存为模块级 `let` | ⏳ 未修（有意） | R1 的修法沿用同一模式：同一页面生命周期内只读一次，是刻意的；已补注释说明 |
-| R7 新代码零测试 | 🟡 部分 | 闸门已有 4 条单测；`leaveRoom` 超时语义、boot snapshot 仍无覆盖 |
+| R7 新代码零测试 | ✅ 已修 | 聊天闸门 4 条、离房尝试 3 条、boot mode 快照 3 条单测，覆盖重入、超时、迟到 ack、卸载清理和 URL 变更后的快照稳定性 |
 
 ### R1 修法说明
 
@@ -33,7 +33,7 @@
 
 | 项 | 结果 |
 |---|---|
-| `npx vitest run` | 17 文件 / **178 测试全通过**，8.0s（与提交说明一致） |
+| `npx vitest run` | 20 文件 / **188 测试全通过**（包含本轮新增的离房与启动快照测试） |
 | `npx tsc --noEmit` | 未复跑（基线 8 条既有错误，本次改动未触及这些文件） |
 | 浏览器冒烟 | ⚠️ 仍无法执行（sandbox 阻止本机端口 / `next dev` 起不来）；R1、R2 需人工确认 |
 

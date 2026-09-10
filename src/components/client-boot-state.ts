@@ -32,19 +32,26 @@ export function subscribeToBootState(): () => void {
   return () => {};
 }
 
-// 与 useFriendRoom 的 boot*Cache 同理：读一次就定住，之后 URL 再变也不回头改写模式。
-let bootGameModeCache: GameMode | null = null;
+/** 创建一个页面生命周期内只读取一次 URL 的模式快照。 */
+export function createBootGameModeReader(readSearch: () => string | undefined): () => GameMode {
+  let cache: GameMode | null = null;
 
-function readGameModeFromUrl(): GameMode {
-  if (typeof window === "undefined") {
-    return DEFAULT_GAME_MODE;
-  }
+  return () => {
+    const search = readSearch();
 
-  bootGameModeCache ??=
-    new URLSearchParams(window.location.search).has("room") ? "room" : DEFAULT_GAME_MODE;
+    if (search === undefined) {
+      return DEFAULT_GAME_MODE;
+    }
 
-  return bootGameModeCache;
+    cache ??= new URLSearchParams(search).has("room") ? "room" : DEFAULT_GAME_MODE;
+    return cache;
+  };
 }
+
+// 与 useFriendRoom 的 boot*Cache 同理：读一次就定住，之后 URL 再变也不回头改写模式。
+const readGameModeFromUrl = createBootGameModeReader(() =>
+  typeof window === "undefined" ? undefined : window.location.search
+);
 
 function getServerGameMode(): GameMode {
   return DEFAULT_GAME_MODE;

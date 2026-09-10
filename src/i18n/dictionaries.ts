@@ -45,6 +45,7 @@ export type GameDictionary = {
     allowUndo: string;
     availableRooms: string;
     chatPlaceholder: string;
+    chatSendTimeout: string;
     connected: string;
     connection: string;
     cancelMatch: string;
@@ -90,6 +91,7 @@ export type GameDictionary = {
     leaderboardStreakValue: string;
     leaderboardTodayWins: string;
     leaveRoom: string;
+    leaveRoomTimeout: string;
     loadingRooms: string;
     lobbyPlaying: string;
     lobbyWaiting: string;
@@ -259,6 +261,7 @@ const en = {
       allowUndo: "Allow",
       availableRooms: "Rooms",
       chatPlaceholder: "Message this room",
+      chatSendTimeout: "Message not sent: no response from the server. Please try again.",
       connected: "Connected",
       connection: "Connection",
       cancelMatch: "Cancel match",
@@ -304,6 +307,7 @@ const en = {
       leaderboardStreakValue: "Streak {count}",
       leaderboardTodayWins: "Today {count}",
       leaveRoom: "Leave",
+      leaveRoomTimeout: "Leaving the room timed out. Please try again.",
       loadingRooms: "Loading rooms",
       lobbyPlaying: "Playing",
       lobbyWaiting: "Waiting",
@@ -469,6 +473,7 @@ const zh = {
       allowUndo: "允许",
       availableRooms: "房间列表",
       chatPlaceholder: "发送房间消息",
+      chatSendTimeout: "消息发送超时，服务器未响应，请重试。",
       connected: "已连接",
       connection: "连接",
       cancelMatch: "取消匹配",
@@ -514,6 +519,7 @@ const zh = {
       leaderboardStreakValue: "连胜 {count}",
       leaderboardTodayWins: "今日胜 {count}",
       leaveRoom: "离开",
+      leaveRoomTimeout: "离开房间超时，请重试。",
       loadingRooms: "正在加载房间",
       lobbyPlaying: "对局中",
       lobbyWaiting: "等待中",
@@ -679,6 +685,7 @@ const fr = {
       allowUndo: "Autoriser",
       availableRooms: "Salons",
       chatPlaceholder: "Message du salon",
+      chatSendTimeout: "Message non envoyé : le serveur ne répond pas. Réessayez.",
       connected: "Connecté",
       connection: "Connexion",
       cancelMatch: "Annuler la recherche",
@@ -724,6 +731,7 @@ const fr = {
       leaderboardStreakValue: "Série {count}",
       leaderboardTodayWins: "Jour {count}",
       leaveRoom: "Quitter",
+      leaveRoomTimeout: "Le délai pour quitter le salon a expiré. Réessayez.",
       loadingRooms: "Chargement des salons",
       lobbyPlaying: "En jeu",
       lobbyWaiting: "En attente",
@@ -889,6 +897,7 @@ const es = {
       allowUndo: "Permitir",
       availableRooms: "Salas",
       chatPlaceholder: "Mensaje de sala",
+      chatSendTimeout: "Mensaje no enviado: el servidor no respondió. Inténtalo de nuevo.",
       connected: "Conectado",
       connection: "Conexión",
       cancelMatch: "Cancelar búsqueda",
@@ -934,6 +943,7 @@ const es = {
       leaderboardStreakValue: "Racha {count}",
       leaderboardTodayWins: "Hoy {count}",
       leaveRoom: "Salir",
+      leaveRoomTimeout: "Se agotó el tiempo para salir de la sala. Inténtalo de nuevo.",
       loadingRooms: "Cargando salas",
       lobbyPlaying: "En juego",
       lobbyWaiting: "Esperando",
@@ -1099,6 +1109,7 @@ const ru = {
       allowUndo: "Разрешить",
       availableRooms: "Комнаты",
       chatPlaceholder: "Сообщение в комнату",
+      chatSendTimeout: "Сообщение не отправлено: сервер не ответил. Повторите попытку.",
       connected: "Подключен",
       connection: "Связь",
       cancelMatch: "Отменить поиск",
@@ -1144,6 +1155,7 @@ const ru = {
       leaderboardStreakValue: "Серия {count}",
       leaderboardTodayWins: "Сегодня {count}",
       leaveRoom: "Выйти",
+      leaveRoomTimeout: "Не удалось вовремя выйти из комнаты. Повторите попытку.",
       loadingRooms: "Загрузка комнат",
       lobbyPlaying: "Идет игра",
       lobbyWaiting: "Ожидание",
@@ -1309,6 +1321,7 @@ const ar = {
       allowUndo: "السماح",
       availableRooms: "الغرف",
       chatPlaceholder: "رسالة الغرفة",
+      chatSendTimeout: "لم تُرسل الرسالة: لم يستجب الخادم. حاول مرة أخرى.",
       connected: "متصل",
       connection: "الاتصال",
       cancelMatch: "إلغاء البحث",
@@ -1354,6 +1367,7 @@ const ar = {
       leaderboardStreakValue: "سلسلة {count}",
       leaderboardTodayWins: "اليوم {count}",
       leaveRoom: "مغادرة",
+      leaveRoomTimeout: "انتهت مهلة مغادرة الغرفة. حاول مرة أخرى.",
       loadingRooms: "جار تحميل الغرف",
       lobbyPlaying: "قيد اللعب",
       lobbyWaiting: "انتظار",
