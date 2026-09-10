@@ -187,6 +187,8 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   const [copiedInvite, setCopiedInvite] = useState(false);
   const autoJoinRoomCodeRef = useRef<string | null>(null);
   const createRequestInFlightRef = useRef(false);
+  const hasConnectedOnceRef = useRef(false);
+  const reconnectHandlerRef = useRef<(() => void) | null>(null);
 
   const isPlayer = room?.role === "player" && room.seat !== null;
   const currentPlayer = isPlayer ? getPlayerBySeat(room.snapshot, room.seat) : null;
@@ -271,7 +273,18 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       path: "/socket.io"
     });
 
-    socket.on("connect", () => setConnectionStatus("connected"));
+    socket.on("connect", () => {
+      setConnectionStatus("connected");
+
+      // socket.io does not restore server-side room membership after a
+      // reconnect, so re-emit room:rejoin or the room would be treated as
+      // empty (and eventually swept) while the game is still running.
+      if (hasConnectedOnceRef.current) {
+        reconnectHandlerRef.current?.();
+      } else {
+        hasConnectedOnceRef.current = true;
+      }
+    });
     socket.on("disconnect", () => setConnectionStatus("disconnected"));
     socket.on("connect_error", (connectError: unknown) => {
       setConnectionStatus("disconnected");
@@ -350,6 +363,33 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       persistGuestToken(acknowledgedGuestToken);
     }
   }, [account]);
+
+  useEffect(() => {
+    reconnectHandlerRef.current = () => {
+      const storedSession = readRoomSession();
+
+      if (!storedSession) {
+        return;
+      }
+
+      ensureSocket().emit("room:rejoin", storedSession, (response: RoomAck) => {
+        if (response.ok) {
+          applyRoomAck(response);
+          return;
+        }
+
+        if (response.error.code === "guest-session-invalid") {
+          clearGuestToken();
+          createAndPersistPlayerId();
+        } else if (response.error.code === "room-not-found") {
+          clearClosedRoom(storedSession.roomCode);
+          return;
+        }
+
+        applyRoomAck(response);
+      });
+    };
+  }, [applyRoomAck, clearClosedRoom, ensureSocket]);
 
   const createRoom = useCallback((visibility: RoomVisibility = "public") => {
     if (!canCreateRoom || createRequestInFlightRef.current) {

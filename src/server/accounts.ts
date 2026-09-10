@@ -70,6 +70,7 @@ type PersistedAccountEntry = {
 
 const ACCOUNT_ID_PREFIX = "acct";
 const ACCOUNT_LAST_SEEN_PERSIST_INTERVAL_MS = 60_000;
+const GUEST_PLAYER_ID_PREFIX = "guest_";
 const GUEST_SESSION_MAX_ENTRIES = 10_000;
 const GUEST_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_DISPLAY_NAME_LENGTH = 24;
@@ -308,6 +309,10 @@ export class GuestSessionStore {
       return failure("invalid-player", "Player id and name are required.");
     }
 
+    if (isRegisteredPlayerIdShape(playerId)) {
+      return failure("invalid-player", "This player id is reserved for registered accounts.");
+    }
+
     if (this.sessionsByPlayerId.has(playerId)) {
       return failure("guest-session-invalid", "This guest identity requires its session token.");
     }
@@ -432,7 +437,13 @@ export function resolvePlayerIdentity(
     });
   }
 
-  const guestSession = guestSessionStore.createSession(input);
+  // The client-supplied playerId is never trusted for identity: guest ids are
+  // issued server-side so a client cannot claim another player's id (or a
+  // registered `acct_*` id) and pollute their records.
+  const guestSession = guestSessionStore.createSession({
+    playerId: createGuestPlayerId(),
+    playerName: input.playerName
+  });
 
   if (!guestSession.ok) {
     return guestSession;
@@ -481,6 +492,14 @@ function normalizeDisplayName(displayName: string): string {
 
 function normalizePlayerId(playerId: string): string {
   return playerId.trim().slice(0, MAX_PLAYER_ID_LENGTH);
+}
+
+function createGuestPlayerId(): string {
+  return `${GUEST_PLAYER_ID_PREFIX}${randomTokenPart(12)}`;
+}
+
+function isRegisteredPlayerIdShape(playerId: string): boolean {
+  return /^acct(?:[_-]|$)/i.test(playerId);
 }
 
 function normalizePublicHandle(publicHandle: string): string {

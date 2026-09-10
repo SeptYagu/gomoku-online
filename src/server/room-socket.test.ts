@@ -833,7 +833,7 @@ describe("room socket handlers", () => {
       ).toMatchObject({
         ok: true,
         value: {
-          playerId: "protected-guest",
+          playerId: created.value.playerId,
           snapshot: {
             players: [expect.objectContaining({ name: "Protected", seat: "black" })]
           }
@@ -948,6 +948,56 @@ describe("room socket handlers", () => {
       expect(secondAck.ok ? secondAck.value.snapshot.code : firstRoomCode).not.toBe(firstRoomCode);
       expect(await firstSocketSawClosed).toMatchObject({ code: firstRoomCode });
       expect(await lobbySawFirstDelete).toMatchObject({ code: firstRoomCode });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("keeps a room with an unfinished game alive for a grace period after every socket drops", async () => {
+    let now = 1_780_000_000_000;
+    const harness = await createSocketHarness({
+      emptyRoomGraceMs: 1_000,
+      lifecycleIntervalMs: 5,
+      now: () => now
+    });
+
+    try {
+      const lobby = await harness.connectClient();
+      const host = await harness.connectClient();
+      const guest = await harness.connectClient();
+
+      const createAck = await emitAck(host, "room:create", {
+        playerId: "host-player",
+        playerName: "Host"
+      });
+
+      if (!createAck.ok) {
+        throw new Error(createAck.error.message);
+      }
+
+      const roomCode = createAck.value.snapshot.code;
+
+      expect(
+        await emitAck(guest, "room:join", { playerId: "guest-player", playerName: "Guest", roomCode })
+      ).toMatchObject({ ok: true });
+      expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+      expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
+
+      host.disconnect();
+      guest.disconnect();
+
+      // Several sweep intervals pass while the room stays inside the grace
+      // window: the unfinished game must not be deleted.
+      await delay(40);
+
+      const inGraceList = await emitAck<RoomListAck>(lobby, "lobby:list", { limit: 20 });
+      expect(inGraceList.ok ? inGraceList.value.rooms.some((room) => room.code === roomCode) : false).toBe(true);
+
+      now += 30_000;
+      await delay(40);
+
+      const afterGraceList = await emitAck<RoomListAck>(lobby, "lobby:list", { limit: 20 });
+      expect(afterGraceList.ok ? afterGraceList.value.rooms.some((room) => room.code === roomCode) : true).toBe(false);
     } finally {
       await harness.close();
     }
@@ -1169,13 +1219,13 @@ describe("room socket handlers", () => {
 
       const roomCode = createAck.value.snapshot.code;
 
-      expect(
-        await emitAck(guest, "room:join", {
-          playerId: "record-guest",
-          playerName: "Record Guest",
-          roomCode
-        })
-      ).toMatchObject({ ok: true });
+      const guestJoinAck = await emitAck(guest, "room:join", {
+        playerId: "record-guest",
+        playerName: "Record Guest",
+        roomCode
+      });
+
+      expect(guestJoinAck).toMatchObject({ ok: true });
       expect(await emitAck(host, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
       expect(await emitAck(guest, "room:ready", { ready: true, roomCode })).toMatchObject({ ok: true });
 
@@ -1225,8 +1275,8 @@ describe("room socket handlers", () => {
           record: {
             recordStatus: "verified",
             submissions: [
-              expect.objectContaining({ playerId: "record-host" }),
-              expect.objectContaining({ playerId: "record-guest" })
+              expect.objectContaining({ playerId: createAck.value.playerId }),
+              expect.objectContaining({ playerId: guestJoinAck.ok ? guestJoinAck.value.playerId : "" })
             ]
           }
         }
@@ -1459,7 +1509,13 @@ describe("room socket handlers", () => {
 });
 
 async function createSocketHarness(
-  options: { accountStore?: AccountStore; lifecycleIntervalMs?: false | number; roomStore?: RoomStore } = {}
+  options: {
+    accountStore?: AccountStore;
+    emptyRoomGraceMs?: number;
+    lifecycleIntervalMs?: false | number;
+    now?: () => number;
+    roomStore?: RoomStore;
+  } = {}
 ) {
   const httpServer = createServer();
   const io = new Server(httpServer, {
@@ -1469,7 +1525,9 @@ async function createSocketHarness(
 
   registerRoomSocketHandlers(io as unknown as RoomSocketServer, options.roomStore ?? new RoomStore(), {
     accountStore: options.accountStore,
-    lifecycleIntervalMs: options.lifecycleIntervalMs ?? false
+    emptyRoomGraceMs: options.emptyRoomGraceMs,
+    lifecycleIntervalMs: options.lifecycleIntervalMs ?? false,
+    now: options.now
   });
 
   await new Promise<void>((resolve) => {
@@ -1512,6 +1570,12 @@ async function createSocketHarness(
 function emitAck<T = RoomAck>(socket: TestSocket, event: string, payload: unknown): Promise<T> {
   return new Promise((resolve) => {
     socket.emit(event, payload, resolve);
+  });
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
 }
 

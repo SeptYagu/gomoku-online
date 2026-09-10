@@ -953,13 +953,13 @@ export class RoomStore {
     this.syncHostTarget(room);
 
     if (!hasConnectedParticipant(room) && room.status !== "finished") {
-      abandonRoom(room, now);
-      this.captureFinishedGame(room);
-      this.clearHostTarget(room.code);
-      this.rooms.delete(room.code);
-      if (room.visibility === "public") {
-        this.nextLobbyVersion();
-      }
+      // The status is "playing" here (waiting/ready disconnects remove the
+      // player above and finished rooms are excluded). Keep the room alive for
+      // the reconnect grace window so a quick reconnect can resume the game;
+      // advanceRoomLifecycle abandons it once every disconnect deadline
+      // expires.
+      this.markRoomListed(room);
+
       return success(getRoomSnapshot(room));
     }
 
@@ -1430,6 +1430,10 @@ export class RoomStore {
       const snapshotBeforeExpiry = getRoomSnapshot(room);
 
       if (this.deleteIfExpired(room, now)) {
+        if (changed) {
+          this.captureFinishedGame(room);
+        }
+
         deletedRoomCodes.push(code);
         deletedSnapshots.push(snapshotBeforeExpiry);
         continue;
@@ -2045,7 +2049,16 @@ function shouldDeleteRoom(room: RoomState, now: number, limits: RoomLifecycleLim
       );
     }
 
-    return true;
+    // Playing rooms linger for the reconnect grace window; they become
+    // abandoned via the lifecycle sweep and are deleted once every player's
+    // disconnect deadline has passed.
+    if (room.players.length === 0) {
+      return true;
+    }
+
+    return room.players.every(
+      (player) => player.disconnectDeadline !== null && now >= player.disconnectDeadline
+    );
   }
 
   if (room.status === "finished" || room.status === "abandoned") {

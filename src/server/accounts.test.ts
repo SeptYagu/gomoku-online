@@ -165,11 +165,19 @@ describe("AccountStore", () => {
     expect(guest).toMatchObject({
       guestToken: expect.any(String),
       identity: "guest",
-      playerId: "guest",
       playerName: "Guest"
     });
-    expect(resolvePlayerIdentity({ playerId: "guest", playerName: "Attacker" }, accountStore, guestSessionStore))
-      .toMatchObject({ ok: false, error: { code: "guest-session-invalid" } });
+    expect(guest.playerId).toMatch(/^guest_/);
+    expect(guest.playerId).not.toBe("guest");
+
+    // A second tokenless request gets its own fresh identity instead of
+    // claiming the first player's id.
+    const impostor = expectOk(
+      resolvePlayerIdentity({ playerId: guest.playerId, playerName: "Impostor" }, accountStore, guestSessionStore)
+    );
+
+    expect(impostor.playerId).not.toBe(guest.playerId);
+
     expect(
       resolvePlayerIdentity(
         { guestToken: guest.guestToken, playerId: "guest", playerName: "Guest Renamed" },
@@ -181,9 +189,32 @@ describe("AccountStore", () => {
       value: {
         guestToken: guest.guestToken,
         identity: "guest",
-        playerId: "guest",
+        playerId: guest.playerId,
         playerName: "Guest Renamed"
       }
+    });
+  });
+
+  it("issues server-generated guest ids that cannot impersonate registered accounts", () => {
+    const accountStore = new AccountStore({ filePath: false });
+    const guestSessionStore = new GuestSessionStore();
+    const account = expectOk(accountStore.createAccount({ displayName: "Victim" }));
+
+    const guest = expectOk(
+      resolvePlayerIdentity({ playerId: account.playerId, playerName: "Impostor" }, accountStore, guestSessionStore)
+    );
+
+    expect(guest.playerId).not.toBe(account.playerId);
+    expect(guest.playerId.startsWith("acct_")).toBe(false);
+    expect(accountStore.findByPlayerId(guest.playerId)).toBeNull();
+  });
+
+  it("rejects reserved account-shaped player ids for guest sessions", () => {
+    const guestSessionStore = new GuestSessionStore();
+
+    expect(guestSessionStore.createSession({ playerId: "acct_abc12345", playerName: "Impostor" })).toMatchObject({
+      ok: false,
+      error: { code: "invalid-player" }
     });
   });
 

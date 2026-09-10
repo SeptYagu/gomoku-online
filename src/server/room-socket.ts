@@ -29,6 +29,7 @@ import {
 const LOBBY_ROOM = "lobby";
 const PRESENCE_ROOM = "presence";
 const PUBLIC_CHAT_ROOM = "public-chat";
+const EMPTY_ROOM_GRACE_MS = 60_000;
 
 type PlayerAuthPayload = {
   accountToken?: null | string;
@@ -141,8 +142,16 @@ export type RoomSocketServer = {
 
 type RegisterRoomSocketOptions = {
   accountStore?: AccountStore;
+  emptyRoomGraceMs?: number;
   guestSessionStore?: GuestSessionStore;
   lifecycleIntervalMs?: false | number;
+  now?: () => number;
+};
+
+type EmptyRoomSweepState = {
+  emptySince: Map<string, number>;
+  graceMs: number;
+  now: () => number;
 };
 
 type RoomSocket = {
@@ -184,9 +193,14 @@ export function registerRoomSocketHandlers(
   const lifecycleIntervalMs = options.lifecycleIntervalMs ?? 10_000;
   const connections = new RoomConnectionTracker();
   const joinTargetLimiter = new FixedWindowRateLimiter({ limit: 20, windowMs: 60_000 });
+  const emptyRoomSweep: EmptyRoomSweepState = {
+    emptySince: new Map(),
+    graceMs: Math.max(0, options.emptyRoomGraceMs ?? EMPTY_ROOM_GRACE_MS),
+    now: options.now ?? Date.now
+  };
 
   if (lifecycleIntervalMs !== false) {
-    const interval = setInterval(() => broadcastLifecycleSweep(io, roomStore), lifecycleIntervalMs);
+    const interval = setInterval(() => broadcastLifecycleSweep(io, roomStore, emptyRoomSweep), lifecycleIntervalMs);
 
     interval.unref?.();
   }
@@ -212,7 +226,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, emptyRoomSweep);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -231,7 +245,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, payload.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, emptyRoomSweep, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -265,7 +279,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, resolved.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, emptyRoomSweep, resolved.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -284,7 +298,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, payload.roomCode);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, emptyRoomSweep, payload.roomCode);
       const response = handleJoinedRoom(
         socket,
         roomStore,
@@ -303,7 +317,7 @@ export function registerRoomSocketHandlers(
         return;
       }
 
-      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value);
+      leaveRoomsBeforeEntry(io, socket, roomStore, connections, player.value, emptyRoomSweep);
       const response = handleJoinedRoom(socket, roomStore, connections, roomStore.findMatch(player.value), player.value);
       acknowledgeAndBroadcast(io, socket, roomStore, response, ack);
     });
@@ -695,13 +709,14 @@ function leaveRoomsBeforeEntry(
   roomStore: RoomStore,
   connections: RoomConnectionTracker,
   nextPlayer: { playerId: string; playerName: string },
+  emptyRoomSweep: EmptyRoomSweepState,
   nextRoomCode?: string
 ) {
   const previousRoomCode = socket.data.roomCode;
   const playerIds = new Set([socket.data.playerId, nextPlayer.playerId].filter((playerId): playerId is string => Boolean(playerId)));
   const normalizedNextRoomCode = nextRoomCode?.trim().toUpperCase();
 
-  closeRoomsWithoutSocketMembers(io, roomStore);
+  closeRoomsWithoutSocketMembers(io, roomStore, emptyRoomSweep);
 
   for (const playerId of playerIds) {
     connections.clearParticipantOutsideRoom(playerId, normalizedNextRoomCode);
@@ -719,7 +734,7 @@ function leaveRoomsBeforeEntry(
     socket.data.roomCode = undefined;
   }
 
-  closeRoomsWithoutSocketMembers(io, roomStore);
+  closeRoomsWithoutSocketMembers(io, roomStore, emptyRoomSweep);
 }
 
 function getCurrentDisposableWaitingRoom(
@@ -771,24 +786,50 @@ function broadcastRoomCleanup(io: RoomSocketServer, roomStore: RoomStore, cleanu
   }
 }
 
-function closeRoomsWithoutSocketMembers(io: RoomSocketServer, roomStore: RoomStore) {
+function closeRoomsWithoutSocketMembers(io: RoomSocketServer, roomStore: RoomStore, emptyRoomSweep: EmptyRoomSweepState) {
+  const now = emptyRoomSweep.now();
+
   for (const roomCode of roomStore.listRoomCodes()) {
     const socketRoom = io.sockets.adapter.rooms.get(roomCode);
 
     if (socketRoom && socketRoom.size > 0) {
+      emptyRoomSweep.emptySince.delete(roomCode);
       continue;
     }
 
-    const snapshot = roomStore.deleteRoom(roomCode);
+    // Rooms with a game in progress get a reconnect grace period before being
+    // swept, so a short network blip (longer than one sweep interval) does not
+    // destroy an unfinished game. Waiting rooms are still swept immediately.
+    const snapshot = roomStore.getSnapshot(roomCode);
 
-    if (snapshot) {
-      broadcastRoomClosed(io, roomStore, snapshot.code, snapshot.visibility);
+    if (snapshot.ok && snapshot.value.status !== "waiting") {
+      const emptySince = emptyRoomSweep.emptySince.get(roomCode) ?? now;
+
+      emptyRoomSweep.emptySince.set(roomCode, emptySince);
+
+      if (now - emptySince < emptyRoomSweep.graceMs) {
+        continue;
+      }
+    }
+
+    emptyRoomSweep.emptySince.delete(roomCode);
+
+    const deleted = roomStore.deleteRoom(roomCode);
+
+    if (deleted) {
+      broadcastRoomClosed(io, roomStore, deleted.code, deleted.visibility);
+    }
+  }
+
+  for (const roomCode of emptyRoomSweep.emptySince.keys()) {
+    if (!roomStore.getSnapshot(roomCode).ok) {
+      emptyRoomSweep.emptySince.delete(roomCode);
     }
   }
 }
 
-function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore) {
-  closeRoomsWithoutSocketMembers(io, roomStore);
+function broadcastLifecycleSweep(io: RoomSocketServer, roomStore: RoomStore, emptyRoomSweep: EmptyRoomSweepState) {
+  closeRoomsWithoutSocketMembers(io, roomStore, emptyRoomSweep);
 
   const sweep = roomStore.sweepExpiredRooms();
 

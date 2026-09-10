@@ -926,15 +926,46 @@ describe("RoomStore", () => {
     });
   });
 
-  it("closes an active room immediately after every participant disconnects", () => {
-    const { room, store } = createStartedRoom();
+  it("keeps an active room for the reconnect grace window after every participant disconnects", () => {
+    const now = 1_780_000_000_000;
+    const store = createTimedRoomStore({
+      codeGenerator: () => "ROOM01",
+      disconnectGraceMs: 1_000,
+      now: () => now
+    });
+    const started = createStartedRoomWithStore(store);
 
-    expectOk(store.markDisconnected(room.code, "player-1"));
-    const closed = expectOk(store.markDisconnected(room.code, "player-2"));
+    expectOk(store.markDisconnected(started.code, "player-1"));
+    const allDisconnected = expectOk(store.markDisconnected(started.code, "player-2"));
 
-    expect(closed.status).toBe("abandoned");
-    expect(closed.players.every((player) => !player.connected)).toBe(true);
-    expect(store.getSnapshot(room.code)).toMatchObject({
+    expect(allDisconnected.status).toBe("playing");
+    expect(allDisconnected.players.every((player) => !player.connected)).toBe(true);
+    expect(store.listRooms().rooms).toHaveLength(1);
+
+    // A player returning inside the grace window resumes the game.
+    const restored = expectOk(
+      store.reconnectRoom(started.code, { playerId: "player-2", playerName: "Bob back" })
+    );
+
+    expect(restored.status).toBe("playing");
+    expect(restored.players.find((player) => player.seat === "white")).toMatchObject({ connected: true });
+  });
+
+  it("abandons an active room once every reconnect deadline expires without a reconnect", () => {
+    let now = 1_780_000_000_000;
+    const store = createTimedRoomStore({
+      codeGenerator: () => "ROOM01",
+      disconnectGraceMs: 1_000,
+      now: () => now
+    });
+    const started = createStartedRoomWithStore(store);
+
+    expectOk(store.markDisconnected(started.code, "player-1"));
+    expectOk(store.markDisconnected(started.code, "player-2"));
+
+    now += 1_001;
+
+    expect(store.getSnapshot(started.code)).toMatchObject({
       ok: false,
       error: { code: "room-not-found" }
     });
