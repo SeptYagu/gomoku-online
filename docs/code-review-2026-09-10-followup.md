@@ -4,7 +4,7 @@
 - 范围：`aa9b142..f30e273` 三个修复提交（M1/M2、M3、M4/M5/m6/m7）+ 工作区未提交改动
 - 方式：diff 精读 + 调用链回溯 + 依赖源码核对（React 19.2.7 / socket.io-client 4.8.3）
 - 结论：**无 Critical**。M1/M2/M3 修复扎实且带测试；M4/M5/m6/m7 的修法引入了 **2 个新的 Major 级副作用**（R1 模式被 URL 反向改写、R2 聊天在途闸门可永久锁死），建议在下一迭代优先处理。
-- 当前状态（滚动）：R1/R2（`e14ec7e`）、R3/R4/R5 + R7（`5056016`）均已修复并通过变异复核；R6 为有意取舍（部分保留）；待办只剩 R8（连接/加入失败文案仍英文）与 R9（超时后的服务端/客户端短暂不一致）。
+- 当前状态（滚动）：R1/R2（`e14ec7e`）、R3/R4/R5 + R7（`5056016`）、R8（`2a2c2b6`）均已修复并通过变异复核；R6 为有意取舍（部分保留）；只剩 R9（超时后的服务端/客户端短暂不一致）一项未修，属 R4 的既定取舍。
 
 ## 修复进展（滚动更新）
 
@@ -17,7 +17,7 @@
 | R5 leaveRoom 计时器无卸载清理 | ✅ 已修 | hook 卸载时 settle 当前离房尝试并清掉看门狗，同时清理两个聊天闸门 |
 | R6 启动快照缓存为模块级 `let` | 🟡 部分（有意） | boot mode 已改成 `createBootGameModeReader()` 的实例闭包（可注入搜索串、可测）；`useFriendRoom` 里另外四个 `boot*Cache`（`:1446-1483`）仍是模块级 `let`，同一页面生命周期内只读一次是刻意取舍 |
 | R7 新代码零测试 | 🟡 已修（模块级） | 聊天闸门 4 条、离房尝试 3 条、boot mode 快照 3 条单测，覆盖重入、超时/迟到 ack、URL 变更后的快照稳定性。**注意**：覆盖的是三个纯函数模块自身的语义；hook 里的接线（谁调用 `settle()`、卸载时是否真的 settle）因仓库无 jsdom / testing-library 仍无测试 |
-| R8 连接/加入失败文案仍是英文 | ⏳ 未修 | `useFriendRoom.ts:464`、`:516` 与 `formatConnectionError()`（`:1700-1707`）的英文串同样渲染进 `room-error`（`OnlineLobbyView.tsx:56,257`）——R3 这次只覆盖了两条超时文案 |
+| R8 连接/加入失败文案仍是英文 | ✅ 已修 | `2a2c2b6`：`connectionFailed`（含 `{message}` 占位符）/`connectionFailedXhr`/`roomCodeRequired`/`joinTargetRequired`/`roomError` 进 `dictionary.room` 六语种；socket 建一次用 `messagesRef` 跟随语言。另补 `dictionaries.test.ts` 断言 key 与占位符六语种一致 |
 | R9 超时后「服务端已离开、客户端仍认为在房间」 | ⏳ 未修（取舍） | R4 改成忽略迟到 ack 之后，若丢的只是 ack 而服务端其实已处理，本地房间状态会滞留到用户再次点离开；重试会重新 emit 并自愈，期间 UI 与服务端短暂不一致 |
 
 ### 复核（提交 `5056016`，2026-09-10）
@@ -53,6 +53,15 @@
 | `npx eslint`（本次改动的 8 个文件） | ✅ 退出码 0，无输出 |
 | 变异测试（见上一节） | ✅ 三处新测试在坏代码上均失败，无空转断言 |
 | 浏览器冒烟 | ⚠️ 仍无法执行（sandbox 阻止本机端口 / `next dev` 起不来），需人工确认：① `/?room=XXXXXX` 进房后点「离开房间」应留在联机大厅而非被丢到本地棋盘；② 断网发一条聊天，8s 内按钮自恢复且内容回填输入框；③ 断网点「离开房间」，8s 后应提示超时且**不**出现「房间已退但提示失败」的矛盾 |
+
+### 验证（R8 轮，`2a2c2b6`）
+
+| 项 | 结果 |
+|---|---|
+| `npx vitest run` | ✅ **24 文件 / 221 测试全通过**（本轮新增 6 文件 33 条：jsonl-file 5 / client-address 6 / dictionaries 3 / ai-worker-request 10 / accounts +2 / game-records +2 / rate-limit +3 / sgf +2 / table-ui-state 改 1 条） |
+| `npx tsc --noEmit` | ✅ 仍是**恰好 8 条基线错误**，分布未变、无新增 |
+| `npx eslint`（本轮改动的 25 个文件） | ✅ 退出码 0，零警告 |
+| 浏览器冒烟 | ⚠️ 仍不可执行；新增人工确认项：`room-error` 文案是否随语言切换、被请求悔棋时「离开房间」是否可点、线上若在反代之后是否已设 `GOMOKU_TRUST_PROXY=1` |
 
 ---
 

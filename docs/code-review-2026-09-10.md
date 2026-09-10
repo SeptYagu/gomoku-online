@@ -14,11 +14,12 @@
 | M3 AI 战术截断 | ✅ 已修 | `d69d0bd` | 必胜/必挡改在**全量候选池**上判定，截断只留给 α-β 搜索 |
 | M4 聊天可重复发送 | ✅ 已修 | `f30e273` | emit 前 ref 闸门 + `isSending*` 禁用按钮 + 乐观清空 |
 | M5 水合不一致 | ✅ 已修 | 同上 | 启动快照改走 `useSyncExternalStore`，见下 |
-| M6 持久化无界增长 | ⏳ 未修 | — | 放到下一迭代 |
-| M7 XFF 可伪造绕过限流 | ⏳ 未修 | — | 需先确认线上是否部署在可信反代之后，见下 |
+| M6 持久化无界增长 | ✅ 已修 | `2a2c2b6` | 抽 `jsonl-file.ts`（容错读 + 计数告警 + 原子重写）；两个 store 按**追加行数阈值**压缩，文件随 live 条目增长而非写入次数 |
+| M7 XFF 可伪造绕过限流 | ✅ 已修 | `2a2c2b6` | 默认**不信任** XFF；`client-address.ts` 统一判定，只有显式 `GOMOKU_TRUST_PROXY=1` 且传输对端是 loopback 才采信 |
 | m6 确认态被覆盖 | ✅ 已修 | 同上 | `pendingTransition` 期间锁定模式 pill 并忽略新点击 |
 | m7 leaveRoom 无超时 | ✅ 已修 | 同上 | 8s 超时兜底，`onComplete` 必定被调用一次 |
-| m10/m11 等其余 Minor/Nit | ⏳ 未修 | — | 按迭代节奏推进 |
+| m3/m4/m5/m8/m10/m11/m14 | ✅ 已修 | `2a2c2b6` | 见下表 |
+| 其余 Minor/Nit | ⏳ 未修 | — | 按迭代节奏推进（m1/m2/m9/m12/m13/m15/m16/m17 与架构拆分） |
 
 ### M3 复核更正（重要）
 
@@ -42,15 +43,45 @@
 - 服务端快照固定为 `guest / "Player" / "" / false`，与旧的服务端渲染结果一致；
   hydration 阶段 React 用服务端快照，水合完成后再取客户端快照自动重渲染 → 不再有 mismatch。
 
+### 本轮修复说明（`2a2c2b6`）
+
+**M6 持久化无界增长** —— 原来 `persist()` 每写一次就 append 一行，文件大小跟**写入次数**成正比（账号的 last-seen 每 60s 一次、每条对局记录更新一次），长期运行必然吃满磁盘。修法：
+
+- 新增 `src/server/jsonl-file.ts`：`readJsonlFile`（容错读 + 统计跳过行数）、`appendJsonlLine`、`rewriteJsonlFile`（写同目录临时文件后 `rename` 原子替换，崩在中间不会截断日志）、`JsonlCompactionTracker`（计数 + 阈值判定）。
+- 两个 store 的 `loadFromFile` 改成走 `readJsonlFile`，把读到的行数灌给 tracker；`persist()` 追加后问 tracker「该压缩了吗」，到了就把内存里最新的 Map 整体重写成一行一条（内存里的 Map 本来就是「后写覆盖先写」的投影，所以重写无损）。
+- 效果：文件规模 = `live 条目数 + 阈值`，与写入次数**解耦**。阈值默认各 2000 行，可用 `compactAfterLines` 注入（0 = 关闭，测试用）。
+
+**M7 XFF 可伪造** —— 原实现「只要传输对端是 loopback 就采信 `x-forwarded-for`」，而本机直连时对端就是 loopback，客户端随手伪造一个 XFF 就能每次换一个限流 key，注册限流（5/10min）与 join 限流（20/min）形同虚设，还叠加放大 M6 的存储压力。修法：判定逻辑抽到 `src/server/client-address.ts`（同时消掉 `online-server.ts` 与 `room-socket.ts` 两份重复实现），默认**不信任** XFF，只有显式设了 `GOMOKU_TRUST_PROXY=1`（`1/true/yes/on`）且传输对端确为 loopback 才取 XFF 末段。
+
+> ⚠️ **部署须知**：若线上确实挂在 Nginx/Caddy 之类的可信反代之后，必须设 `GOMOKU_TRUST_PROXY=1`，否则所有请求会被算作同一个 key（`127.0.0.1`）而互相限流。反代务必**覆盖**而非追加客户端传入的 XFF。
+
+**m3/m4/m5/m8/m10/m11/m14**：
+
+| # | 修法 |
+|---|---|
+| m3 | `profile?.stats?.games/wins/losses/draws`（4 处），`stats` 缺失不再 TypeError |
+| m4 | `escapeSgfValue` 增加控制字符剔除（改为先转义、后 `stripControlCharacters`）。**未**按原建议转义 `(` `)` `;`——按 SGF FF[4]，这三个字符只在属性值**之外**有结构含义，值转义它们只会往玩家可见文本里塞无谓反斜杠；测试里加了一个最小属性读取器，证明 `Bob](;B[aa])\evil` 这类名字无法逃出属性 |
+| m5 | `undo-response-required` 的操作列表补 `leave`（toolbar），被请求方不再被一个卡住的悔棋请求堵死 |
+| m8 | worker 载荷校验抽成纯模块 `ai-worker-request.ts`（`describeInvalidAiWorkerRequest`），非法 board/stone/difficulty/timeLimit/shard 直接回 `type:"error"` 并 return；`chooseAiMoveResult` 外包 try/catch 同样回 error。`GameShell` 侧把 `error` 当作「这个 shard 结束」处理，立刻走应急着法，而不用干等看门狗 |
+| m10 | `listPresence` 先前对**每个** presence 都 `[...this.rooms.values()]` 扫一遍全部房间（O(users×rooms) 且每次新分配数组）；改成先建 `playerId → {role, room}` 索引一次，再 O(1) 查表。索引构建保持「先出现的房间获胜」，与原线性扫描语义一致（有测试兜底） |
+| m11 | `prune` 原来每次 `consume` 都全表扫 + 超限时 `sort` 取最旧（O(n) + O(n log n)）。改成：① 全表清扫按 `pruneIntervalMs`（默认 = windowMs）节流——过期的 entry 本就在读取时被当作新窗口，清扫只是内存卫生；② 超限时用一次线性扫描找 `resetAt` 最小者（避免 sort）。**保留**「正在被 consume 的 key 永不驱逐」这条守卫，否则等于白送一个新窗口 |
+| m14 | 两个 store 的坏行不再静默丢弃，改为统计后各发一条 `console.warn`（`skipped N unreadable line(s)`） |
+
+**R8 连接/加入失败文案** —— `formatConnectionError()` 的英文串、`:464`/`:516` 的入参校验文案、以及 `room:error` 的畸形回退「Room error.」全部进 `dictionary.room`（六语种）：`connectionFailed`（带 `{message}` 占位符）、`connectionFailedXhr`、`roomCodeRequired`、`joinTargetRequired`、`roomError`。hook 保留英文默认值供独立调用。socket 处理器建一次（空 deps），所以用 `messagesRef` 跟随当前语言，避免把 `messages` 塞进每个 callback 的依赖而重建 socket。
+
+顺带把 m2 的建议落成 `src/i18n/dictionaries.test.ts`：遍历六语种断言 key 结构一致、`{...}` 占位符集合一致（`satisfies` 只校验 key，漏写占位符会静默渲染字面量）、无空串。
+
+**R9 维持取舍**：本轮未改「超时后客户端短暂仍认为在房间」的语义（R4 已定），重试会自愈。
+
 ### 验证状态
 
-- `npx vitest run`：178 passed（新增 ai 用例 3 条）。
+- `npx vitest run`：**24 文件 / 221 passed**（本轮新增 6 个测试文件、33 条用例）。
 - `npx tsc --noEmit`：8 条错误，全部是既有基线（`game-record-export.test.ts` 1 +
   `game-record-opening-analysis.test.ts` 1 + `room-socket.test.ts` 6），无新增。
-- `npx eslint`：改动文件零警告零错误。
-- ⚠️ **未做**：本轮没能跑真实浏览器的 hydration 冒烟（本地 3210 端口起不来、
-  sandbox 阻止本机端口访问），也没有跑 `next build`（被工作机的 safe-delete 批量删除保护拦住）。
-  建议人工在 `npm run dev` 下打开 `/?room=XXXXXX` 看一眼 console 有无 hydration 告警。
+- `npx eslint`：本轮改动的 25 个文件零错误零警告（exit 0）。
+- ⚠️ **未做**：真实浏览器冒烟（sandbox 阻止本机端口 / `next dev` 起不来），
+  建议人工确认：① 连续收发聊天与离开房间后 `room-error` 文案随语言切换；② 被请求悔棋时能点到「离开房间」；
+  ③ 线上若在反代之后，确认 `GOMOKU_TRUST_PROXY=1` 已设置。
 
 ## 总体结论
 
