@@ -1,5 +1,6 @@
 import type { Point } from "../game/types";
 import { AccountStore, GuestSessionStore, resolvePlayerIdentity } from "./accounts";
+import { resolveClientAddress, shouldTrustProxy } from "./client-address";
 import type {
   GameRecordAck,
   PresenceAck,
@@ -146,6 +147,8 @@ type RegisterRoomSocketOptions = {
   guestSessionStore?: GuestSessionStore;
   lifecycleIntervalMs?: false | number;
   now?: () => number;
+  /** Trust `x-forwarded-for` for rate-limit keys. Defaults to `GOMOKU_TRUST_PROXY`. */
+  trustProxy?: boolean;
 };
 
 type EmptyRoomSweepState = {
@@ -191,6 +194,7 @@ export function registerRoomSocketHandlers(
   const accountStore = options.accountStore ?? new AccountStore({ filePath: false });
   const guestSessionStore = options.guestSessionStore ?? new GuestSessionStore();
   const lifecycleIntervalMs = options.lifecycleIntervalMs ?? 10_000;
+  const trustProxy = options.trustProxy ?? shouldTrustProxy();
   const connections = new RoomConnectionTracker();
   const joinTargetLimiter = new FixedWindowRateLimiter({ limit: 20, windowMs: 60_000 });
   const emptyRoomSweep: EmptyRoomSweepState = {
@@ -267,7 +271,7 @@ export function registerRoomSocketHandlers(
       const target = payload.target?.trim() ?? "";
       const aliasLookup = target.startsWith("@") || target.startsWith("acct_");
 
-      if (aliasLookup && !joinTargetLimiter.consume(getJoinTargetRateKey(socket)).allowed) {
+      if (aliasLookup && !joinTargetLimiter.consume(getJoinTargetRateKey(socket, trustProxy)).allowed) {
         acknowledgeAndBroadcast(io, socket, roomStore, roomNotFound(), ack);
         return;
       }
@@ -1213,22 +1217,14 @@ function resolveJoinTarget(
   return { kind: "room-code", roomCode: target.toUpperCase() };
 }
 
-function getJoinTargetRateKey(socket: RoomSocket): string {
-  const remoteAddress = socket.handshake.address || "unknown";
+function getJoinTargetRateKey(socket: RoomSocket, trustProxy: boolean): string {
+  const key = resolveClientAddress({
+    forwardedFor: socket.handshake.headers["x-forwarded-for"],
+    remoteAddress: socket.handshake.address || "unknown",
+    trustProxy
+  });
 
-  if (!isLoopbackAddress(remoteAddress)) {
-    return remoteAddress;
-  }
-
-  const forwardedFor = socket.handshake.headers["x-forwarded-for"];
-  const forwardedValue = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor;
-  const forwardedClient = forwardedValue?.split(",").at(-1)?.trim();
-
-  return forwardedClient || remoteAddress || socket.id;
-}
-
-function isLoopbackAddress(address: string): boolean {
-  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+  return key === "unknown" ? socket.id : key;
 }
 
 function isAllowedInviteUrl(socket: RoomSocket, url: URL): boolean {

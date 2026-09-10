@@ -121,7 +121,7 @@ describe("getTableActions", () => {
     { expected: ["undo", "resign", "leave"], state: "playing-my-turn" },
     { expected: ["undo", "resign", "leave"], state: "playing-opponent-turn" },
     { expected: ["resign", "leave"], state: "undo-request-pending" },
-    { expected: ["reject-undo", "allow-undo"], state: "undo-response-required" },
+    { expected: ["reject-undo", "allow-undo", "leave"], state: "undo-response-required" },
     { expected: ["rematch-ready", "replay", "leave"], state: "finished-rematch-open" },
     { expected: ["rematch-cancel", "replay", "leave"], state: "finished-rematch-ready" },
     { expected: ["replay", "leave"], state: "abandoned" }

@@ -48,6 +48,13 @@ export type GameDictionary = {
     chatSendTimeout: string;
     connected: string;
     connection: string;
+    /** `{message}` is replaced with the underlying transport error. */
+    connectionFailed: string;
+    connectionFailedXhr: string;
+    /** Client-side fallbacks for errors the server never formats. */
+    joinTargetRequired: string;
+    roomCodeRequired: string;
+    roomError: string;
     cancelMatch: string;
     cancelWaiting: string;
     cancelRematch: string;
@@ -264,6 +271,12 @@ const en = {
       chatSendTimeout: "Message not sent: no response from the server. Please try again.",
       connected: "Connected",
       connection: "Connection",
+      connectionFailed: "Realtime connection failed: {message}",
+      connectionFailedXhr:
+        "Realtime connection failed: xhr poll error. Deploy with npm start after npm run build, and make sure /socket.io is proxied with WebSocket upgrade support.",
+      joinTargetRequired: "Enter a room link, code, @handle, or account ID.",
+      roomCodeRequired: "Enter a room code.",
+      roomError: "Room error.",
       cancelMatch: "Cancel match",
       cancelWaiting: "Cancel waiting",
       cancelRematch: "Cancel rematch",
@@ -476,6 +489,12 @@ const zh = {
       chatSendTimeout: "消息发送超时，服务器未响应，请重试。",
       connected: "已连接",
       connection: "连接",
+      connectionFailed: "实时连接失败：{message}",
+      connectionFailedXhr:
+        "实时连接失败：xhr poll 错误。请先 npm run build 再用 npm start 部署，并确认 /socket.io 已配置 WebSocket 升级转发。",
+      joinTargetRequired: "请输入房间链接、房间号、@用户名 或账号 ID。",
+      roomCodeRequired: "请输入房间号。",
+      roomError: "房间出错。",
       cancelMatch: "取消匹配",
       cancelWaiting: "取消等待",
       cancelRematch: "取消再战",
@@ -688,6 +707,12 @@ const fr = {
       chatSendTimeout: "Message non envoyé : le serveur ne répond pas. Réessayez.",
       connected: "Connecté",
       connection: "Connexion",
+      connectionFailed: "Échec de la connexion en temps réel : {message}",
+      connectionFailedXhr:
+        "Échec de la connexion en temps réel : erreur xhr poll. Déployez avec npm start après npm run build, et assurez-vous que /socket.io est proxifié avec la mise à niveau WebSocket.",
+      joinTargetRequired: "Saisissez un lien de salon, un code, un @identifiant ou un ID de compte.",
+      roomCodeRequired: "Saisissez un code de salon.",
+      roomError: "Erreur du salon.",
       cancelMatch: "Annuler la recherche",
       cancelWaiting: "Annuler l'attente",
       cancelRematch: "Annuler la revanche",
@@ -900,6 +925,12 @@ const es = {
       chatSendTimeout: "Mensaje no enviado: el servidor no respondió. Inténtalo de nuevo.",
       connected: "Conectado",
       connection: "Conexión",
+      connectionFailed: "Falló la conexión en tiempo real: {message}",
+      connectionFailedXhr:
+        "Falló la conexión en tiempo real: error de xhr poll. Despliega con npm start después de npm run build y asegúrate de que /socket.io se proxifique con soporte de WebSocket.",
+      joinTargetRequired: "Introduce un enlace de sala, un código, un @usuario o un ID de cuenta.",
+      roomCodeRequired: "Introduce un código de sala.",
+      roomError: "Error de la sala.",
       cancelMatch: "Cancelar búsqueda",
       cancelWaiting: "Cancelar espera",
       cancelRematch: "Cancelar revancha",
@@ -1112,6 +1143,12 @@ const ru = {
       chatSendTimeout: "Сообщение не отправлено: сервер не ответил. Повторите попытку.",
       connected: "Подключен",
       connection: "Связь",
+      connectionFailed: "Не удалось установить соединение в реальном времени: {message}",
+      connectionFailedXhr:
+        "Не удалось установить соединение в реальном времени: ошибка xhr poll. Разверните через npm start после npm run build и убедитесь, что /socket.io проксируется с поддержкой WebSocket.",
+      joinTargetRequired: "Введите ссылку на комнату, код, @имя или ID аккаунта.",
+      roomCodeRequired: "Введите код комнаты.",
+      roomError: "Ошибка комнаты.",
       cancelMatch: "Отменить поиск",
       cancelWaiting: "Отменить ожидание",
       cancelRematch: "Отменить реванш",
@@ -1324,6 +1361,12 @@ const ar = {
       chatSendTimeout: "لم تُرسل الرسالة: لم يستجب الخادم. حاول مرة أخرى.",
       connected: "متصل",
       connection: "الاتصال",
+      connectionFailed: "فشل الاتصال المباشر: {message}",
+      connectionFailedXhr:
+        "فشل الاتصال المباشر: خطأ xhr poll. انشر باستخدام npm start بعد npm run build، وتأكد من تمرير /socket.io عبر وكيل يدعم ترقية WebSocket.",
+      joinTargetRequired: "أدخل رابط الغرفة أو رمزها أو @المعرّف أو معرّف الحساب.",
+      roomCodeRequired: "أدخل رمز الغرفة.",
+      roomError: "خطأ في الغرفة.",
       cancelMatch: "إلغاء البحث",
       cancelWaiting: "إلغاء الانتظار",
       cancelRematch: "إلغاء إعادة اللعب",

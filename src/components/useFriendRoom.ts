@@ -143,7 +143,13 @@ type UseFriendRoomOptions = {
   enabled?: boolean;
   messages?: Partial<{
     chatSendTimeout: string;
+    /** `{message}` is replaced with the underlying transport error. */
+    connectionFailed: string;
+    connectionFailedXhr: string;
+    joinTargetRequired: string;
     leaveRoomTimeout: string;
+    roomCodeRequired: string;
+    roomError: string;
   }>;
 };
 
@@ -160,11 +166,20 @@ const GUEST_TOKEN_STORAGE_KEY = "gomoku-guest-token";
 const LEADERBOARD_PAGE_SIZE = 10;
 const DEFAULT_CHAT_SEND_TIMEOUT_ERROR = "Message not sent: no response from the server. Please try again.";
 const DEFAULT_LEAVE_ROOM_TIMEOUT_ERROR = "Leaving the room timed out. Please try again.";
+const DEFAULT_CONNECTION_FAILED_ERROR = "Realtime connection failed: {message}";
+const DEFAULT_CONNECTION_XHR_ERROR =
+  "Realtime connection failed: xhr poll error. Deploy with npm start after npm run build, and make sure /socket.io is proxied with WebSocket upgrade support.";
+const DEFAULT_JOIN_TARGET_REQUIRED_ERROR = "Enter a room link, code, @handle, or account ID.";
+const DEFAULT_ROOM_CODE_REQUIRED_ERROR = "Enter a room code.";
+const DEFAULT_ROOM_ERROR = "Room error.";
 // 首屏默认展示名，必须与服务端渲染的结果一致（真实名字挂载后再从存储恢复）。
 const DEFAULT_PLAYER_NAME = "Player";
 
 export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions = {}): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
+  // Socket handlers are installed once (empty deps) but the errors they report
+  // must follow the active locale, so they read the latest copy through a ref.
+  const messagesRef = useRef(messages);
   const leaderboardAbortControllerRef = useRef<AbortController | null>(null);
   const leaderboardRequestSeqRef = useRef(0);
   const submittedGameRecordsRef = useRef<Set<string>>(new Set());
@@ -231,6 +246,13 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
   const leaveRoomRequestRef = useRef<LeaveRoomRequest | null>(null);
   const hasConnectedOnceRef = useRef(false);
   const reconnectHandlerRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    // No dep array on purpose: callers pass an inline object literal, so this
+    // keeps the ref in sync with the latest locale copy without re-creating the
+    // socket or threading `messages` through every callback's deps.
+    messagesRef.current = messages;
+  });
 
   const isPlayer = room?.role === "player" && room.seat !== null;
   const currentPlayer = isPlayer ? getPlayerBySeat(room.snapshot, room.seat) : null;
@@ -330,10 +352,10 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
     socket.on("disconnect", () => setConnectionStatus("disconnected"));
     socket.on("connect_error", (connectError: unknown) => {
       setConnectionStatus("disconnected");
-      setError(formatConnectionError(connectError));
+      setError(formatConnectionError(connectError, messagesRef.current));
     });
     socket.on("room:error", (roomError: unknown) => {
-      setError(isRoomErrorLike(roomError) ? roomError.message : "Room error.");
+      setError(isRoomErrorLike(roomError) ? roomError.message : messagesRef.current?.roomError ?? DEFAULT_ROOM_ERROR);
     });
     socket.on("room:state", (snapshot: unknown) => {
       if (isRoomSnapshot(snapshot)) {
@@ -461,7 +483,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
 
     if (!nextRoomCode) {
       setIsJoiningRoom(false);
-      setError("Enter a room code.");
+      setError(messages?.roomCodeRequired ?? DEFAULT_ROOM_CODE_REQUIRED_ERROR);
       return;
     }
 
@@ -502,7 +524,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
         applyRoomAck(response);
       }
     );
-  }, [applyRoomAck, enabled, ensureSocket, getActivePlayer, identityReady]);
+  }, [applyRoomAck, enabled, ensureSocket, getActivePlayer, identityReady, messages?.roomCodeRequired]);
 
   const joinRoomByTarget = useCallback((target: string, retryWithFreshIdentity = true) => {
     if (!enabled || !identityReady) {
@@ -513,7 +535,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
 
     if (!nextTarget) {
       setIsJoiningRoom(false);
-      setError("Enter a room link, code, @handle, or account ID.");
+      setError(messages?.joinTargetRequired ?? DEFAULT_JOIN_TARGET_REQUIRED_ERROR);
       return;
     }
 
@@ -546,7 +568,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
 
       applyRoomAck(response);
     });
-  }, [applyRoomAck, enabled, ensureSocket, getActivePlayer, identityReady]);
+  }, [applyRoomAck, enabled, ensureSocket, getActivePlayer, identityReady, messages?.joinTargetRequired]);
 
   const joinRoom = useCallback(() => {
     joinRoomByTarget(joinTarget);
@@ -1697,12 +1719,12 @@ function createRandomNumber(min: number, max: number): number {
   return min + Math.floor(Math.random() * span);
 }
 
-function formatConnectionError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error || "Connection failed.");
+function formatConnectionError(error: unknown, messages?: UseFriendRoomOptions["messages"]): string {
+  const message = error instanceof Error ? error.message : String(error || "");
 
   if (message.toLocaleLowerCase().includes("xhr poll")) {
-    return "Realtime connection failed: xhr poll error. Deploy with npm start after npm run build, and make sure /socket.io is proxied with WebSocket upgrade support.";
+    return messages?.connectionFailedXhr ?? DEFAULT_CONNECTION_XHR_ERROR;
   }
 
-  return `Realtime connection failed: ${message}`;
+  return (messages?.connectionFailed ?? DEFAULT_CONNECTION_FAILED_ERROR).replace("{message}", message || "unknown error");
 }

@@ -148,7 +148,9 @@ export function getTableActions(
         action("leave", "toolbar")
       ];
     case "undo-response-required":
-      return [action("reject-undo", "task"), action("allow-undo", "task")];
+      // The requested player must be able to leave too; otherwise a stalled
+      // undo request leaves them with no exit from the table.
+      return [action("reject-undo", "task"), action("allow-undo", "task"), action("leave", "toolbar")];
     case "finished-rematch-open":
       return [
         ...(capabilities.canRematch ? [action("rematch-ready", "task")] : []),

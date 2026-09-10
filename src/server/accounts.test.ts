@@ -126,6 +126,63 @@ describe("AccountStore", () => {
     }
   });
 
+  it("compacts the append log so file growth follows live accounts, not writes", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-account-compact-"));
+    const filePath = join(tempDir, "accounts.jsonl");
+    let now = 1_780_000_000_000;
+
+    try {
+      const store = new AccountStore({
+        compactAfterLines: 5,
+        filePath,
+        lastSeenPersistIntervalMs: 0,
+        now: () => now
+      });
+      const account = expectOk(store.createAccount({ displayName: "Compact Player" }));
+
+      // Every authenticate appends a new last-seen line: 1 + 9 = 10 writes.
+      for (let i = 0; i < 9; i += 1) {
+        now += 1_000;
+        expect(store.authenticate(account.token)).not.toBeNull();
+      }
+
+      // The log was collapsed at writes 5 and 9, so the 10 appends leave the
+      // single live account plus the one line written after the last collapse.
+      expect(readRawFile(filePath).trim().split(/\r?\n/)).toHaveLength(2);
+
+      const reloaded = new AccountStore({ filePath });
+
+      expect(reloaded.authenticate(account.token)).toMatchObject({
+        displayName: "Compact Player",
+        playerId: account.playerId
+      });
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("warns about unreadable lines instead of silently dropping history", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-account-corrupt-"));
+    const filePath = join(tempDir, "accounts.jsonl");
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    try {
+      writeFileSync(filePath, ["{ not json", JSON.stringify({ type: "account" }), ""].join("\n"), "utf8");
+      console.warn = (message?: unknown) => {
+        warnings.push(String(message));
+      };
+
+      new AccountStore({ filePath });
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("2 unreadable line(s)");
+    } finally {
+      console.warn = originalWarn;
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
   it("resolves account tokens into registered player identities", () => {
     const accountStore = new AccountStore({ filePath: false });
     const guestSessionStore = new GuestSessionStore();

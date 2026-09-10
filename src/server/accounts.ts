@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
+import { appendJsonlLine, JsonlCompactionTracker, readJsonlFile, rewriteJsonlFile } from "./jsonl-file";
 
 export type PlayerIdentityKind = "guest" | "registered";
 
@@ -39,6 +39,12 @@ export type GuestSessionSnapshot = {
 };
 
 type AccountStoreOptions = {
+  /**
+   * Rewrite the append-only log after this many appended lines, bounding file
+   * growth by the number of live accounts instead of the number of writes.
+   * `0` disables compaction (only useful in tests).
+   */
+  compactAfterLines?: number;
   filePath?: false | string;
   lastSeenPersistIntervalMs?: number;
   now?: () => number;
@@ -69,6 +75,7 @@ type PersistedAccountEntry = {
 };
 
 const ACCOUNT_ID_PREFIX = "acct";
+const ACCOUNT_COMPACT_AFTER_LINES = 2_000;
 const ACCOUNT_LAST_SEEN_PERSIST_INTERVAL_MS = 60_000;
 const GUEST_PLAYER_ID_PREFIX = "guest_";
 const GUEST_SESSION_MAX_ENTRIES = 10_000;
@@ -81,6 +88,7 @@ const RESERVED_PUBLIC_HANDLES = new Set(["admin", "api", "gomoku", "guest", "pla
 
 export class AccountStore {
   private readonly accounts = new Map<string, StoredAccount>();
+  private readonly compaction: JsonlCompactionTracker;
   private readonly filePath: false | string;
   private readonly lastPersistedSeenAt = new Map<string, number>();
   private readonly lastSeenPersistIntervalMs: number;
@@ -94,6 +102,9 @@ export class AccountStore {
       options.lastSeenPersistIntervalMs ?? ACCOUNT_LAST_SEEN_PERSIST_INTERVAL_MS
     );
     this.now = options.now ?? Date.now;
+    this.compaction = new JsonlCompactionTracker({
+      threshold: options.compactAfterLines ?? ACCOUNT_COMPACT_AFTER_LINES
+    });
 
     this.loadFromFile();
   }
@@ -228,43 +239,37 @@ export class AccountStore {
   }
 
   private loadFromFile(): void {
-    if (!this.filePath || !existsSync(this.filePath)) {
+    if (!this.filePath) {
       return;
     }
 
-    const content = readFileSync(this.filePath, "utf8");
+    const { entries, lineCount, skipped } = readJsonlFile(this.filePath, parsePersistedAccountEntry);
 
-    for (const line of content.split(/\r?\n/)) {
-      if (!line.trim()) {
-        continue;
+    if (skipped > 0) {
+      console.warn(`[accounts] skipped ${skipped} unreadable line(s) while loading ${this.filePath}`);
+    }
+
+    this.compaction.reset(lineCount);
+
+    for (const entry of entries) {
+      const previous = this.accounts.get(entry.account.id);
+
+      if (previous) {
+        this.playerIdByPublicHandle.delete(previous.publicHandle);
       }
 
-      try {
-        const entry = JSON.parse(line) as PersistedAccountEntry;
+      const persistedHandle = normalizePublicHandle(entry.account.publicHandle ?? "");
+      const publicHandle =
+        persistedHandle &&
+        isValidPublicHandle(persistedHandle) &&
+        !this.playerIdByPublicHandle.has(persistedHandle)
+          ? persistedHandle
+          : this.createAvailablePublicHandle(entry.account.displayName, entry.account.id);
+      const account = { ...entry.account, publicHandle };
 
-        if (entry.type === "account" && entry.account?.id) {
-          const previous = this.accounts.get(entry.account.id);
-
-          if (previous) {
-            this.playerIdByPublicHandle.delete(previous.publicHandle);
-          }
-
-          const persistedHandle = normalizePublicHandle(entry.account.publicHandle ?? "");
-          const publicHandle =
-            persistedHandle &&
-            isValidPublicHandle(persistedHandle) &&
-            !this.playerIdByPublicHandle.has(persistedHandle)
-              ? persistedHandle
-              : this.createAvailablePublicHandle(entry.account.displayName, entry.account.id);
-          const account = { ...entry.account, publicHandle };
-
-          this.accounts.set(account.id, account);
-          this.playerIdByPublicHandle.set(account.publicHandle, account.id);
-          this.lastPersistedSeenAt.set(account.id, account.lastSeenAt);
-        }
-      } catch {
-        // Ignore corrupt historical lines; the next valid line for an account wins.
-      }
+      this.accounts.set(account.id, account);
+      this.playerIdByPublicHandle.set(account.publicHandle, account.id);
+      this.lastPersistedSeenAt.set(account.id, account.lastSeenAt);
     }
   }
 
@@ -273,17 +278,37 @@ export class AccountStore {
       return;
     }
 
-    mkdirSync(dirname(this.filePath), { recursive: true });
-    appendFileSync(
-      this.filePath,
-      `${JSON.stringify({
-        account,
-        type: "account",
-        writtenAt: this.now()
-      } satisfies PersistedAccountEntry)}\n`,
-      "utf8"
-    );
+    appendJsonlLine(this.filePath, {
+      account,
+      type: "account",
+      writtenAt: this.now()
+    } satisfies PersistedAccountEntry);
     this.lastPersistedSeenAt.set(account.id, account.lastSeenAt);
+
+    if (this.compaction.noteAppend()) {
+      this.compactFile();
+    }
+  }
+
+  /**
+   * Collapses the append log into one line per live account. The in-memory map
+   * is already the win-by-latest-line projection of the log, so rewriting from
+   * it is lossless while bounding the file at ~the number of accounts.
+   */
+  private compactFile(): void {
+    if (!this.filePath || this.accounts.size === 0) {
+      return;
+    }
+
+    const writtenAt = this.now();
+
+    rewriteJsonlFile(
+      this.filePath,
+      [...this.accounts.values()].map(
+        (account) => ({ account, type: "account", writtenAt }) satisfies PersistedAccountEntry
+      )
+    );
+    this.compaction.reset(this.accounts.size);
   }
 }
 
@@ -480,6 +505,12 @@ function getGuestSessionSnapshot(session: StoredGuestSession, token: string): Gu
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function parsePersistedAccountEntry(value: unknown): PersistedAccountEntry | null {
+  const entry = value as PersistedAccountEntry;
+
+  return entry?.type === "account" && entry.account?.id ? entry : null;
 }
 
 function randomTokenPart(byteLength: number): string {

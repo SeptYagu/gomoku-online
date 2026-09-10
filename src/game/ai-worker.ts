@@ -1,44 +1,43 @@
+import { chooseAiMoveResult } from "./ai";
 import {
-  chooseAiMoveResult,
-  type AiDifficulty,
-  type AiMoveSource,
-  type AiRootCandidateShard
-} from "./ai";
-import type { Board, Move, Point, Stone } from "./types";
+  describeInvalidAiWorkerRequest,
+  type AiWorkerRequest,
+  type AiWorkerResponse
+} from "./ai-worker-request";
 
-type AiWorkerRequest = {
-  board: Board;
-  moves: Move[];
-  aiStone: Stone;
-  difficulty: AiDifficulty;
-  timeLimitMs: number;
-  rootCandidateShard?: AiRootCandidateShard;
-  openingSeed?: number;
-};
+self.onmessage = (event: MessageEvent<unknown>) => {
+  const invalid = describeInvalidAiWorkerRequest(event.data);
 
-type AiWorkerResponse = {
-  type: "best" | "done";
-  point: Point | null;
-  score?: number;
-  completedDepth?: number;
-  nodes?: number;
-  source?: AiMoveSource;
-};
+  if (invalid) {
+    self.postMessage({ type: "error", point: null, message: invalid } satisfies AiWorkerResponse);
+    return;
+  }
 
-self.onmessage = (event: MessageEvent<AiWorkerRequest>) => {
-  const { board, moves, aiStone, difficulty, timeLimitMs, rootCandidateShard, openingSeed } = event.data;
-  const result = chooseAiMoveResult(board, aiStone, {
-    difficulty,
-    moves,
-    timeLimitMs,
-    rootCandidateShard,
-    openingSeed,
-    onBestMove: (bestMove) => {
-      self.postMessage({ type: "best", point: bestMove } satisfies AiWorkerResponse);
-    }
-  });
+  const { board, moves, aiStone, difficulty, timeLimitMs, rootCandidateShard, openingSeed } =
+    event.data as AiWorkerRequest;
 
-  self.postMessage({ type: "done", ...result } satisfies AiWorkerResponse);
+  try {
+    const result = chooseAiMoveResult(board, aiStone, {
+      difficulty,
+      moves,
+      timeLimitMs,
+      rootCandidateShard,
+      openingSeed,
+      onBestMove: (bestMove) => {
+        self.postMessage({ type: "best", point: bestMove } satisfies AiWorkerResponse);
+      }
+    });
+
+    self.postMessage({ type: "done", ...result } satisfies AiWorkerResponse);
+  } catch (error) {
+    // Never leave the caller waiting on the watchdog: report the failure so it
+    // can finish this request immediately and fall back to a synchronous move.
+    self.postMessage({
+      type: "error",
+      point: null,
+      message: error instanceof Error ? error.message : String(error)
+    } satisfies AiWorkerResponse);
+  }
 };
 
 export {};

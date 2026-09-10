@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -277,6 +277,56 @@ describe("GameRecordStore", () => {
       dailyWins: 0,
       displayName: "Bob"
     });
+  });
+
+  it("compacts the append log so file growth follows live records, not writes", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-records-compact-"));
+    const filePath = join(tempDir, "records.jsonl");
+
+    try {
+      const store = new GameRecordStore({ compactAfterLines: 3, filePath, now: createClock() });
+      const first = createAuthoritativeGameRecord();
+
+      // Two writes for the first game (create + audit submission), one for the second.
+      store.submit(first, createSubmission(first, "player-1"));
+      store.submit(first, createSubmission(first, "player-2"));
+      const second = createAuthoritativeGameRecord({ gameId: "ROOM02-1", roomCode: "ROOM02" });
+      store.submit(second, createSubmission(second, "player-1"));
+
+      const lines = readFileSync(filePath, "utf8").trim().split(/\r?\n/);
+
+      expect(lines).toHaveLength(2);
+      expect(lines.map((line) => JSON.parse(line).record.id)).toEqual(["ROOM01-1", "ROOM02-1"]);
+
+      const reloaded = new GameRecordStore({ filePath });
+
+      expect(reloaded.listRecords().map((record) => record.id).sort()).toEqual(["ROOM01-1", "ROOM02-1"]);
+      expect(reloaded.getRecord("ROOM02-1")).toMatchObject({ roomCode: "ROOM02" });
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("warns about unreadable lines instead of silently dropping history", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-records-corrupt-"));
+    const filePath = join(tempDir, "records.jsonl");
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    try {
+      writeFileSync(filePath, ["{ not json", JSON.stringify({ type: "game-record" }), ""].join("\n"), "utf8");
+      console.warn = (message?: unknown) => {
+        warnings.push(String(message));
+      };
+
+      new GameRecordStore({ filePath });
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("2 unreadable line(s)");
+    } finally {
+      console.warn = originalWarn;
+      rmSync(tempDir, { force: true, recursive: true });
+    }
   });
 });
 

@@ -2,6 +2,12 @@ type FixedWindowRateLimiterOptions = {
   limit: number;
   maxEntries?: number;
   now?: () => number;
+  /**
+   * Minimum gap between full sweeps for expired entries. Sweeping is pure
+   * memory hygiene (an expired entry is already treated as fresh on read), so
+   * it does not need to run on every `consume`.
+   */
+  pruneIntervalMs?: number;
   windowMs: number;
 };
 
@@ -21,13 +27,16 @@ export class FixedWindowRateLimiter {
   private readonly limit: number;
   private readonly maxEntries: number;
   private readonly now: () => number;
+  private readonly pruneIntervalMs: number;
   private readonly windowMs: number;
+  private nextPruneAt = 0;
 
   constructor(options: FixedWindowRateLimiterOptions) {
     this.limit = Math.max(1, Math.floor(options.limit));
     this.maxEntries = Math.max(1, Math.floor(options.maxEntries ?? 10_000));
     this.now = options.now ?? Date.now;
     this.windowMs = Math.max(1, options.windowMs);
+    this.pruneIntervalMs = Math.max(0, options.pruneIntervalMs ?? this.windowMs);
   }
 
   consume(key: string): RateLimitResult {
@@ -50,20 +59,34 @@ export class FixedWindowRateLimiter {
   }
 
   private prune(now: number, preservedKey: string): void {
-    for (const [key, entry] of this.entries) {
-      if (now >= entry.resetAt) {
-        this.entries.delete(key);
+    if (now >= this.nextPruneAt) {
+      this.nextPruneAt = now + this.pruneIntervalMs;
+
+      for (const [key, entry] of this.entries) {
+        if (now >= entry.resetAt) {
+          this.entries.delete(key);
+        }
       }
     }
 
+    // The key being consumed is never evicted: it is already tracked, so
+    // dropping it would hand the caller a fresh window for free.
     if (this.entries.size < this.maxEntries || this.entries.has(preservedKey)) {
       return;
     }
 
-    const oldest = [...this.entries.entries()].sort((left, right) => left[1].resetAt - right[1].resetAt)[0];
+    let oldestKey: string | null = null;
+    let oldestResetAt = Number.POSITIVE_INFINITY;
 
-    if (oldest) {
-      this.entries.delete(oldest[0]);
+    for (const [key, entry] of this.entries) {
+      if (entry.resetAt < oldestResetAt) {
+        oldestResetAt = entry.resetAt;
+        oldestKey = key;
+      }
+    }
+
+    if (oldestKey !== null) {
+      this.entries.delete(oldestKey);
     }
   }
 }

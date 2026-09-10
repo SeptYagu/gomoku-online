@@ -71,8 +71,29 @@ function toSgfPoint(point: Point): string {
   return `${String.fromCharCode(97 + point.col)}${String.fromCharCode(97 + point.row)}`;
 }
 
+/**
+ * Escapes a value for use inside an SGF property (`PB[...]`).
+ *
+ * Per SGF FF[4] only `\`, `]` and line breaks are special *inside* a property
+ * value — `(` `)` `;` are structural only outside values, so escaping them
+ * would just inject stray backslashes into player-visible text. Control
+ * characters have no representation at all, so they are dropped instead of
+ * being emitted raw.
+ */
 function escapeSgfValue(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\]/g, "\\]").replace(/\r?\n/g, "\\n");
+  return stripControlCharacters(
+    value.replace(/\\/g, "\\\\").replace(/\]/g, "\\]").replace(/\r\n?|\n/g, "\\n")
+  );
+}
+
+function stripControlCharacters(value: string): string {
+  return [...value]
+    .filter((character) => {
+      const code = character.codePointAt(0) ?? 0;
+
+      return code >= 0x20 && code !== 0x7f;
+    })
+    .join("");
 }
 
 function sanitizeFileNamePart(value: string): string {

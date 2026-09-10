@@ -1,6 +1,6 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { PlayerIdentityKind } from "./accounts";
+import { appendJsonlLine, JsonlCompactionTracker, readJsonlFile, rewriteJsonlFile } from "./jsonl-file";
 import type { RoomVisibility } from "./rooms";
 import type { Board, Move, Point, Stone } from "../game/types";
 
@@ -158,9 +158,16 @@ export type LeaderboardSnapshot = {
   version: number;
 };
 
+const GAME_RECORD_COMPACT_AFTER_LINES = 2_000;
 const MAX_GAME_RECORD_LIST_LIMIT = 100_000;
 
 type GameRecordStoreOptions = {
+  /**
+   * Rewrite the append-only log after this many appended lines, bounding file
+   * growth by the number of live records instead of the number of writes.
+   * `0` disables compaction (only useful in tests).
+   */
+  compactAfterLines?: number;
   filePath?: false | string;
   now?: () => number;
 };
@@ -172,6 +179,7 @@ type PersistedGameRecordEntry = {
 };
 
 export class GameRecordStore {
+  private readonly compaction: JsonlCompactionTracker;
   private readonly filePath: false | string;
   private leaderboardCache: { dayStart: number; entries: LeaderboardEntry[]; revision: number } | null = null;
   private readonly now: () => number;
@@ -181,6 +189,9 @@ export class GameRecordStore {
   constructor(options: GameRecordStoreOptions = {}) {
     this.filePath = options.filePath === undefined ? false : options.filePath === false ? false : resolve(options.filePath);
     this.now = options.now ?? Date.now;
+    this.compaction = new JsonlCompactionTracker({
+      threshold: options.compactAfterLines ?? GAME_RECORD_COMPACT_AFTER_LINES
+    });
 
     this.loadFromFile();
   }
@@ -415,31 +426,25 @@ export class GameRecordStore {
   }
 
   private loadFromFile(): void {
-    if (!this.filePath || !existsSync(this.filePath)) {
+    if (!this.filePath) {
       return;
     }
 
-    const content = readFileSync(this.filePath, "utf8");
+    const { entries, lineCount, skipped } = readJsonlFile(this.filePath, parsePersistedGameRecordEntry);
 
-    for (const line of content.split(/\r?\n/)) {
-      if (!line.trim()) {
-        continue;
-      }
+    if (skipped > 0) {
+      console.warn(`[game-records] skipped ${skipped} unreadable line(s) while loading ${this.filePath}`);
+    }
 
-      try {
-        const entry = JSON.parse(line) as PersistedGameRecordEntry;
+    this.compaction.reset(lineCount);
 
-        if (entry.type === "game-record" && entry.record?.id) {
-          this.records.set(entry.record.id, {
-            ...entry.record,
-            authoritative: entry.record.authoritative === true,
-            visibility: entry.record.visibility === "unlisted" ? "unlisted" : "public"
-          });
-          this.recordsRevision += 1;
-        }
-      } catch {
-        // Ignore corrupt historical lines; the next valid line for a record wins.
-      }
+    for (const entry of entries) {
+      this.records.set(entry.record.id, {
+        ...entry.record,
+        authoritative: entry.record.authoritative === true,
+        visibility: entry.record.visibility === "unlisted" ? "unlisted" : "public"
+      });
+      this.recordsRevision += 1;
     }
   }
 
@@ -448,17 +453,43 @@ export class GameRecordStore {
       return;
     }
 
-    mkdirSync(dirname(this.filePath), { recursive: true });
-    appendFileSync(
-      this.filePath,
-      `${JSON.stringify({
-        record,
-        type: "game-record",
-        writtenAt: this.now()
-      } satisfies PersistedGameRecordEntry)}\n`,
-      "utf8"
-    );
+    appendJsonlLine(this.filePath, {
+      record,
+      type: "game-record",
+      writtenAt: this.now()
+    } satisfies PersistedGameRecordEntry);
+
+    if (this.compaction.noteAppend()) {
+      this.compactFile();
+    }
   }
+
+  /**
+   * Collapses the append log into one line per live record. The in-memory map
+   * is the win-by-latest-line projection of the log, so rewriting from it is
+   * lossless while bounding the file at ~the number of records.
+   */
+  private compactFile(): void {
+    if (!this.filePath || this.records.size === 0) {
+      return;
+    }
+
+    const writtenAt = this.now();
+
+    rewriteJsonlFile(
+      this.filePath,
+      [...this.records.values()].map(
+        (record) => ({ record, type: "game-record", writtenAt }) satisfies PersistedGameRecordEntry
+      )
+    );
+    this.compaction.reset(this.records.size);
+  }
+}
+
+function parsePersistedGameRecordEntry(value: unknown): PersistedGameRecordEntry | null {
+  const entry = value as PersistedGameRecordEntry;
+
+  return entry?.type === "game-record" && entry.record?.id ? entry : null;
 }
 
 function createSavedGameRecord(

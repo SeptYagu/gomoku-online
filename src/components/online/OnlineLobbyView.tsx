@@ -328,10 +328,10 @@ function RoomProfilePanel({ dictionary, room }: { dictionary: GameDictionary; ro
       </div>
 
       <div className="room-profile-stats">
-        <span>{labels.gamesCount.replace("{count}", String(profile?.stats.games ?? 0))}</span>
-        <span>{labels.profileWins.replace("{count}", String(profile?.stats.wins ?? 0))}</span>
-        <span>{labels.profileLosses.replace("{count}", String(profile?.stats.losses ?? 0))}</span>
-        <span>{labels.profileDraws.replace("{count}", String(profile?.stats.draws ?? 0))}</span>
+        <span>{labels.gamesCount.replace("{count}", String(profile?.stats?.games ?? 0))}</span>
+        <span>{labels.profileWins.replace("{count}", String(profile?.stats?.wins ?? 0))}</span>
+        <span>{labels.profileLosses.replace("{count}", String(profile?.stats?.losses ?? 0))}</span>
+        <span>{labels.profileDraws.replace("{count}", String(profile?.stats?.draws ?? 0))}</span>
       </div>
 
       {records.length > 0 ? (

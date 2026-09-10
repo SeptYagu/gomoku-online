@@ -1204,8 +1204,11 @@ export class RoomStore {
     const now = this.now();
     this.pruneTransientIdentityState(now);
     const limit = clampPresenceListLimit(query.limit);
+    // Index membership once instead of scanning every room for every presence
+    // (O(users × rooms) with a fresh room array allocated per user).
+    const roomPresenceIndex = buildRoomPresenceIndex([...this.rooms.values()]);
     const users = [...this.presences.values()]
-      .map((entry) => getPresenceSnapshotForEntry(entry, [...this.rooms.values()]))
+      .map((entry) => getPresenceSnapshotForEntry(entry, roomPresenceIndex))
       .filter((presence) => query.includeOffline || presence.connected)
       .sort(comparePresence)
       .slice(0, limit);
@@ -1883,8 +1886,38 @@ function hasConnectedParticipant(room: RoomState): boolean {
   return [...room.players, ...room.spectators].some((participant) => participant.connected);
 }
 
-function getPresenceSnapshotForEntry(entry: PresenceEntry, rooms: RoomState[]): UserPresenceSnapshot {
-  const roomPresence = findRoomPresence(entry.playerId, rooms);
+type RoomPresenceLocation = { role: RoomParticipantRole; room: RoomState };
+
+/**
+ * Maps each participant id to the room that holds it, so presence snapshots can
+ * resolve room/role in O(1) instead of rescanning every room per user.
+ * The first room encountered wins, matching the previous linear-scan order.
+ */
+function buildRoomPresenceIndex(rooms: RoomState[]): Map<string, RoomPresenceLocation> {
+  const index = new Map<string, RoomPresenceLocation>();
+
+  for (const room of rooms) {
+    for (const player of room.players) {
+      if (!index.has(player.id)) {
+        index.set(player.id, { role: "player", room });
+      }
+    }
+
+    for (const spectator of room.spectators) {
+      if (!index.has(spectator.id)) {
+        index.set(spectator.id, { role: "spectator", room });
+      }
+    }
+  }
+
+  return index;
+}
+
+function getPresenceSnapshotForEntry(
+  entry: PresenceEntry,
+  roomPresenceIndex: Map<string, RoomPresenceLocation>
+): UserPresenceSnapshot {
+  const roomPresence = roomPresenceIndex.get(entry.playerId) ?? null;
   const connected = entry.connectionCount > 0;
 
   return {
@@ -1898,23 +1931,6 @@ function getPresenceSnapshotForEntry(entry: PresenceEntry, rooms: RoomState[]): 
     roomStatus: roomPresence?.room.status ?? null,
     status: getPresenceStatus(connected, roomPresence)
   };
-}
-
-function findRoomPresence(
-  playerId: string,
-  rooms: RoomState[]
-): { role: RoomParticipantRole; room: RoomState } | null {
-  for (const room of rooms) {
-    if (room.players.some((player) => player.id === playerId)) {
-      return { role: "player", room };
-    }
-
-    if (room.spectators.some((spectator) => spectator.id === playerId)) {
-      return { role: "spectator", room };
-    }
-  }
-
-  return null;
 }
 
 function getPresenceStatus(

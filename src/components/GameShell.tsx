@@ -46,8 +46,9 @@ type GameSnapshot = {
 };
 
 type AiWorkerResponse = {
-  type: "best" | "done";
+  type: "best" | "done" | "error";
   point: Point | null;
+  message?: string;
   score?: number;
   completedDepth?: number;
   nodes?: number;
@@ -97,7 +98,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     enabled: isOnlineWorkspaceEnabled(mode),
     messages: {
       chatSendTimeout: dictionary.room.chatSendTimeout,
-      leaveRoomTimeout: dictionary.room.leaveRoomTimeout
+      connectionFailed: dictionary.room.connectionFailed,
+      connectionFailedXhr: dictionary.room.connectionFailedXhr,
+      joinTargetRequired: dictionary.room.joinTargetRequired,
+      leaveRoomTimeout: dictionary.room.leaveRoomTimeout,
+      roomCodeRequired: dictionary.room.roomCodeRequired,
+      roomError: dictionary.room.roomError
     }
   });
 
@@ -480,6 +486,13 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
           if (event.data.type === "best") {
             latestBestMove = event.data.point ?? latestBestMove;
+            return;
+          }
+
+          if (event.data.type === "error") {
+            // The worker rejected its payload or threw; the other shards (or the
+            // watchdog) still get a chance to answer, so just retire this one.
+            markWorkerComplete();
             return;
           }
 
