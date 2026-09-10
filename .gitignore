@@ -18,5 +18,8 @@ data/accounts/
 # 本地工具产物：agent 工作目录、远程附件缓存、TS 增量编译信息，都不进版本库
 .codex/
 .codex-remote-attachments/
-.workbuddy/
 tsconfig.tsbuildinfo
+
+# agent 工作目录：只放行项目记忆（跨机器同步项目约定与踩坑），其余本地状态一律不进库
+.workbuddy/*
+!.workbuddy/memory/
