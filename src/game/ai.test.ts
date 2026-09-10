@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chooseAiMove, chooseAiMoveResult, getAiTimeLimitMs, getAiWorkerCount, getThreatSummaryAfterMove } from "./ai";
-import { createBoard, getGameResult, getLegalMoves, placeStone } from "./board";
+import { createBoard, getGameResult, getLegalMoves, isValidMove, placeStone } from "./board";
 import { GENERATED_OPENING_BOOK_LINES } from "./opening-book";
 import type { Board, Move, Point, Stone } from "./types";
 
@@ -55,6 +55,83 @@ describe("ai", () => {
       { row: 8, col: 4 },
       { row: 8, col: 9 }
     ]).toContainEqual(move);
+  });
+
+  it("takes its own five when the candidate pool is crowded", () => {
+    // 白棋第 2 行已连四，黑棋在别处堆出远多于 rootCandidates 的空点，
+    // 逼使候选截断真实生效；必胜手来自全量候选池，不受截断影响。
+    let board = placeLine(createBoard(), { row: 2, col: 2 }, { row: 0, col: 1 }, 4, "white");
+    board = placeStones(board, "black", CROWDING_STONES);
+
+    const result = chooseAiMoveResult(board, "white", { difficulty: "normal", timeLimitMs: 1_000 });
+
+    expect(result.source).toBe("winning");
+    expect([
+      { row: 2, col: 1 },
+      { row: 2, col: 6 }
+    ]).toContainEqual(result.point);
+  });
+
+  it("blocks the opponent's five when its own candidates are crowded", () => {
+    // 黑棋第 12 行已连四，白棋在别处堆出大量候选点，白棋仍必须落在唯一堵点上。
+    let board = placeLine(createBoard(), { row: 12, col: 4 }, { row: 0, col: 1 }, 4, "black");
+    board = placeStones(board, "white", CROWDING_STONES);
+
+    const result = chooseAiMoveResult(board, "white", { difficulty: "normal", timeLimitMs: 1_000 });
+
+    expect(result.source).toBe("blocking");
+    expect([
+      { row: 12, col: 3 },
+      { row: 12, col: 8 }
+    ]).toContainEqual(result.point);
+  });
+
+  it("reports the same tactical move from every parallel worker shard", () => {
+    let board = placeLine(createBoard(), { row: 2, col: 2 }, { row: 0, col: 1 }, 4, "white");
+    board = placeStones(board, "black", CROWDING_STONES);
+
+    const results = Array.from({ length: 4 }, (_, index) =>
+      chooseAiMoveResult(board, "white", {
+        difficulty: "hard",
+        timeLimitMs: 300,
+        rootCandidateShard: { index, total: 4 }
+      })
+    );
+
+    for (const result of results) {
+      expect(result.source).toBe("winning");
+      expect([
+        { row: 2, col: 1 },
+        { row: 2, col: 6 }
+      ]).toContainEqual(result.point);
+    }
+  });
+
+  it("keeps the win/block guarantee on crowded random boards", () => {
+    let tacticalCases = 0;
+
+    for (let seed = 1; seed <= 12; seed += 1) {
+      const board = createCrowdedBoard(seed);
+      const legalMoves = getLegalMoves(board);
+      const winningMoves = legalMoves.filter((point) => completesFive(board, point, "white"));
+      const blockingMoves = legalMoves.filter((point) => completesFive(board, point, "black"));
+      const result = chooseAiMoveResult(board, "white", { difficulty: "normal", timeLimitMs: 1_000 });
+
+      expect(result.point).not.toBeNull();
+
+      if (winningMoves.length > 0) {
+        tacticalCases += 1;
+        expect(result.source).toBe("winning");
+        expect(winningMoves).toContainEqual(result.point);
+      } else if (blockingMoves.length > 0) {
+        tacticalCases += 1;
+        expect(result.source).toBe("blocking");
+        expect(blockingMoves).toContainEqual(result.point);
+      }
+    }
+
+    // 生成的密集局面必须真的覆盖到战术分支，否则这条用例就退化成空跑。
+    expect(tacticalCases).toBeGreaterThan(0);
   });
 
   it("always returns a legal empty point", () => {
@@ -398,4 +475,68 @@ function relativeToBoardPoint(point: { row: number; col: number }): Point {
     row: 7 + point.row,
     col: 7 + point.col
   };
+}
+
+// 19 个互不相连成五的散点：任意方向的同色连子最长只有 3，用来把候选池撑到
+// rootCandidates（normal 26 / expert 14）之上，同时不引入额外的五连威胁。
+const CROWDING_STONES: Point[] = [
+  { row: 5, col: 4 },
+  { row: 5, col: 5 },
+  { row: 5, col: 6 },
+  { row: 8, col: 3 },
+  { row: 8, col: 4 },
+  { row: 5, col: 10 },
+  { row: 6, col: 10 },
+  { row: 9, col: 8 },
+  { row: 10, col: 8 },
+  { row: 4, col: 11 },
+  { row: 5, col: 11 },
+  { row: 7, col: 2 },
+  { row: 7, col: 3 },
+  { row: 10, col: 3 },
+  { row: 10, col: 4 },
+  { row: 3, col: 7 },
+  { row: 4, col: 7 },
+  { row: 11, col: 6 },
+  { row: 11, col: 7 }
+];
+
+function placeStones(board: Board, stone: Stone, points: Point[]): Board {
+  return points.reduce((nextBoard, point) => placeStone(nextBoard, point, stone), board);
+}
+
+function completesFive(board: Board, point: Point, stone: Stone): boolean {
+  return getGameResult(placeStone(board, point, stone), point, stone).state === "won";
+}
+
+function createCrowdedBoard(seed: number): Board {
+  let board = createBoard();
+  let state = (seed * 2654435761) >>> 0;
+  const nextRandom = () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4_294_967_296;
+  };
+
+  let placed = 0;
+  let attempts = 0;
+
+  while (placed < 34 && attempts < 400) {
+    attempts += 1;
+
+    const stone: Stone = placed % 2 === 0 ? "black" : "white";
+    const point = {
+      row: 3 + Math.floor(nextRandom() * 9),
+      col: 3 + Math.floor(nextRandom() * 9)
+    };
+
+    // 只保留尚未分出胜负的局面：落子会凑成五连的位置直接跳过。
+    if (!isValidMove(board, point) || getThreatSummaryAfterMove(board, point, stone).wins > 0) {
+      continue;
+    }
+
+    board = placeStone(board, point, stone);
+    placed += 1;
+  }
+
+  return board;
 }

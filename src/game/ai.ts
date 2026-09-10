@@ -304,14 +304,17 @@ export function chooseAiMoveResult(
   }
 
   const opponent = getOpponent(aiStone);
-  const winningMove = chooseBestMove(board, findWinningMoves(board, candidates, aiStone), aiStone);
+  // 必胜/必挡必须在**全量候选池**上判定：候选截断只服务于后续 α-β 搜索的预算控制。
+  // 若在截断集里找五连点，结果就会依赖候选排序（中残局空点密集时可能把唯一的
+  // 五连点/堵五点挤出截断线），normal 难度 depth=1 无从补救。
+  const winningMove = chooseBestMove(board, findWinningMoves(board, candidatePool, aiStone), aiStone);
 
   if (winningMove) {
     reportBestMove(onBestMove, winningMove);
     return createAiMoveResult(winningMove, WIN_SCORE + scoreAiMove(board, winningMove, aiStone) * 0.001, "winning");
   }
 
-  const blockingMove = chooseBestMove(board, findWinningMoves(board, candidates, opponent), aiStone);
+  const blockingMove = chooseBestMove(board, findWinningMoves(board, candidatePool, opponent), aiStone);
 
   if (blockingMove) {
     reportBestMove(onBestMove, blockingMove);
