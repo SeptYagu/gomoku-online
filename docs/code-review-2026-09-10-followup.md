@@ -5,6 +5,30 @@
 - 方式：diff 精读 + 调用链回溯 + 依赖源码核对（React 19.2.7 / socket.io-client 4.8.3）
 - 结论：**无 Critical**。M1/M2/M3 修复扎实且带测试；M4/M5/m6/m7 的修法引入了 **2 个新的 Major 级副作用**（R1 模式被 URL 反向改写、R2 聊天在途闸门可永久锁死），建议在下一迭代优先处理。
 
+## 修复进展（滚动更新）
+
+| 项 | 状态 | 落地方式 |
+|---|---|---|
+| R1 模式快照被 URL 反向改写 | ✅ 已修 | `readGameModeFromUrl` 补 `bootGameModeCache ??=`，与另外四个 `boot*Cache` 对齐；「启动快照」真正只读一次，`clearRoomUrl()` 不再反向改模式 |
+| R2 聊天在途闸门可永久锁死 | ✅ 已修 | 新增 `src/components/chat-send-gate.ts`：同步闸门 + 8s 看门狗，房间聊天与公聊共用；配 4 条单测 |
+| R3 超时文案硬编码英文 | ⏳ 未修 | 根因是 `useFriendRoom` 拿不到 dictionary（六语种在组件层），需要先做「locale 注入 hook」；本轮新增的聊天超时文案也算在内 |
+| R4 超时后迟到 ack 与 `left=false` 冲突 | ⏳ 未修 | 下一迭代 |
+| R5 leaveRoom 计时器无卸载清理 | ⏳ 未修 | 低危 |
+| R6 启动快照缓存为模块级 `let` | ⏳ 未修（有意） | R1 的修法沿用同一模式：同一页面生命周期内只读一次，是刻意的；已补注释说明 |
+| R7 新代码零测试 | 🟡 部分 | 闸门已有 4 条单测；`leaveRoom` 超时语义、boot snapshot 仍无覆盖 |
+
+### R1 修法说明
+
+只做了一件事：把 `readGameModeFromUrl` 的读取结果缓存住（`bootGameModeCache ??=`）。这样「启动快照」= 页面加载时的 URL，之后 `syncRoomUrl` / `clearRoomUrl` 的 `history.replaceState` 不再反向改写模式，行为回到 M5 重构之前的语义（旧实现在 `useState` 初始化器里读一次 URL，之后固定），同时保留 `useSyncExternalStore` 带来的水合一致性。
+
+**没有**再加「离开房间时显式 `setMode("room")`」：快照定住之后，`pendingTransition.nextMode = null` 的语义自然成立（留在 online-lobby），多写一处反而多一个状态来源。
+
+### R2 修法说明
+
+`socket.io` 的 ack 只有 `.timeout()` 产出的才带 `withError`，断线时其余的会被 `_clearAcks()` 直接丢弃 —— 所以「emit 前置在途闸门」必须自带看门狗，否则一次网络抖动就能把发送按钮永久锁死。闸门抽成 `createChatSendGate()`：`begin(onTimeout)` 同步判重入并挂看门狗，`settle()` 幂等复位。超时回调负责复位按钮状态、把内容放回输入框并提示，尽量不丢用户输入。
+
+语义说明：若 socket 处于断开状态，socket.io 会把包缓冲到 `sendBuffer`，重连后仍会发出并回调 ack；看门狗 8s 对这种情况属「可能偏早」，但换来的是「绝不可能永久锁死」，取舍明确。
+
 ## 验证
 
 | 项 | 结果 |
