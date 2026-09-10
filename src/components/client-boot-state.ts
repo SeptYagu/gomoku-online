@@ -16,6 +16,13 @@ import type { GameMode } from "./online/workspace-state";
  * 也不会出现水合不一致。
  *
  * 快照必须是原始值或稳定引用，否则 React 会判定「每次渲染都变了」而循环重渲染。
+ *
+ * ⚠️ 快照函数**必须自带缓存**（下面的 `bootGameModeCache ??=`，或 useFriendRoom 里
+ * 的 `boot*Cache`）。React 在非水合路径下每次渲染都会重新调用 getSnapshot 并与上次
+ * 结果比较，不同就立刻以新值渲染；而这一层没有任何订阅通知，URL/storage 却会被
+ * 本模块之外的代码改写（例如 `syncRoomUrl` / `clearRoomUrl` 里的 history.replaceState）。
+ * 不缓存就等于把一个「启动快照」变成了随 URL 浮动的活值：离开房间时 `?room=` 被抹掉，
+ * 模式就会静默从 room 掉回 local。
  */
 
 export const DEFAULT_GAME_MODE: GameMode = "local";
@@ -25,12 +32,18 @@ export function subscribeToBootState(): () => void {
   return () => {};
 }
 
+// 与 useFriendRoom 的 boot*Cache 同理：读一次就定住，之后 URL 再变也不回头改写模式。
+let bootGameModeCache: GameMode | null = null;
+
 function readGameModeFromUrl(): GameMode {
   if (typeof window === "undefined") {
     return DEFAULT_GAME_MODE;
   }
 
-  return new URLSearchParams(window.location.search).has("room") ? "room" : DEFAULT_GAME_MODE;
+  bootGameModeCache ??=
+    new URLSearchParams(window.location.search).has("room") ? "room" : DEFAULT_GAME_MODE;
+
+  return bootGameModeCache;
 }
 
 function getServerGameMode(): GameMode {

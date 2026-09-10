@@ -34,6 +34,7 @@ import type {
 import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
 import { isAccountIdentityReady } from "./account-identity";
 import { subscribeToBootState } from "./client-boot-state";
+import { createChatSendGate, type ChatSendGate } from "./chat-send-gate";
 
 type RoomSocket = {
   disconnect: () => void;
@@ -148,6 +149,9 @@ const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
 const GUEST_TOKEN_STORAGE_KEY = "gomoku-guest-token";
 const LEADERBOARD_PAGE_SIZE = 10;
 const LEAVE_ROOM_TIMEOUT_MS = 8_000;
+// 聊天 ack 一直不来（断线丢包、服务端重启）时的兜底提示。
+// 注意：本 hook 拿不到 dictionary（六语种文案在组件层），这里沿用既有的英文兜底风格。
+const CHAT_ACK_TIMEOUT_ERROR = "Message not sent: no response from the server. Please try again.";
 // 首屏默认展示名，必须与服务端渲染的结果一致（真实名字挂载后再从存储恢复）。
 const DEFAULT_PLAYER_NAME = "Player";
 
@@ -212,10 +216,10 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   const [copiedInvite, setCopiedInvite] = useState(false);
   const autoJoinRoomCodeRef = useRef<string | null>(null);
   const createRequestInFlightRef = useRef(false);
-  // 聊天发送的在途标记：state 只用来驱动按钮禁用，ref 才是真正的重入闸门，
-  // 否则同一次点击事件循环里的连点仍是「按钮还没重渲染 → 又发一条」。
-  const chatSendInFlightRef = useRef(false);
-  const publicChatSendInFlightRef = useRef(false);
+  // 聊天发送的在途闸门：state 只用来驱动按钮禁用，同步闸门（ref 里的 gate）才是真正的
+  // 重入防线，且带 8s 看门狗 —— socket.io 断线时会静默丢弃普通 ack，没有兜底就会永久锁死。
+  const chatSendGateRef = useRef<ChatSendGate | null>(null);
+  const publicChatSendGateRef = useRef<ChatSendGate | null>(null);
   const hasConnectedOnceRef = useRef(false);
   const reconnectHandlerRef = useRef<(() => void) | null>(null);
 
@@ -807,7 +811,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   }, [applyRoomAck, ensureSocket, room]);
 
   const sendChatMessage = useCallback(() => {
-    if (!room || chatSendInFlightRef.current) {
+    if (!room) {
       return;
     }
 
@@ -817,13 +821,25 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       return;
     }
 
-    chatSendInFlightRef.current = true;
+    const gate = (chatSendGateRef.current ??= createChatSendGate());
+
+    if (
+      !gate.begin(() => {
+        // 超时兜底：闸门已经放开，把内容放回输入框并提示，避免按钮永久禁用 + 内容丢失。
+        setIsSendingChat(false);
+        setError(CHAT_ACK_TIMEOUT_ERROR);
+        setChatText((current) => (current ? current : text));
+      })
+    ) {
+      return;
+    }
+
     setIsSendingChat(true);
-    // 乐观清空输入框：ack 回来之前按钮已经是禁用态，连点也不会重复发同一条。
+    // 乐观清空输入框：ack 回来之前闸门已经关上，连点也不会重复发同一条。
     setChatText("");
 
     ensureSocket().emit("room:chat-send", { roomCode: room.snapshot.code, text }, (response: RoomAck) => {
-      chatSendInFlightRef.current = false;
+      gate.settle();
       setIsSendingChat(false);
       applyRoomAck(response);
 
@@ -835,7 +851,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   }, [applyRoomAck, chatText, ensureSocket, room]);
 
   const sendPublicChatMessage = useCallback(() => {
-    if (!identityReady || publicChatSendInFlightRef.current) {
+    if (!identityReady) {
       return;
     }
 
@@ -846,8 +862,18 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     }
 
     const player = getActivePlayer();
+    const gate = (publicChatSendGateRef.current ??= createChatSendGate());
 
-    publicChatSendInFlightRef.current = true;
+    if (
+      !gate.begin(() => {
+        setIsSendingPublicChat(false);
+        setError(CHAT_ACK_TIMEOUT_ERROR);
+        setPublicChatText((current) => (current ? current : text));
+      })
+    ) {
+      return;
+    }
+
     setIsSendingPublicChat(true);
     setPlayerNameState(player.playerName);
     persistPlayerName(player.playerName);
@@ -857,7 +883,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       "public-chat:send",
       { ...player, text },
       (response: PublicChatAck) => {
-        publicChatSendInFlightRef.current = false;
+        gate.settle();
         setIsSendingPublicChat(false);
 
         if (!response.ok) {
