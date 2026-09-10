@@ -1,0 +1,22 @@
+[Unit]
+Description=Gomoku Online
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+# Replace this path with the production checkout.
+WorkingDirectory=/srv/gomoku-online
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3010
+# Enable this only when the app is reached exclusively through the trusted
+# loopback reverse proxy configured in openresty-gomoku.conf.example.
+Environment=GOMOKU_TRUST_PROXY=1
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

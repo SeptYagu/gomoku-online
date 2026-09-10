@@ -106,6 +106,13 @@ location / {
 }
 ```
 
+仓库提供了可纳入部署流程的脱敏模板：
+
+- [`deploy/gomoku-online.service.example`](deploy/gomoku-online.service.example)：systemd 用户服务示例；安装前替换 `WorkingDirectory`，并确认 `npm` 的绝对路径。
+- [`deploy/openresty-gomoku.conf.example`](deploy/openresty-gomoku.conf.example)：OpenResty/Nginx 反代示例；安装前替换域名，并按实际环境补充 TLS 配置。
+
+systemd 用户服务可放到 `~/.config/systemd/user/gomoku-online.service`；OpenResty 配置路径由部署平台决定。示例文件不包含证书路径、密钥或服务器专属目录。
+
 推送 GitHub 后等待 90 秒，再用同一条命令确认真实服务器页面、`/api/version`、Socket.IO polling 入口和 WebSocket upgrade：
 
 ```bash
