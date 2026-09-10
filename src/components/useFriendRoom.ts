@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { io } from "socket.io-client";
 import type { Point, Stone } from "@/game/types";
 import type { AccountSession } from "@/server/accounts";
@@ -33,6 +33,7 @@ import type {
 } from "@/server/rooms";
 import { clearRoomUrlFromHref, getRoomUrlFromHref } from "./room-url";
 import { isAccountIdentityReady } from "./account-identity";
+import { subscribeToBootState } from "./client-boot-state";
 
 type RoomSocket = {
   disconnect: () => void;
@@ -70,6 +71,8 @@ export type FriendRoomController = {
   canUndo: boolean;
   chatText: string;
   connectionStatus: "idle" | "connecting" | "connected" | "disconnected";
+  isSendingChat: boolean;
+  isSendingPublicChat: boolean;
   cancelMatch: () => void;
   copyInvite: () => void;
   copiedInvite: boolean;
@@ -144,6 +147,9 @@ const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
 const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
 const GUEST_TOKEN_STORAGE_KEY = "gomoku-guest-token";
 const LEADERBOARD_PAGE_SIZE = 10;
+const LEAVE_ROOM_TIMEOUT_MS = 8_000;
+// 首屏默认展示名，必须与服务端渲染的结果一致（真实名字挂载后再从存储恢复）。
+const DEFAULT_PLAYER_NAME = "Player";
 
 export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
@@ -154,14 +160,27 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   const [connectionStatus, setConnectionStatus] = useState<FriendRoomController["connectionStatus"]>("idle");
   const [room, setRoom] = useState<RoomClientState | null>(null);
   const [account, setAccount] = useState<AccountSession | null>(null);
-  const [accountStatus, setAccountStatus] = useState<FriendRoomController["accountStatus"]>(() =>
-    readAccountToken() ? "loading" : "guest"
+  // 身份相关的前四项来自浏览器（token / 名字 / 邀请链接），服务端渲染读不到。
+  // 这里只保存「程序显式设置过的覆盖值」，未设置时回落到启动快照（见 client-boot-state.ts），
+  // 于是首屏 SSR 与 hydration 完全一致，且不需要在 effect 里补 setState。
+  const [accountStatusOverride, setAccountStatus] = useState<FriendRoomController["accountStatus"] | null>(null);
+  const [playerNameOverride, setPlayerNameState] = useState<string | null>(null);
+  const [joinTargetOverride, setJoinTargetState] = useState<string | null>(null);
+  const bootAccountStatus = useSyncExternalStore(
+    subscribeToBootState,
+    readBootAccountStatus,
+    getServerAccountStatus
   );
-  const [playerName, setPlayerNameState] = useState(getInitialPlayerName);
-  const [joinTarget, setJoinTargetState] = useState(getInitialJoinTarget);
+  const bootPlayerName = useSyncExternalStore(subscribeToBootState, readBootPlayerName, getServerPlayerName);
+  const bootJoinTarget = useSyncExternalStore(subscribeToBootState, readBootJoinTarget, getServerJoinTarget);
+  const accountStatus = accountStatusOverride ?? bootAccountStatus;
+  const playerName = playerNameOverride ?? bootPlayerName;
+  const joinTarget = joinTargetOverride ?? bootJoinTarget;
   const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
   const [lobbyStatus, setLobbyStatus] = useState<FriendRoomController["lobbyStatus"]>("idle");
   const [chatText, setChatText] = useState("");
+  const [isSendingChat, setIsSendingChat] = useState(false);
+  const [isSendingPublicChat, setIsSendingPublicChat] = useState(false);
   const [profile, setProfile] = useState<PlayerProfileSnapshot | null>(null);
   const [profileStatus, setProfileStatus] = useState<FriendRoomController["profileStatus"]>("idle");
   const [previousGameRecord, setPreviousGameRecord] = useState<RoomGameRecordSnapshot | null>(null);
@@ -182,11 +201,21 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   const [leaderboardStatus, setLeaderboardStatus] = useState<FriendRoomController["leaderboardStatus"]>("idle");
   const [matchmakingStatus, setMatchmakingStatus] = useState<FriendRoomController["matchmakingStatus"]>("idle");
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
-  const [isJoiningRoom, setIsJoiningRoom] = useState(() => enabled && Boolean(getRoomCodeFromCurrentUrl()));
+  const [isJoiningRoomOverride, setIsJoiningRoom] = useState<boolean | null>(null);
+  const bootIsJoiningRoom = useSyncExternalStore(
+    subscribeToBootState,
+    readBootIsJoiningRoom,
+    getServerIsJoiningRoom
+  );
+  const isJoiningRoom = isJoiningRoomOverride ?? bootIsJoiningRoom;
   const [error, setError] = useState<string | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const autoJoinRoomCodeRef = useRef<string | null>(null);
   const createRequestInFlightRef = useRef(false);
+  // 聊天发送的在途标记：state 只用来驱动按钮禁用，ref 才是真正的重入闸门，
+  // 否则同一次点击事件循环里的连点仍是「按钮还没重渲染 → 又发一条」。
+  const chatSendInFlightRef = useRef(false);
+  const publicChatSendInFlightRef = useRef(false);
   const hasConnectedOnceRef = useRef(false);
   const reconnectHandlerRef = useRef<(() => void) | null>(null);
 
@@ -778,7 +807,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
   }, [applyRoomAck, ensureSocket, room]);
 
   const sendChatMessage = useCallback(() => {
-    if (!room) {
+    if (!room || chatSendInFlightRef.current) {
       return;
     }
 
@@ -788,17 +817,25 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       return;
     }
 
+    chatSendInFlightRef.current = true;
+    setIsSendingChat(true);
+    // 乐观清空输入框：ack 回来之前按钮已经是禁用态，连点也不会重复发同一条。
+    setChatText("");
+
     ensureSocket().emit("room:chat-send", { roomCode: room.snapshot.code, text }, (response: RoomAck) => {
+      chatSendInFlightRef.current = false;
+      setIsSendingChat(false);
       applyRoomAck(response);
 
-      if (response.ok) {
-        setChatText("");
+      if (!response.ok) {
+        // 发送失败时把内容放回输入框（仅当用户还没输入新内容），方便直接重试。
+        setChatText((current) => (current ? current : text));
       }
     });
   }, [applyRoomAck, chatText, ensureSocket, room]);
 
   const sendPublicChatMessage = useCallback(() => {
-    if (!identityReady) {
+    if (!identityReady || publicChatSendInFlightRef.current) {
       return;
     }
 
@@ -810,20 +847,27 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
 
     const player = getActivePlayer();
 
+    publicChatSendInFlightRef.current = true;
+    setIsSendingPublicChat(true);
     setPlayerNameState(player.playerName);
     persistPlayerName(player.playerName);
+    setPublicChatText("");
+
     ensureSocket().emit(
       "public-chat:send",
       { ...player, text },
       (response: PublicChatAck) => {
+        publicChatSendInFlightRef.current = false;
+        setIsSendingPublicChat(false);
+
         if (!response.ok) {
           setError(response.error.message);
+          setPublicChatText((current) => (current ? current : text));
           return;
         }
 
         setPublicChatMessages(response.value.messages);
         setPublicChatStatus("ready");
-        setPublicChatText("");
         setError(null);
       }
     );
@@ -831,13 +875,41 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
 
   const leaveRoom = useCallback((onComplete?: (left: boolean) => void) => {
     if (!room) {
+      // 没有房间可离开也算「已离开」，否则调用方会一直等一个永远不来的回调。
+      onComplete?.(true);
       return;
     }
+
+    let settled = false;
+    let timeoutId: number | null = null;
+
+    // 离开房间必须给出确定结果：服务端不 ack 时超时兜底，
+    // 否则 GameShell 的 isTransitioning 会永久为 true，模式切换被锁死。
+    const finish = (left: boolean, message?: string) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+
+      if (message) {
+        setError(message);
+      }
+
+      onComplete?.(left);
+    };
+
+    timeoutId = window.setTimeout(() => finish(false, "Leaving the room timed out. Please try again."), LEAVE_ROOM_TIMEOUT_MS);
 
     ensureSocket().emit("room:leave", { roomCode: room.snapshot.code }, (response: RoomAck) => {
       if (!response.ok) {
         setError(response.error.message);
-        onComplete?.(false);
+        finish(false);
         return;
       }
 
@@ -848,7 +920,7 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
       setChatText("");
       setMatchmakingStatus("idle");
       setError(null);
-      onComplete?.(true);
+      finish(true);
     });
   }, [ensureSocket, room]);
 
@@ -1193,6 +1265,8 @@ export function useFriendRoom({ enabled = true }: UseFriendRoomOptions = {}): Fr
     canUndo,
     chatText,
     connectionStatus,
+    isSendingChat,
+    isSendingPublicChat,
     cancelMatch,
     copyInvite,
     copiedInvite,
@@ -1326,9 +1400,55 @@ function sortLobbyRooms(rooms: RoomListItem[]): RoomListItem[] {
   return [...rooms].sort((first, second) => second.updatedAt - first.updatedAt || first.code.localeCompare(second.code));
 }
 
+// 启动快照读取器：只在浏览器里读 storage / URL，而且只读一次（之后由 React 状态接管）。
+// 对应的服务端快照固定为默认值，保证 hydration 前后的首屏 DOM 完全一致。
+let bootAccountStatusCache: FriendRoomController["accountStatus"] | null = null;
+
+function readBootAccountStatus(): FriendRoomController["accountStatus"] {
+  bootAccountStatusCache ??= readAccountToken() ? "loading" : "guest";
+  return bootAccountStatusCache;
+}
+
+function getServerAccountStatus(): "guest" {
+  return "guest";
+}
+
+let bootPlayerNameCache: string | null = null;
+
+function readBootPlayerName(): string {
+  bootPlayerNameCache ??= getInitialPlayerName();
+  return bootPlayerNameCache;
+}
+
+function getServerPlayerName(): string {
+  return DEFAULT_PLAYER_NAME;
+}
+
+let bootJoinTargetCache: string | null = null;
+
+function readBootJoinTarget(): string {
+  bootJoinTargetCache ??= getInitialJoinTarget();
+  return bootJoinTargetCache;
+}
+
+function getServerJoinTarget(): string {
+  return "";
+}
+
+let bootIsJoiningRoomCache: boolean | null = null;
+
+function readBootIsJoiningRoom(): boolean {
+  bootIsJoiningRoomCache ??= Boolean(getRoomCodeFromCurrentUrl());
+  return bootIsJoiningRoomCache;
+}
+
+function getServerIsJoiningRoom(): boolean {
+  return false;
+}
+
 function getInitialPlayerName(): string {
   if (typeof window === "undefined") {
-    return "Player";
+    return DEFAULT_PLAYER_NAME;
   }
 
   const storedPlayerName = readRoomSession()?.playerName ?? window.localStorage.getItem(PLAYER_NAME_STORAGE_KEY);

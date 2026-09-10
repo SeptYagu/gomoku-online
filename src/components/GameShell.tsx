@@ -14,6 +14,7 @@ import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import type { RoomSnapshot } from "@/server/rooms";
+import { useBootGameMode } from "./client-boot-state";
 import { InteractionConfirmation } from "./InteractionConfirmation";
 import {
   getModeChangeDecision,
@@ -75,7 +76,11 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const [nextPlayer, setNextPlayer] = useState<Stone>("black");
   const [status, setStatus] = useState<GameStatus>({ state: "playing", nextPlayer: "black" });
   const [moves, setMoves] = useState<Move[]>([]);
-  const [mode, setMode] = useState<GameMode>(() => getInitialGameMode());
+  // 模式由 URL 决定（带 ?room= 直接进联机），但 URL 只有浏览器能读：
+  // 未显式切换过模式前先用启动快照，避免 SSR/CSR 首屏不一致。
+  const bootMode = useBootGameMode();
+  const [modeOverride, setMode] = useState<GameMode | null>(null);
+  const mode = modeOverride ?? bootMode;
   const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("normal");
   const [firstPlayer, setFirstPlayer] = useState<FirstPlayer>("human");
   const [pendingDifficulty, setPendingDifficulty] = useState<AiDifficulty | null>(null);
@@ -159,6 +164,11 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   }
 
   function handleModeChange(nextMode: GameMode) {
+    if (pendingTransition) {
+      // 已经有待确认的切换：忽略新的点击，避免确认态被悄悄改写。
+      return;
+    }
+
     const decision = getModeChangeDecision({
       currentMode: mode,
       localMoveCount: moves.length,
@@ -530,6 +540,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     mode === "room"
       ? friendRoom.canPlay
       : !isAiThinking && status.state === "playing" && !(mode === "ai" && nextPlayer !== humanStone);
+  // 确认弹窗打开期间必须锁住模式切换：否则第二次点击会直接覆盖 pendingTransition，
+  // 让用户以为自己在回答第一个问题时其实已经换了目标模式。
+  const isModeSwitchLocked =
+    isAiThinking || friendRoom.isJoiningRoom || isTransitioning || pendingTransition !== null;
 
   return (
     <>
@@ -558,7 +572,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             data-game-mode="local"
             type="button"
             onClick={() => handleModeChange("local")}
-            disabled={isAiThinking || friendRoom.isJoiningRoom || isTransitioning}
+            disabled={isModeSwitchLocked}
           >
             <Users aria-hidden="true" focusable={false} />
             {dictionary.modes.local}
@@ -568,7 +582,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             data-game-mode="ai"
             type="button"
             onClick={() => handleModeChange("ai")}
-            disabled={isAiThinking || friendRoom.isJoiningRoom || isTransitioning}
+            disabled={isModeSwitchLocked}
           >
             <Bot aria-hidden="true" focusable={false} />
             {dictionary.modes.ai}
@@ -578,7 +592,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             data-game-mode="room"
             type="button"
             onClick={() => handleModeChange("room")}
-            disabled={isAiThinking || friendRoom.isJoiningRoom || isTransitioning}
+            disabled={isModeSwitchLocked}
           >
             <Wifi aria-hidden="true" focusable={false} />
             {dictionary.modes.room}
@@ -852,14 +866,6 @@ function getAiStone(firstPlayer: FirstPlayer): Stone {
 
 function createOpeningSeed(): number {
   return Math.floor(Math.random() * 0x1_0000_0000);
-}
-
-function getInitialGameMode(): GameMode {
-  if (typeof window === "undefined") {
-    return "local";
-  }
-
-  return new URLSearchParams(window.location.search).has("room") ? "room" : "local";
 }
 
 function getRoomGameStatus(snapshot: RoomSnapshot | null): GameStatus {

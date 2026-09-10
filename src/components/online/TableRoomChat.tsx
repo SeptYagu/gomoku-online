@@ -31,6 +31,7 @@ export function TableRoomChat({ dictionary, room }: TableRoomChatProps) {
         )}
       </div>
       <form
+        aria-busy={room.isSendingChat}
         className="room-chat-form"
         onSubmit={(event) => {
           event.preventDefault();
@@ -46,7 +47,7 @@ export function TableRoomChat({ dictionary, room }: TableRoomChatProps) {
         />
         <button
           className="icon-button"
-          disabled={!room.chatText.trim()}
+          disabled={room.isSendingChat || !room.chatText.trim()}
           title={labels.sendMessage}
           type="submit"
         >

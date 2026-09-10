@@ -583,6 +583,7 @@ function PublicChatPanel({ dictionary, room }: { dictionary: GameDictionary; roo
         )}
       </div>
       <form
+        aria-busy={room.isSendingPublicChat}
         className="room-chat-form"
         onSubmit={(event) => {
           event.preventDefault();
@@ -598,7 +599,9 @@ function PublicChatPanel({ dictionary, room }: { dictionary: GameDictionary; roo
         />
         <button
           className="icon-button"
-          disabled={room.accountStatus === "loading" || !room.publicChatText.trim()}
+          disabled={
+            room.accountStatus === "loading" || room.isSendingPublicChat || !room.publicChatText.trim()
+          }
           title={labels.sendMessage}
           type="submit"
         >
