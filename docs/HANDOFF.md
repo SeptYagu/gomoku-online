@@ -5054,3 +5054,13 @@ b6faf9e
 - 提交范围：30 个文件，834 行新增、84 行删除；包含 previousGameId、成员鉴权 record lookup、当前/上一局主棋盘复盘、public Profile 入口、abandoned 有 moves 复盘、六语种/响应式、170 项测试、Chrome smoke、验证报告和计划/逻辑文档。
 - `git push origin main`：成功，`69e6e49..998833d`。
 - 本段 handoff 作为独立记录提交并再次推送；持续目标不结束，下一阶段进入 IX-07。
+
+## 2026-07-10 IX-07 精确大厅汇总
+
+### 步骤 1：重读 Presence、room list 与版本边界
+
+1. 重读 IX-07、RoomStore list/presence、socket lobby/presence 广播、controller 增量 upsert/delete、在线大厅空状态、六语种/CSS 和 presence/lobby UI smoke；Git 与远端同步，仅 `.codex/` 未跟踪。
+2. 服务端当前已有无分页 Presence map、`presenceVersion` 和 `lobbyVersion`；但 `RoomListSnapshot` 只返回分页 rooms + version，客户端对 `lobby:room-updated/deleted` 直接改数组，从未保存、比较或在版本缺口时 resync。
+3. IX-07 采用独立 `LobbyActivitySummary.version`：RoomStore 每次读取时比较 online/open/playing/spectators 指纹，数值变化才单调递增；同一状态重复广播保持同版本。初始 lobby ack 携整份 activity，后续 `lobby:activity` 整份替换。
+4. room delta 与 activity 都按 `incoming <= current` 忽略、`incoming === current + 1` 应用、`incoming > current + 1` full `lobby:list` resync；抽为纯函数测试，不把 socket 到达顺序写成隐含假设。
+5. `onlineUsers` 严格按已加入当前实例 Presence 且 connectionCount > 0 的 playerId 去重；open/playing/spectators 只统计 public 可发现房，防止 unlisted 通过聚合指标侧漏。UI 分列显示四项并明确“本服务器实例”，异常时标记暂不可用，不填伪造数字。
