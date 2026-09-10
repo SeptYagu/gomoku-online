@@ -61,7 +61,7 @@
 | `npx vitest run` | ✅ **24 文件 / 221 测试全通过**（本轮新增 6 文件 33 条：jsonl-file 5 / client-address 6 / dictionaries 3 / ai-worker-request 10 / accounts +2 / game-records +2 / rate-limit +3 / sgf +2 / table-ui-state 改 1 条） |
 | `npx tsc --noEmit` | ✅ 仍是**恰好 8 条基线错误**，分布未变、无新增 |
 | `npx eslint`（本轮改动的 25 个文件） | ✅ 退出码 0，零警告 |
-| 浏览器冒烟 | ⚠️ 仍不可执行；新增人工确认项：`room-error` 文案是否随语言切换、被请求悔棋时「离开房间」是否可点、线上若在反代之后是否已设 `GOMOKU_TRUST_PROXY=1` |
+| 浏览器冒烟 | ✅ 公开站实测通过：阿拉伯语页面真实离房超时后 `room-error` 使用当前语言；被请求悔棋时 Leave 存在且启用。OpenResty 已确认，`GOMOKU_TRUST_PROXY=1` 仍需登录主机核实 |
 
 ---
 

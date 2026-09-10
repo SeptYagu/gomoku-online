@@ -77,6 +77,14 @@ npm start
 
 如果前面有 Nginx/OpenResty 反向代理，确认 `/socket.io/` 和普通页面都代理到同一个 Node 端口，并保留 WebSocket upgrade：
 
+同时给 Node 进程设置 `GOMOKU_TRUST_PROXY=1`。下面的 `X-Forwarded-For` 必须用
+`$remote_addr` **覆盖**客户端传入值，不能使用会把客户端 XFF 拼进去的
+`$proxy_add_x_forwarded_for`；否则攻击者仍可伪造限流地址。
+
+```bash
+GOMOKU_TRUST_PROXY=1 npm start
+```
+
 ```nginx
 location /socket.io/ {
   proxy_pass http://127.0.0.1:3000;
@@ -84,7 +92,7 @@ location /socket.io/ {
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection "upgrade";
   proxy_set_header Host $host;
-  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-For $remote_addr;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 60s;
 }
@@ -93,7 +101,7 @@ location / {
   proxy_pass http://127.0.0.1:3000;
   proxy_http_version 1.1;
   proxy_set_header Host $host;
-  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-For $remote_addr;
   proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```

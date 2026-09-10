@@ -131,6 +131,7 @@ async function main(): Promise<void> {
       );
       await waitForTableState(cdp, "undo-response-required");
       await assertTableTaskModel(cdp, "undo-response-required", ["Reject", "Allow"]);
+      await assertEnabledTableAction(cdp, "leave", "Leave");
       await assertSidebarTabs(cdp, preparedRooms.waitingCode);
       await assertUndoLayoutAtTargetViewports(cdp);
       await clickButton(cdp, "Allow");
@@ -216,6 +217,19 @@ async function main(): Promise<void> {
       await clickTableAction(cdp, "leave");
       await waitForOnlineView(cdp, "lobby");
       await assertRtlMobileLobby(cdp);
+      await clickLobbyRoomButton(cdp, preparedRooms.playingCode);
+      await waitForRoomUrl(cdp, preparedRooms.playingCode);
+      await waitForTableState(cdp, "spectating");
+      await cdp.send("Network.enable");
+      await cdp.send("Network.emulateNetworkConditions", {
+        connectionType: "none",
+        downloadThroughput: 0,
+        latency: 0,
+        offline: true,
+        uploadThroughput: 0
+      });
+      await clickTableAction(cdp, "leave");
+      await assertRoomError(cdp, "انتهت مهلة مغادرة الغرفة. حاول مرة أخرى.");
 
       console.log(`Lobby UI smoke: ${baseUrl}`);
       console.log("PASS local and AI workspaces do not create a realtime connection");
@@ -228,6 +242,8 @@ async function main(): Promise<void> {
       console.log(`PASS lobby playing row is watchable - ${preparedRooms.playingCode}`);
       console.log("PASS online lobby and table are mutually exclusive");
       console.log("PASS table tasks are state-driven, non-blocking, and limited to four actions");
+      console.log("PASS the undo recipient can still use the enabled Leave action");
+      console.log("PASS room-error uses the active Arabic locale after a real browser timeout");
       console.log("PASS terminal and post-rematch records replay move-by-move on the readonly table board");
       console.log("PASS the previous authoritative game remains available after locale refresh and rejoin");
       console.log("PASS both players choose rematch before one immediate next game starts");
@@ -746,6 +762,42 @@ async function assertTableTaskModel(cdp: CdpClient, expectedState: string, expec
   if (!isValid) {
     throw new Error(`Table task model failed for ${expectedState}: ${JSON.stringify(result)}`);
   }
+}
+
+async function assertEnabledTableAction(cdp: CdpClient, action: string, expectedLabel: string): Promise<void> {
+  const result = await evaluate<{ count: number; disabled: boolean; label: string }>(
+    cdp,
+    `(() => {
+      const buttons = Array.from(document.querySelectorAll('[data-table-action="${action}"]'));
+      const button = buttons[0];
+      return {
+        count: buttons.length,
+        disabled: button?.disabled ?? true,
+        label: (button?.textContent || '').trim()
+      };
+    })()`
+  );
+
+  if (result.count !== 1 || result.disabled || !result.label.includes(expectedLabel)) {
+    throw new Error(`Expected enabled table action ${action}: ${JSON.stringify(result)}`);
+  }
+}
+
+async function assertRoomError(cdp: CdpClient, expectedText: string): Promise<void> {
+  await waitForValue(async () => {
+    const error = await evaluate<{ text: string; visible: boolean }>(
+      cdp,
+      `(() => {
+        const element = document.querySelector('.room-error');
+        return {
+          text: (element?.textContent || '').trim(),
+          visible: Boolean(element && element.getBoundingClientRect().height > 0)
+        };
+      })()`
+    );
+
+    return error.visible && error.text === expectedText ? error : null;
+  }, STEP_TIMEOUT_MS);
 }
 
 async function assertSidebarTabs(cdp: CdpClient, roomCode: string): Promise<void> {

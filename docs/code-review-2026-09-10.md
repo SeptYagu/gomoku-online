@@ -79,9 +79,11 @@
 - `npx tsc --noEmit`：8 条错误，全部是既有基线（`game-record-export.test.ts` 1 +
   `game-record-opening-analysis.test.ts` 1 + `room-socket.test.ts` 6），无新增。
 - `npx eslint`：本轮改动的 25 个文件零错误零警告（exit 0）。
-- ⚠️ **未做**：真实浏览器冒烟（sandbox 阻止本机端口 / `next dev` 起不来），
-  建议人工确认：① 连续收发聊天与离开房间后 `room-error` 文案随语言切换；② 被请求悔棋时能点到「离开房间」；
-  ③ 线上若在反代之后，确认 `GOMOKU_TRUST_PROXY=1` 已设置。
+- ✅ **线上浏览器 UI 冒烟已完成**：在公开测试站切到阿拉伯语后制造真实离房超时，`room-error`
+  显示阿拉伯语；被请求悔棋时「Leave」按钮存在且启用。两项都已写入 `smoke:lobby-ui` 回归脚本。
+- ⚠️ **部署环境仍需主机侧确认**：公开站响应头确认使用 OpenResty，但 HTTP 无法读取 Node 进程环境；
+  请在服务器确认已设置 `GOMOKU_TRUST_PROXY=1`。README 的 OpenResty/Nginx 示例已改为用
+  `$remote_addr` 覆盖 XFF，不再使用会追加客户端值的 `$proxy_add_x_forwarded_for`。
 
 ## 总体结论
 
