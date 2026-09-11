@@ -67,7 +67,7 @@ function formatSgfResult(winner: Stone | null, finishReason: PlayerGameRecordSum
   return `${prefix}+`;
 }
 
-function toSgfPoint(point: Point): string {
+export function toSgfPoint(point: Point): string {
   return `${String.fromCharCode(97 + point.col)}${String.fromCharCode(97 + point.row)}`;
 }
 
@@ -80,7 +80,7 @@ function toSgfPoint(point: Point): string {
  * characters have no representation at all, so they are dropped instead of
  * being emitted raw.
  */
-function escapeSgfValue(value: string): string {
+export function escapeSgfValue(value: string): string {
   return stripControlCharacters(
     value.replace(/\\/g, "\\\\").replace(/\]/g, "\\]").replace(/\r\n?|\n/g, "\\n")
   );

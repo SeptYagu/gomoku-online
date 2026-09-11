@@ -23,10 +23,36 @@ export function InteractionConfirmation({
   title
 }: InteractionConfirmationProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     cancelRef.current?.focus();
-  }, []);
+
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isSubmitting) {
+        event.preventDefault();
+        onCancel();
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [isSubmitting, onCancel]);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Tab") {
+      if (event.shiftKey && document.activeElement === cancelRef.current) {
+        event.preventDefault();
+        confirmRef.current?.focus();
+      } else if (!event.shiftKey && document.activeElement === confirmRef.current) {
+        event.preventDefault();
+        cancelRef.current?.focus();
+      }
+    }
+  };
 
   return (
     <section
@@ -34,6 +60,7 @@ export function InteractionConfirmation({
       aria-labelledby="interaction-confirmation-title"
       className="interaction-confirmation"
       data-interaction-confirmation
+      onKeyDown={handleKeyDown}
       role="alertdialog"
     >
       <AlertTriangle aria-hidden="true" focusable={false} />
@@ -45,7 +72,7 @@ export function InteractionConfirmation({
         <button className="mode-pill" disabled={isSubmitting} onClick={onCancel} ref={cancelRef} type="button">
           {cancelLabel}
         </button>
-        <button className="mode-pill danger" disabled={isSubmitting} onClick={onConfirm} type="button">
+        <button className="mode-pill danger" disabled={isSubmitting} onClick={onConfirm} ref={confirmRef} type="button">
           {confirmLabel}
         </button>
       </div>

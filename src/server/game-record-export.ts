@@ -1,5 +1,6 @@
+import { escapeSgfValue, toSgfPoint } from "../game/game-record-sgf";
 import type { GameRecordStatus, SavedGameRecord } from "./game-records";
-import type { Point, Stone } from "../game/types";
+import type { Stone } from "../game/types";
 
 export type GameRecordExportFormat = "jsonl" | "sgf";
 export type GameRecordExportStatus = "all" | GameRecordStatus;
@@ -91,10 +92,3 @@ function formatSgfResult(winner: Stone | null, finishReason: SavedGameRecord["fi
   return `${prefix}+`;
 }
 
-function toSgfPoint(point: Point): string {
-  return `${String.fromCharCode(97 + point.col)}${String.fromCharCode(97 + point.row)}`;
-}
-
-function escapeSgfValue(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\]/g, "\\]").replace(/\r?\n/g, "\\n");
-}
