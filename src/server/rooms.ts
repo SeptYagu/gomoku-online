@@ -142,7 +142,17 @@ export type RoomListQuery = {
   status?: RoomListStatus | "all";
 };
 
+export type LobbyActivitySummary = {
+  generatedAt: number;
+  onlineUsers: number;
+  openTables: number;
+  playingTables: number;
+  spectators: number;
+  version: number;
+};
+
 export type RoomListSnapshot = {
+  activity?: LobbyActivitySummary;
   generatedAt: number;
   rooms: RoomListItem[];
   version: number;
@@ -342,6 +352,7 @@ export class RoomStore {
   private readonly gameRecordStore: GameRecordStore;
   private readonly hostAccountIdByRoomCode = new Map<string, string>();
   private readonly lifecycleLimits: RoomLifecycleLimits;
+  private cachedActivitySummary: LobbyActivitySummary | null = null;
   private lobbyVersion = 0;
   private nextPublicChatMessageId = 1;
   private readonly now: () => number;
@@ -1109,10 +1120,63 @@ export class RoomStore {
       .map(getRoomListItem);
 
     return {
+      activity: this.getLobbyActivitySummary(),
       generatedAt: now,
       rooms,
       version: this.lobbyVersion
     };
+  }
+
+  getLobbyActivitySummary(): LobbyActivitySummary {
+    const now = this.now();
+    let onlineUsers = 0;
+
+    for (const entry of this.presences.values()) {
+      if (entry.connectionCount > 0) {
+        onlineUsers += 1;
+      }
+    }
+
+    let openTables = 0;
+    let playingTables = 0;
+    let spectators = 0;
+
+    for (const room of this.rooms.values()) {
+      if (room.visibility === "public") {
+        if (room.status === "waiting") {
+          openTables += 1;
+        } else if (room.status === "playing") {
+          playingTables += 1;
+        }
+        spectators += room.spectators.length;
+      }
+    }
+
+    const cached = this.cachedActivitySummary;
+
+    if (
+      cached &&
+      cached.onlineUsers === onlineUsers &&
+      cached.openTables === openTables &&
+      cached.playingTables === playingTables &&
+      cached.spectators === spectators
+    ) {
+      return cached;
+    }
+
+    const nextVersion = cached ? cached.version + 1 : 1;
+    const summary: LobbyActivitySummary = {
+      generatedAt: now,
+      onlineUsers,
+      openTables,
+      playingTables,
+      spectators,
+      version: nextVersion
+    };
+
+    this.cachedActivitySummary = summary;
+
+    return summary;
   }
 
   listPublicChatMessages(): PublicChatSnapshot {

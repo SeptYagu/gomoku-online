@@ -21,6 +21,7 @@ import type {
   RoomListAck
 } from "@/server/room-contract";
 import type {
+  LobbyActivitySummary,
   LobbyRoomDeletedEvent,
   LobbyRoomUpdatedEvent,
   PresenceSnapshot,
@@ -86,6 +87,7 @@ export type FriendRoomController = {
   joinListedRoom: (roomCode: string) => void;
   joinRoom: () => void;
   leaveRoom: (onComplete?: (left: boolean) => void) => void;
+  lobbyActivity: LobbyActivitySummary | null;
   lobbyRooms: RoomListItem[];
   lobbyStatus: "idle" | "loading" | "ready" | "error";
   leaderboard: LeaderboardSnapshot | null;
@@ -203,6 +205,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
   const accountStatus = accountStatusOverride ?? bootAccountStatus;
   const playerName = playerNameOverride ?? bootPlayerName;
   const joinTarget = joinTargetOverride ?? bootJoinTarget;
+  const [lobbyActivity, setLobbyActivity] = useState<LobbyActivitySummary | null>(null);
   const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
   const [lobbyStatus, setLobbyStatus] = useState<FriendRoomController["lobbyStatus"]>("idle");
   const [chatText, setChatText] = useState("");
@@ -360,6 +363,16 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
     socket.on("room:state", (snapshot: unknown) => {
       if (isRoomSnapshot(snapshot)) {
         setRoom((currentRoom) => (currentRoom ? { ...currentRoom, snapshot } : currentRoom));
+      }
+    });
+    socket.on("lobby:activity", (summary: unknown) => {
+      if (isLobbyActivitySummary(summary)) {
+        setLobbyActivity((prev) => {
+          if (!prev || summary.version >= prev.version) {
+            return summary;
+          }
+          return prev;
+        });
       }
     });
     socket.on("lobby:room-updated", (event: unknown) => {
@@ -628,6 +641,9 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
       }
 
       setLobbyRooms(response.value.rooms);
+      if (response.value.activity) {
+        setLobbyActivity(response.value.activity);
+      }
       setLobbyStatus("ready");
     });
   }, [ensureSocket]);
@@ -1350,6 +1366,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
     leaderboardSearch,
     leaderboardScope,
     leaderboardStatus,
+    lobbyActivity,
     lobbyRooms,
     lobbyStatus,
     matchmakingStatus,
@@ -1424,6 +1441,23 @@ function isAbortError(value: unknown): boolean {
 
 function isRoomSnapshot(value: unknown): value is RoomSnapshot {
   return typeof value === "object" && value !== null && "code" in value && "board" in value && "players" in value;
+}
+
+function isLobbyActivitySummary(value: unknown): value is LobbyActivitySummary {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "onlineUsers" in value &&
+    typeof (value as { onlineUsers: unknown }).onlineUsers === "number" &&
+    "openTables" in value &&
+    typeof (value as { openTables: unknown }).openTables === "number" &&
+    "playingTables" in value &&
+    typeof (value as { playingTables: unknown }).playingTables === "number" &&
+    "spectators" in value &&
+    typeof (value as { spectators: unknown }).spectators === "number" &&
+    "version" in value &&
+    typeof (value as { version: unknown }).version === "number"
+  );
 }
 
 function isLobbyRoomUpdatedEvent(value: unknown): value is LobbyRoomUpdatedEvent {

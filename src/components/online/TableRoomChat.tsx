@@ -2,6 +2,7 @@
 
 import { Send } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
+import { formatChatMessageTime } from "@/lib/date-format";
 import type { FriendRoomController } from "../useFriendRoom";
 
 type TableRoomChatProps = {
@@ -56,11 +57,4 @@ export function TableRoomChat({ dictionary, room }: TableRoomChatProps) {
       </form>
     </section>
   );
-}
-
-function formatChatMessageTime(sentAt: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(sentAt));
 }

@@ -27,7 +27,9 @@ export function InteractionConfirmation({
 
   useEffect(() => {
     cancelRef.current?.focus();
+  }, []);
 
+  useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !isSubmitting) {
         event.preventDefault();

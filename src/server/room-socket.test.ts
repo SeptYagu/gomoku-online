@@ -14,6 +14,7 @@ import type {
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
 import {
   RoomStore,
+  type LobbyActivitySummary,
   type LobbyRoomDeletedEvent,
   type LobbyRoomUpdatedEvent,
   type PresenceSnapshot,
@@ -261,7 +262,17 @@ describe("room socket handlers", () => {
       const initialList = await emitAck<RoomListAck>(lobby, "lobby:join", { limit: 20 });
 
       expect(initialList.ok ? initialList.value.rooms : ["unexpected"]).toEqual([]);
+      expect(initialList.ok ? initialList.value.activity : undefined).toMatchObject({
+        openTables: 0,
+        playingTables: 0,
+        spectators: 0
+      });
 
+      const lobbySawActivity = waitForEventMatching<LobbyActivitySummary>(
+        lobby,
+        "lobby:activity",
+        (summary) => summary.openTables === 1
+      );
       const lobbySawCreate = waitForEventMatching<LobbyRoomUpdatedEvent>(
         lobby,
         "lobby:room-updated",
@@ -278,6 +289,10 @@ describe("room socket handlers", () => {
 
       const roomCode = createAck.value.snapshot.code;
       const createdEvent = await lobbySawCreate;
+      const createdActivity = await lobbySawActivity;
+
+      expect(createdActivity.openTables).toBe(1);
+      expect(createdActivity.playingTables).toBe(0);
 
       expect(createdEvent.room).toMatchObject({
         canJoin: true,

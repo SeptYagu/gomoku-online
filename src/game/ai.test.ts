@@ -256,6 +256,41 @@ describe("ai", () => {
     ).toEqual(expectedMove);
   });
 
+  it("differentiates opening lines by difficulty tier and weights", () => {
+    const normalLines = GENERATED_OPENING_BOOK_LINES.filter((line) => line.minDifficulty === "normal");
+    const hardLines = GENERATED_OPENING_BOOK_LINES.filter((line) => line.minDifficulty === "hard");
+    const expertLines = GENERATED_OPENING_BOOK_LINES.filter((line) => line.minDifficulty === "expert");
+    const insaneLines = GENERATED_OPENING_BOOK_LINES.filter((line) => line.minDifficulty === "insane");
+
+    expect(normalLines.length).toBeGreaterThan(0);
+    expect(hardLines.length).toBeGreaterThan(0);
+    expect(expertLines.length).toBeGreaterThan(0);
+    expect(insaneLines.length).toBeGreaterThan(0);
+    expect(normalLines.length + hardLines.length + expertLines.length + insaneLines.length).toBe(26);
+
+    const weights = new Set(GENERATED_OPENING_BOOK_LINES.map((line) => line.weight));
+    expect(weights.size).toBeGreaterThan(1);
+
+    // D13 (Wandering Star) is insane-tier: normal difficulty must not match it
+    const insaneLine = GENERATED_OPENING_BOOK_LINES.find((line) => line.id === "generated-d13-v1")!;
+    expect(insaneLine.minDifficulty).toBe("insane");
+    const prefix = playRelativeMoves(insaneLine.moves.slice(0, 3));
+    const expectedMove = relativeToBoardPoint(insaneLine.moves[3]);
+
+    const insaneChoice = chooseAiMove(prefix.board, "white", {
+      difficulty: "insane",
+      moves: prefix.moves,
+      openingSeed: 42
+    });
+    expect(insaneChoice).toEqual(expectedMove);
+
+    // Normal difficulty must not match insane-tier line
+    const normalCandidateMoves = GENERATED_OPENING_BOOK_LINES
+      .filter((l) => l.minDifficulty === "normal")
+      .map((l) => l.id);
+    expect(normalCandidateMoves).not.toContain("generated-d13-v1");
+  });
+
   it("insane difficulty can block a one-ply forced win", () => {
     let board = createBoard();
     board = placeStone(board, { row: 7, col: 7 }, "black");

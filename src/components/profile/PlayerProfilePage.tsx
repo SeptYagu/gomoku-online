@@ -35,6 +35,14 @@ export function PlayerProfilePage({ dictionary, initialName, locale, playerId }:
   const [profile, setProfile] = useState<PlayerProfileSnapshot | null>(null);
   const [status, setStatus] = useState<ProfileStatus>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [prevPlayerId, setPrevPlayerId] = useState(playerId);
+
+  if (prevPlayerId !== playerId) {
+    setPrevPlayerId(playerId);
+    setProfile(null);
+    setStatus("loading");
+    setError(null);
+  }
   const displayName = profile?.displayName ?? initialName ?? playerId;
   const records = profile?.recentRecords ?? [];
   const profileUrl = useMemo(() => {

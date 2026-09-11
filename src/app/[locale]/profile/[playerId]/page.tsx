@@ -28,6 +28,7 @@ export default async function ProfileRoute({ params, searchParams }: ProfileRout
       <PlayerProfilePage
         dictionary={dictionary.game}
         initialName={name}
+        key={decodedPlayerId}
         locale={localeParam as Locale}
         playerId={decodedPlayerId}
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, CircleDot, Users, Wifi } from "lucide-react";
 import {
   chooseAiMove,
@@ -9,6 +9,7 @@ import {
   type AiDifficulty,
   type AiMoveSource
 } from "@/game/ai";
+import { AiWorkerPool } from "@/game/ai-worker-pool";
 import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
@@ -91,6 +92,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const [tableReplay, setTableReplay] = useState<TableReplayState | null>(null);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const aiWorkersRef = useRef<Worker[]>([]);
+  const aiWorkerPoolRef = useRef<AiWorkerPool | null>(null);
   const aiWorkerTimeoutRef = useRef<number | null>(null);
   const aiRequestIdRef = useRef(0);
   const openingSeedRef = useRef(createOpeningSeed());
@@ -275,6 +277,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     }
   }
 
+  const handleCancelPendingTransition = useCallback(() => {
+    setPendingTransition(null);
+  }, []);
+
   function handleUndo() {
     cancelAiTurn();
     const aiStone = getAiStone(firstPlayer);
@@ -387,11 +393,17 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     clearAiWorkerTimeout();
   }
 
-  function terminateAiWorkers() {
-    for (const worker of aiWorkersRef.current) {
-      worker.terminate();
+  function getAiWorkerPool(): AiWorkerPool {
+    if (!aiWorkerPoolRef.current) {
+      aiWorkerPoolRef.current = new AiWorkerPool();
     }
+    return aiWorkerPoolRef.current;
+  }
 
+  function terminateAiWorkers() {
+    if (aiWorkerPoolRef.current && aiWorkersRef.current.length > 0) {
+      aiWorkerPoolRef.current.terminateBusy(aiWorkersRef.current);
+    }
     aiWorkersRef.current = [];
   }
 
@@ -407,6 +419,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   useEffect(() => {
     return () => {
       terminateAiWorkers();
+      aiWorkerPoolRef.current?.terminateAll();
       clearAiWorkerTimeout();
     };
   }, []);
@@ -433,12 +446,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       let bestResult: AiWorkerDoneResult | null = null;
       let completedWorkers = 0;
       let settled = false;
+      const pool = getAiWorkerPool();
       const workerCount = getAiWorkerCount(difficulty, navigator.hardwareConcurrency);
-      const workers = Array.from({ length: workerCount }, () =>
-        new Worker(new URL("../game/ai-worker.ts", import.meta.url), {
-          type: "module"
-        })
-      );
+      const workers = pool.acquire(workerCount);
 
       aiWorkersRef.current = workers;
 
@@ -448,9 +458,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         }
 
         settled = true;
-        for (const worker of workers) {
-          worker.terminate();
-        }
+        pool.releaseAll(workers);
         aiWorkersRef.current = aiWorkersRef.current.filter((activeWorker) => !workers.includes(activeWorker));
 
         clearAiWorkerTimeout();
@@ -630,7 +638,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
                 : dictionary.controls.aiExitDescription
             }
             isSubmitting={isTransitioning}
-            onCancel={() => setPendingTransition(null)}
+            onCancel={handleCancelPendingTransition}
             onConfirm={confirmPendingTransition}
             title={
               pendingTransition.kind === "online"

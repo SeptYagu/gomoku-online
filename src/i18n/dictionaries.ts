@@ -93,6 +93,11 @@ export type GameDictionary = {
     leaderboardRating: string;
     leaderboardRecord: string;
     leaderboardRegistered: string;
+    lobbyActivityOnline: string;
+    lobbyActivityWaiting: string;
+    lobbyActivityPlaying: string;
+    lobbyActivitySpectators: string;
+    lobbyActivityServer: string;
     leaderboardSearchPlaceholder: string;
     leaderboardStreak: string;
     leaderboardStreakValue: string;
@@ -316,6 +321,11 @@ const en = {
       leaderboardRating: "Rating {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "Registered",
+      lobbyActivityOnline: "{count} Online",
+      lobbyActivityWaiting: "{count} Open",
+      lobbyActivityPlaying: "{count} Playing",
+      lobbyActivitySpectators: "{count} Watching",
+      lobbyActivityServer: "Live Activity",
       leaderboardSearchPlaceholder: "Search player",
       leaderboardStreak: "Streak",
       leaderboardStreakValue: "Streak {count}",
@@ -535,6 +545,11 @@ const zh = {
       leaderboardRating: "积分 {rating}",
       leaderboardRecord: "{wins}胜 {losses}负 {draws}和",
       leaderboardRegistered: "注册",
+      lobbyActivityOnline: "{count} 人在线",
+      lobbyActivityWaiting: "{count} 房间待战",
+      lobbyActivityPlaying: "{count} 房间对局中",
+      lobbyActivitySpectators: "{count} 人观战",
+      lobbyActivityServer: "大厅实时动态",
       leaderboardSearchPlaceholder: "搜索玩家",
       leaderboardStreak: "连胜",
       leaderboardStreakValue: "连胜 {count}",
@@ -754,6 +769,11 @@ const fr = {
       leaderboardRating: "Score {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "Inscrits",
+      lobbyActivityOnline: "{count} en ligne",
+      lobbyActivityWaiting: "{count} en attente",
+      lobbyActivityPlaying: "{count} en cours",
+      lobbyActivitySpectators: "{count} spectateurs",
+      lobbyActivityServer: "Activité en direct",
       leaderboardSearchPlaceholder: "Rechercher un joueur",
       leaderboardStreak: "Série",
       leaderboardStreakValue: "Série {count}",
@@ -973,6 +993,11 @@ const es = {
       leaderboardRating: "Puntos {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "Registrados",
+      lobbyActivityOnline: "{count} en línea",
+      lobbyActivityWaiting: "{count} esperando",
+      lobbyActivityPlaying: "{count} en juego",
+      lobbyActivitySpectators: "{count} espectadores",
+      lobbyActivityServer: "Actividad en vivo",
       leaderboardSearchPlaceholder: "Buscar jugador",
       leaderboardStreak: "Racha",
       leaderboardStreakValue: "Racha {count}",
@@ -1192,6 +1217,11 @@ const ru = {
       leaderboardRating: "Рейтинг {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "Зарегистр.",
+      lobbyActivityOnline: "{count} онлайн",
+      lobbyActivityWaiting: "{count} ждут",
+      lobbyActivityPlaying: "{count} играют",
+      lobbyActivitySpectators: "{count} смотрят",
+      lobbyActivityServer: "Активность в реальном времени",
       leaderboardSearchPlaceholder: "Поиск игрока",
       leaderboardStreak: "Серия",
       leaderboardStreakValue: "Серия {count}",
@@ -1411,6 +1441,11 @@ const ar = {
       leaderboardRating: "التقييم {rating}",
       leaderboardRecord: "{wins}-{losses}-{draws}",
       leaderboardRegistered: "مسجلون",
+      lobbyActivityOnline: "{count} متصل",
+      lobbyActivityWaiting: "{count} في الانتظار",
+      lobbyActivityPlaying: "{count} يلعبون",
+      lobbyActivitySpectators: "{count} مشاهدين",
+      lobbyActivityServer: "النشاط المباشر",
       leaderboardSearchPlaceholder: "بحث عن لاعب",
       leaderboardStreak: "سلسلة",
       leaderboardStreakValue: "سلسلة {count}",

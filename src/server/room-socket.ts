@@ -13,6 +13,7 @@ import type { GameRecordClientSubmission } from "./game-records";
 import { FixedWindowRateLimiter } from "./rate-limit";
 import {
   RoomStore,
+  type LobbyActivitySummary,
   type LobbyRoomDeletedEvent,
   type LobbyRoomUpdatedEvent,
   type PresenceListQuery,
@@ -109,6 +110,7 @@ export type ClientToServerEvents = {
 };
 
 export type ServerToClientEvents = {
+  "lobby:activity": (summary: LobbyActivitySummary) => void;
   "lobby:room-deleted": (event: LobbyRoomDeletedEvent) => void;
   "lobby:room-updated": (event: LobbyRoomUpdatedEvent) => void;
   "lobby:rooms": (snapshot: RoomListSnapshot) => void;
@@ -1069,6 +1071,17 @@ function acknowledgeAndBroadcastPublicChat(
   io.to(PUBLIC_CHAT_ROOM).emit("public-chat:messages", response.value);
 }
 
+const lastBroadcastActivityVersion = new WeakMap<RoomStore, number>();
+
+function broadcastLobbyActivity(io: RoomSocketServer, roomStore: RoomStore) {
+  const summary = roomStore.getLobbyActivitySummary();
+  if (lastBroadcastActivityVersion.get(roomStore) === summary.version) {
+    return;
+  }
+  lastBroadcastActivityVersion.set(roomStore, summary.version);
+  io.to(LOBBY_ROOM).emit("lobby:activity", summary);
+}
+
 function broadcastLobbyRoomChange(
   io: RoomSocketServer,
   roomStore: RoomStore,
@@ -1087,13 +1100,14 @@ function broadcastLobbyRoomChange(
       room,
       version
     });
-    return;
+  } else {
+    io.to(LOBBY_ROOM).emit("lobby:room-deleted", {
+      code: roomCode,
+      version
+    });
   }
 
-  io.to(LOBBY_ROOM).emit("lobby:room-deleted", {
-    code: roomCode,
-    version
-  });
+  broadcastLobbyActivity(io, roomStore);
 }
 
 function broadcastRoomSnapshotOrClosure(
@@ -1128,10 +1142,14 @@ function broadcastRoomClosed(
     io.to(LOBBY_ROOM).emit("lobby:room-deleted", event);
   }
   broadcastPresence(io, roomStore);
+  if (visibility === "public") {
+    broadcastLobbyActivity(io, roomStore);
+  }
 }
 
 function broadcastPresence(io: RoomSocketServer, roomStore: RoomStore) {
   io.to(PRESENCE_ROOM).emit("presence:users", roomStore.listPresence());
+  broadcastLobbyActivity(io, roomStore);
 }
 
 function identifySocketPresence(

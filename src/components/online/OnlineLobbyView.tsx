@@ -29,6 +29,7 @@ import type {
   PlayerGameRecordSummary
 } from "@/server/game-records";
 import type { PresenceStatus, RoomListItem, RoomSnapshot, UserPresenceSnapshot } from "@/server/rooms";
+import { formatChatMessageTime } from "@/lib/date-format";
 import { getProfileUrl } from "../profile/profile-url";
 import type { FriendRoomController } from "../useFriendRoom";
 
@@ -639,6 +640,23 @@ function RoomLobbyList({
           <RefreshCw aria-hidden="true" focusable={false} />
         </button>
       </div>
+      {room.lobbyActivity ? (
+        <div aria-label={labels.lobbyActivityServer} className="lobby-activity-bar" role="status">
+          <span className="lobby-activity-pill accent">
+            <span aria-hidden="true" className="lobby-activity-dot" />
+            {labels.lobbyActivityOnline.replace("{count}", String(room.lobbyActivity.onlineUsers))}
+          </span>
+          <span className="lobby-activity-pill">
+            {labels.lobbyActivityWaiting.replace("{count}", String(room.lobbyActivity.openTables))}
+          </span>
+          <span className="lobby-activity-pill">
+            {labels.lobbyActivityPlaying.replace("{count}", String(room.lobbyActivity.playingTables))}
+          </span>
+          <span className="lobby-activity-pill">
+            {labels.lobbyActivitySpectators.replace("{count}", String(room.lobbyActivity.spectators))}
+          </span>
+        </div>
+      ) : null}
       {room.lobbyStatus === "loading" && room.lobbyRooms.length === 0 ? (
         <p className="room-message">{labels.loadingRooms}</p>
       ) : hasActionableRooms ? (
@@ -866,11 +884,4 @@ function formatRecordTime(finishedAt: number): string {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(finishedAt));
-}
-
-function formatChatMessageTime(sentAt: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(sentAt));
 }

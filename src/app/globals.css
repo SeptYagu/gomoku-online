@@ -553,6 +553,44 @@ h1 {
   gap: 10px;
 }
 
+.lobby-activity-bar {
+  align-items: center;
+  background: color-mix(in srgb, var(--panel) 50%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.lobby-activity-pill {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line-strong) 80%, transparent);
+  border-radius: 999px;
+  color: var(--foreground);
+  display: inline-flex;
+  font-weight: 500;
+  gap: 5px;
+  padding: 2px 8px;
+}
+
+.lobby-activity-pill.accent {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.lobby-activity-dot {
+  background-color: #2f7d32;
+  border-radius: 50%;
+  display: inline-block;
+  height: 6px;
+  width: 6px;
+}
+
 .room-lobby-list {
   display: grid;
   gap: 8px;
