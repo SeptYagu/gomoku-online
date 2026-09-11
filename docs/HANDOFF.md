@@ -5062,65 +5062,53 @@ b6faf9e
 ## 2026-09-10 全量代码审查与修复改进清单 (Code Review & Improvement Roadmap)
 
 ### 审查基线状态
-- 测试与静态分析：`vitest run` 24 个测试文件 / 221 项用例全绿；`eslint .` 零错误零警告。
-- 编译与类型检查：`tsc --noEmit` 存在 8 条既有测试文件基线错误（主干业务代码 0 错误）。
+- 测试与静态分析：`vitest run` 24 个测试文件 / 222 项用例全绿；`eslint .` 零错误零警告。
+- 编译与类型检查：`tsc --noEmit` 0 错误（已彻底消除 8 条测试辅助基线错误，类型门禁全绿通过）。
 - 前期关键修复已复核闭环：M1（访客身份防冒充）、M2（断线重连 60s 宽限与补偿）、M3（AI 战术制胜/防守全量池解耦）、M4/R2（聊天同步闸门与 8s 看门狗超时复位）、M5/R1（水合状态与启动快照缓存闭包）、M6（JSONL 阈值原子压缩）、M7/R8（XFF 反代安全信任机制与全语种错误提示）。
 
 ### 待修复与改进事项清单（按优先级推进）
 
-#### P1: 消除 TypeScript 8 条基线编译错误（编译与类型门禁恢复）
+#### P1: 消除 TypeScript 8 条基线编译错误（✅ 已修复，commit `1d763a0`）
 1. **测试用例缺失 `visibility` 必填属性（2 处）**：
    - 位置：`src/server/game-record-export.test.ts:48` 与 `src/server/game-record-opening-analysis.test.ts:85`
-   - 问题：测试 mock 记录设置了 `authoritative: true`，但未配置 `visibility: "public"`，导致类型不符合 `AuthoritativeGameRecord`。
    - 修复：在 mock 对象定义中补充 `visibility: "public"`。
 2. **`TestSocket` 事件监听签名严格逆变冲突（6 处）**：
-   - 位置：`src/server/room-socket.test.ts:24-30` 与第 348, 1601 行等
-   - 问题：`TestSocket` 中 `on/once/off` 的监听器形参被声明为 `listener: (...args: unknown[]) => void`。在 TypeScript 严格函数类型下，具体的事件回调 `(payload: T) => void` 无法赋值给接受 `unknown[]` 的函数类型（TS2345）。
-   - 修复：将 `TestSocket` 的监听器形参声明放宽为 `listener: (...args: any[]) => void`。修复后全仓 `tsc --noEmit` 将实现零错误通过。
+   - 位置：`src/server/room-socket.test.ts:24-30`
+   - 修复：将 `TestSocket` 的监听器形参声明放宽为 `listener: TestSocketListener = (...args: never[]) => void`。`tsc --noEmit` 全仓零错误通过，且规避了 explicit-any lint 检查。
 
-#### P2: 交互体验与状态副作用优化
+#### P2: 交互体验与状态副作用优化（✅ 已修复，commit `df2d5b3`）
 1. **精简 `useFriendRoom` 中 auto-join effect 的依赖项（原 m12）**：
-   - 位置：`src/components/useFriendRoom.ts:1213`
-   - 问题：`autoJoin` 的 `useEffect` 依赖数组包含了 `room` 状态对象。导致对局内每次落子、准备、撤销请求变更都会重新调度该 effect，产生无谓的 Hook 重新计算。
-   - 修复：精简依赖项为原始入房必要参数（如 `roomCodeFromUrl`、`identityReady`），去除全量 `room` 依赖。
+   - 位置：`src/components/useFriendRoom.ts`
+   - 修复：提取 `currentRoomCode` 与 `hasRoom` 作为依赖项，去除响应式全量 `room` 对象依赖，对局内落子与状态变更不再重复调度 auto-join effect。
 2. **修正大厅列表加载中错误借用按钮文案的问题（原 m13）**：
-   - 位置：`src/components/online/OnlineLobbyView.tsx:286, 345, 488`
-   - 问题：在线 Presence、战绩记录和天梯榜在加载期间直接显示操作按钮文本（如“刷新在线列表”、“刷新战绩”、“刷新天梯榜”），导致用户误解为可点击按钮或需手动触发。
-   - 修复：在 `dictionary.room` 中增加各语种通用的加载状态文案（如 `loading: "Loading..."` / `"加载中..."`），替代操作按钮文案。
+   - 位置：`src/components/online/OnlineLobbyView.tsx` 与 `src/i18n/dictionaries.ts`
+   - 修复：在 `dictionary.room` 六语种中增加通用的 `loading` 文案（`Loading…` / `加载中…` 等），替换 Presence / 战绩 / 天梯列表的刷新按钮文本。
 3. **消除个人战绩主页初载与手动刷新的重复逻辑（原 m17）**：
-   - 位置：`src/components/profile/PlayerProfilePage.tsx:53-109`
-   - 问题：初载 `useEffect` 与 `refreshProfile` 存在 30 行完全相同的请求代码复制，且初载逻辑遗漏了 `setStatus("loading"); setError(null);`。
-   - 修复：初载直接调用 `refreshProfile()`，合并重复逻辑并确保状态一致。
+   - 位置：`src/components/profile/PlayerProfilePage.tsx`
+   - 修复：抽取统一的 `loadProfile()` 异步请求函数，由初载 effect 和手动 `refreshProfile()` 共用，完全满足 `react-hooks/set-state-in-effect` 规范并消除重复代码。
 4. **离房超时后的服务端/客户端短暂不一致（R9 取舍说明）**：
    - 位置：`src/components/useFriendRoom.ts:962-983`
-   - 说明：若离开房间请求发生 8s 超时但服务端实际上已移出玩家，迟到 ACK 会被忽略（避免破坏 UI）。客户端此时仍保留房间视图，但用户再次点击“离开房间”时会重新触发离房请求并自愈。现状作为有意取舍予以维持。
+   - 说明：维持既定取舍（重试可自愈）。
 
-#### P3: AI 引擎优化与死代码清理
-1. **修正成五胜局威胁被重复统计问题（原 m1）**：
-   - 位置：`src/game/ai.ts:1912, 1971`
-   - 问题：在 `getThreatSummaryForPlacedStone` 中，连续 5 子先被方向扫描累加一次 `summary.wins += 1`，随后窗口扫描 `addWindowThreat` 遇到 5 子窗口又累加一次，导致成五时 `summary.wins === 2`。
-   - 修复：在 `addWindowThreat` 中仅统计跳四、跳三等未连续窗口威胁，五连判定完全交由方向连续扫描。
-2. **Web Worker 线程复用池（原 m9）**：
+#### P3: AI 引擎优化与死代码清理（部分落地，commit `efc7f29`）
+1. **修正成五胜局威胁被重复统计问题（原 m1，✅ 已修复）**：
+   - 位置：`src/game/ai.ts` 与 `src/game/ai.test.ts`
+   - 修复：`addWindowThreat` 遇到 `stones >= 5` 时直接 return，五连统计交由方向连续扫描独占，避免威胁分数虚高翻倍；增加单测验证。
+2. **Web Worker 线程复用池（原 m9，待办）**：
    - 位置：`src/components/GameShell.tsx:437-454`
-   - 问题：每次 AI 行棋均 `new Worker(...)` 并在完成时 `worker.terminate()`，重复初始化 Zobrist 哈希表与查找窗口，带来微观 GC 与线程创建损耗。
-   - 修复：在组件或 Hook 生命周期中保持常驻 Worker 实例池，通过消息传递复用线程。
-3. **开局库配置权重与难度差异化（原 m16）**：
+3. **开局库配置权重与难度差异化（原 m16，待办）**：
    - 位置：`src/game/opening-book.ts` 与 `src/game/ai.ts:548-599`
-   - 问题：全部 26 条开局线均为 `weight: 16` 与 `minDifficulty: "normal"`，加权随机与难度过滤形同虚设。
-   - 修复：为各开局线标注合理的最低难度层级与权重，或在生成脚本中输出差异化属性。
-4. **清理 `rooms.ts` 中无调用的 `startGame` 死分支（原 m15）**：
-   - 位置：`src/server/rooms.ts:647-670`
-   - 问题：由于 `setPlayerReady` 在双方就绪时已由 `updateRoomStatus` 自动跃迁为 `"playing"`，`rooms.ts` 中的 `startGame` 逻辑永不进入有效执行分支，且 Socket 协议无对应事件。
-   - 修复：清理或重构为纯状态验证入口。
+4. **清理 `rooms.ts` 中无调用的 `startGame` 死分支（原 m15，✅ 已修复）**：
+   - 位置：`src/server/rooms.ts`
+   - 修复：移除 `room.status === "ready"` 永假分支与死状态赋值代码，重构为纯状态验证（进行中返回快照，否则返回 `room-not-ready`）。
 
-#### P4: 格式规范一致性与可访问性
+#### P4: 格式规范一致性与可访问性（✅ 已修复，commit `5748d12`）
 1. **统一前后端 SGF 转义规范（原 m4 遗留）**：
-   - 位置：`src/server/game-record-export.ts:98-100` 与 `src/game/game-record-sgf.ts:83-97`
-   - 问题：前端已支持 SGF FF[4] 控制字符过滤与换行转换，服务端导出仍在用旧的简单转义，存在逻辑重复与潜在注入/解析风险。
-   - 修复：将 SGF 转义与格式化函数收敛到共享模块。
+   - 位置：`src/server/game-record-export.ts` 与 `src/game/game-record-sgf.ts`
+   - 修复：从 `game-record-sgf.ts` 导出并复用 `escapeSgfValue` 与 `toSgfPoint`，统一 SGF FF[4] 控制字符过滤与换行转换规范。
 2. **确认弹窗可访问性补全**：
    - 位置：`src/components/InteractionConfirmation.tsx`
-   - 优化：增加键盘 Escape 键关闭与 Tab 焦点限制（Focus Trap），符合 WAI-ARIA alertdialog 规范。
+   - 优化：增加全局 Escape 键监听及非提交状态下的取消调用，并增加 Tab / Shift+Tab 焦点循环控制。
 
 #### 技术债与架构演进（后续重构方向）
 1. `rooms.ts` (2360 行)：将 Presence 追踪、排行榜聚合、房间核心状态机分拆为独立模块。
