@@ -657,16 +657,7 @@ export class RoomStore {
       return success(getRoomSnapshot(room));
     }
 
-    if (room.status !== "ready") {
-      return failure("room-not-ready", "Both players must be ready before the game starts.");
-    }
-
-    room.status = "playing";
-    room.currentTurn = room.nextStartingSeat;
-    room.updatedAt = this.now();
-    this.markRoomListed(room);
-
-    return success(getRoomSnapshot(room));
+    return failure("room-not-ready", "Both players must be ready before the game starts.");
   }
 
   applyMove(roomCode: string, intent: MoveIntent): RoomResult<RoomSnapshot> {

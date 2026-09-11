@@ -317,6 +317,18 @@ describe("ai", () => {
     expect(threat.score).toBeGreaterThan(1_000_000);
   });
 
+  it("counts exactly one win threat for a continuous five-in-a-row without duplicate window counting", () => {
+    let board = createBoard();
+    board = placeStone(board, { row: 7, col: 5 }, "black");
+    board = placeStone(board, { row: 7, col: 6 }, "black");
+    board = placeStone(board, { row: 7, col: 8 }, "black");
+    board = placeStone(board, { row: 7, col: 9 }, "black");
+
+    const threat = getThreatSummaryAfterMove(board, { row: 7, col: 7 }, "black");
+
+    expect(threat.wins).toBe(1);
+  });
+
   it("insane can start a forcing four threat", () => {
     let board = createBoard();
     board = placeStone(board, { row: 7, col: 6 }, "black");

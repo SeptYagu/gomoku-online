@@ -1968,7 +1968,6 @@ function addWindowThreat(board: Board, points: Point[], stone: Stone, summary: T
   }
 
   if (stones >= 5) {
-    summary.wins += 1;
     return;
   }
 
