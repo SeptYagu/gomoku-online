@@ -283,7 +283,7 @@ function OnlineUsersPanel({ dictionary, room }: { dictionary: GameDictionary; ro
         </div>
       ) : (
         <p className="room-message">
-          {room.presenceStatus === "loading" ? labels.refreshPresence : labels.noOnlineUsers}
+          {room.presenceStatus === "loading" ? labels.loading : labels.noOnlineUsers}
         </p>
       )}
     </section>
@@ -342,7 +342,7 @@ function RoomProfilePanel({ dictionary, room }: { dictionary: GameDictionary; ro
         </div>
       ) : (
         <p className="room-message">
-          {room.profileStatus === "loading" && !profile ? labels.refreshProfile : labels.noGameRecords}
+          {room.profileStatus === "loading" && !profile ? labels.loading : labels.noGameRecords}
         </p>
       )}
     </section>
@@ -485,7 +485,7 @@ function LeaderboardPanel({
         </div>
       ) : (
         <p className="room-message">
-          {room.leaderboardStatus === "loading" ? labels.refreshLeaderboard : labels.leaderboardNoEntries}
+          {room.leaderboardStatus === "loading" ? labels.loading : labels.leaderboardNoEntries}
         </p>
       )}
 

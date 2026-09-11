@@ -50,7 +50,7 @@ export function PlayerProfilePage({ dictionary, initialName, locale, playerId }:
     return `/api/profile?${params.toString()}`;
   }, [initialName, playerId]);
 
-  const refreshProfile = useCallback(() => {
+  const loadProfile = useCallback(() => {
     const headers: HeadersInit = {
       "accept": "application/json"
     };
@@ -60,53 +60,33 @@ export function PlayerProfilePage({ dictionary, initialName, locale, playerId }:
       headers.authorization = `Bearer ${accountToken}`;
     }
 
+    void fetch(profileUrl, { headers })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Profile request failed: ${response.status}`);
+        }
+
+        return (await response.json()) as PlayerProfileSnapshot;
+      })
+      .then((nextProfile) => {
+        setProfile(nextProfile);
+        setStatus("ready");
+      })
+      .catch((profileError: unknown) => {
+        setStatus("error");
+        setError(profileError instanceof Error ? profileError.message : "Profile request failed.");
+      });
+  }, [profileUrl]);
+
+  const refreshProfile = useCallback(() => {
     setStatus("loading");
     setError(null);
-    void fetch(profileUrl, { headers })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Profile request failed: ${response.status}`);
-        }
-
-        return (await response.json()) as PlayerProfileSnapshot;
-      })
-      .then((nextProfile) => {
-        setProfile(nextProfile);
-        setStatus("ready");
-      })
-      .catch((profileError: unknown) => {
-        setStatus("error");
-        setError(profileError instanceof Error ? profileError.message : "Profile request failed.");
-      });
-  }, [profileUrl]);
+    loadProfile();
+  }, [loadProfile]);
 
   useEffect(() => {
-    const headers: HeadersInit = {
-      "accept": "application/json"
-    };
-    const accountToken = readAccountToken();
-
-    if (accountToken) {
-      headers.authorization = `Bearer ${accountToken}`;
-    }
-
-    void fetch(profileUrl, { headers })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Profile request failed: ${response.status}`);
-        }
-
-        return (await response.json()) as PlayerProfileSnapshot;
-      })
-      .then((nextProfile) => {
-        setProfile(nextProfile);
-        setStatus("ready");
-      })
-      .catch((profileError: unknown) => {
-        setStatus("error");
-        setError(profileError instanceof Error ? profileError.message : "Profile request failed.");
-      });
-  }, [profileUrl]);
+    loadProfile();
+  }, [loadProfile]);
 
   return (
     <main className="profile-page-shell">

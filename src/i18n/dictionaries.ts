@@ -99,6 +99,7 @@ export type GameDictionary = {
     leaderboardTodayWins: string;
     leaveRoom: string;
     leaveRoomTimeout: string;
+    loading: string;
     loadingRooms: string;
     lobbyPlaying: string;
     lobbyWaiting: string;
@@ -321,6 +322,7 @@ const en = {
       leaderboardTodayWins: "Today {count}",
       leaveRoom: "Leave",
       leaveRoomTimeout: "Leaving the room timed out. Please try again.",
+      loading: "Loading…",
       loadingRooms: "Loading rooms",
       lobbyPlaying: "Playing",
       lobbyWaiting: "Waiting",
@@ -539,6 +541,7 @@ const zh = {
       leaderboardTodayWins: "今日胜 {count}",
       leaveRoom: "离开",
       leaveRoomTimeout: "离开房间超时，请重试。",
+      loading: "加载中…",
       loadingRooms: "正在加载房间",
       lobbyPlaying: "对局中",
       lobbyWaiting: "等待中",
@@ -757,6 +760,7 @@ const fr = {
       leaderboardTodayWins: "Jour {count}",
       leaveRoom: "Quitter",
       leaveRoomTimeout: "Le délai pour quitter le salon a expiré. Réessayez.",
+      loading: "Chargement…",
       loadingRooms: "Chargement des salons",
       lobbyPlaying: "En jeu",
       lobbyWaiting: "En attente",
@@ -975,6 +979,7 @@ const es = {
       leaderboardTodayWins: "Hoy {count}",
       leaveRoom: "Salir",
       leaveRoomTimeout: "Se agotó el tiempo para salir de la sala. Inténtalo de nuevo.",
+      loading: "Cargando…",
       loadingRooms: "Cargando salas",
       lobbyPlaying: "En juego",
       lobbyWaiting: "Esperando",
@@ -1193,6 +1198,7 @@ const ru = {
       leaderboardTodayWins: "Сегодня {count}",
       leaveRoom: "Выйти",
       leaveRoomTimeout: "Не удалось вовремя выйти из комнаты. Повторите попытку.",
+      loading: "Загрузка…",
       loadingRooms: "Загрузка комнат",
       lobbyPlaying: "Идет игра",
       lobbyWaiting: "Ожидание",
@@ -1411,6 +1417,7 @@ const ar = {
       leaderboardTodayWins: "اليوم {count}",
       leaveRoom: "مغادرة",
       leaveRoomTimeout: "انتهت مهلة مغادرة الغرفة. حاول مرة أخرى.",
+      loading: "جارٍ التحميل…",
       loadingRooms: "جار تحميل الغرف",
       lobbyPlaying: "قيد اللعب",
       lobbyWaiting: "انتظار",

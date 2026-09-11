@@ -1146,6 +1146,9 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
       });
   }, []);
 
+  const currentRoomCode = room?.snapshot.code ?? null;
+  const hasRoom = Boolean(room);
+
   useEffect(() => {
     if (!enabled) {
       autoJoinRoomCodeRef.current = null;
@@ -1160,7 +1163,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
     const roomCodeFromUrl = getRoomCodeFromCurrentUrl();
 
     if (roomCodeFromUrl) {
-      if (room?.snapshot.code === roomCodeFromUrl || autoJoinRoomCodeRef.current === roomCodeFromUrl) {
+      if (currentRoomCode === roomCodeFromUrl || autoJoinRoomCodeRef.current === roomCodeFromUrl) {
         return;
       }
 
@@ -1189,7 +1192,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
 
     autoJoinRoomCodeRef.current = null;
 
-    if (!storedSession || room) {
+    if (!storedSession || hasRoom) {
       return;
     }
 
@@ -1210,7 +1213,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
 
       applyRoomAck(response);
     });
-  }, [applyRoomAck, enabled, ensureSocket, identityReady, joinRoomByCode, room]);
+  }, [applyRoomAck, currentRoomCode, enabled, ensureSocket, hasRoom, identityReady, joinRoomByCode]);
 
   useEffect(() => {
     const roomCode = room?.snapshot.code;
