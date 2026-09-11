@@ -69,6 +69,7 @@ function createRecord(overrides: Partial<SavedGameRecord> = {}): SavedGameRecord
       { consistency: "consistent", playerId: "guest_bob", seat: "white", submittedAt: 1_766_666_062_000 }
     ],
     updatedAt: 1_766_666_062_000,
+    visibility: "public",
     winner: "white",
     winLine: [],
     ...overrides

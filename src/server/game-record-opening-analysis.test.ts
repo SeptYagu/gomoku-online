@@ -106,6 +106,7 @@ function createRecord(
       { consistency: "consistent", playerId: "acct_bob", seat: "white", submittedAt: 1_766_666_062_000 }
     ],
     updatedAt: 1_766_666_062_000,
+    visibility: "public",
     winLine: [],
     winner: overrides.winner ?? "black"
   };

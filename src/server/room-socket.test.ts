@@ -21,12 +21,14 @@ import {
   type RoomSnapshot
 } from "./rooms";
 
+type TestSocketListener = (...args: never[]) => void;
+
 type TestSocket = {
   disconnect: () => void;
   emit: (event: string, ...args: unknown[]) => void;
-  off: (event: string, listener: (...args: unknown[]) => void) => void;
-  on: (event: string, listener: (...args: unknown[]) => void) => void;
-  once: (event: string, listener: (...args: unknown[]) => void) => void;
+  off: (event: string, listener: TestSocketListener) => void;
+  on: (event: string, listener: TestSocketListener) => void;
+  once: (event: string, listener: TestSocketListener) => void;
 };
 
 describe("room socket handlers", () => {
