@@ -305,6 +305,7 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/STAGE_3_PROGRESS.md`：阶段 3 小步骤进度记录。
 - `docs/M3_PUBLIC_TEST_PLAN.md`：M3 公开测试执行清单。
 - `docs/M3_PUBLIC_TEST_LOG.md`：M3 公开测试问题记录。
+- `docs/FEEDBACK_AND_LOG_COLLECTION_PLAN.md`：Feedback 页面、浏览器/服务端日志、专属存储和管理员增量拉取计划。
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`：以后参考项目研究和子代理分工的标准流程。
 - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`：主控、实现子代理、验证子代理的标准开发流程。
 - `docs/COMPETITOR_INTERACTION_RESEARCH.md`：竞品界面逻辑和用户路径研究。
