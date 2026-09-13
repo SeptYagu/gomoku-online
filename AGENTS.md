@@ -56,14 +56,20 @@
   3. `npm test`：全部通过（Vitest 单元测试套件全绿）
   4. `npm run build`：0 报错（Next.js 生产构建与页面预渲染完全通过）
   - *注：若涉及联机大厅/核心房间逻辑修改，推荐额外运行 `npm run verify:online`。*
-- **提交与推送（Push on Delivery）**：
+- **提交与推送（Push for Review，非终态）**：
   - 门禁全绿后，仅暂存属于本任务的文件；
   - 执行符合 Conventional Commits 规范的语义化提交（如 `feat(...)`、`fix(...)`、`docs(...)`）；
-  - 立即执行 `git push origin <branch>` 推送至远端，向用户汇报提交哈希与变更简报。
+  - 立即执行 `git push origin <branch>` 推送至远端；
+  - **【流程强绑定与消除歧义】**：`git push` 仅代表代码提交待审，绝非任务完成交付。推送后必须立即、无缝进入第 4 节派发 WorkBuddy 独立审查并挂起等待判定，严禁在未收到 WorkBuddy 审查判定前向用户宣称任务完成或终止执行流程。
 
 ---
 
 ## 4. 双智能体协同与代码审查闭环（Antigravity ↔ WorkBuddy）
+
+### 标准工程生命周期状态机：
+```
+开发/修复 ⟶ 本地门禁 ⟶ 提交推送 ⟶ 立即触发审查 ⟶ 等待判定 ⟶ [自愈循环] ⟶ 审查通过/熔断 ⟶ 向用户交付
+```
 
 当主开发智能体（Antigravity）完成功能开发或缺陷修复并推送到 Git 后，自动触发 WorkBuddy 独立审查，形成免人工干预的代码质量自愈闭环：
 
