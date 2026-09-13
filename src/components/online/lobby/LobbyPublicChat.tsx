@@ -1,27 +1,35 @@
 "use client";
 
+import { useEffect } from "react";
 import { Send } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
-import { formatChatMessageTime } from "@/lib/date-format";
 import { MAX_CHAT_MESSAGE_LENGTH } from "@/lib/constants";
-import type { FriendRoomController } from "../useFriendRoom";
-import { useOptionalRoomContext } from "./RoomContext";
+import { formatChatMessageTime } from "@/lib/date-format";
+import { useOptionalRoomContext } from "../RoomContext";
+import type { FriendRoomController } from "../../useFriendRoom";
 
-type TableRoomChatProps = {
+export type LobbyPublicChatProps = {
   dictionary: GameDictionary;
   room?: FriendRoomController;
 };
 
-export function TableRoomChat({ dictionary, room: roomProp }: TableRoomChatProps) {
+export function LobbyPublicChat({ dictionary, room: roomProp }: LobbyPublicChatProps) {
   const room = useOptionalRoomContext(roomProp);
   const labels = dictionary.room;
-  const messages = room.room?.snapshot.chatMessages ?? [];
+  const { refreshPublicChat } = room;
+
+  useEffect(() => {
+    refreshPublicChat();
+  }, [refreshPublicChat]);
 
   return (
-    <section aria-label={labels.roomChat} className="room-chat table-room-chat">
+    <section aria-label={labels.publicChat} className="room-chat public-chat">
+      <div className="room-chat-header">
+        <p className="metric-label">{labels.publicChat}</p>
+      </div>
       <div aria-live="polite" className="room-chat-list" role="log">
-        {messages.length > 0 ? (
-          messages.map((message) => (
+        {room.publicChatMessages.length > 0 ? (
+          room.publicChatMessages.map((message) => (
             <div className="room-chat-message" key={message.id}>
               <div className="room-chat-meta">
                 <strong>{message.name}</strong>
@@ -35,23 +43,25 @@ export function TableRoomChat({ dictionary, room: roomProp }: TableRoomChatProps
         )}
       </div>
       <form
-        aria-busy={room.isSendingChat}
+        aria-busy={room.isSendingPublicChat}
         className="room-chat-form"
         onSubmit={(event) => {
           event.preventDefault();
-          room.sendChatMessage();
+          room.sendPublicChatMessage();
         }}
       >
         <input
           maxLength={MAX_CHAT_MESSAGE_LENGTH}
-          onChange={(event) => room.setChatText(event.target.value)}
-          placeholder={labels.chatPlaceholder}
+          onChange={(event) => room.setPublicChatText(event.target.value)}
+          placeholder={labels.publicChatPlaceholder}
           type="text"
-          value={room.chatText}
+          value={room.publicChatText}
         />
         <button
           className="icon-button"
-          disabled={room.isSendingChat || !room.chatText.trim()}
+          disabled={
+            room.accountStatus === "loading" || room.isSendingPublicChat || !room.publicChatText.trim()
+          }
           title={labels.sendMessage}
           type="submit"
         >
@@ -61,3 +71,6 @@ export function TableRoomChat({ dictionary, room: roomProp }: TableRoomChatProps
     </section>
   );
 }
+
+// Backward compatibility alias
+export const PublicChatPanel = LobbyPublicChat;

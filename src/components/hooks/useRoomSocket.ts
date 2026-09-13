@@ -54,7 +54,8 @@ export type UseRoomSocketProps = {
   playerName: string;
   setPlayerNameState: (name: string) => void;
   setJoinTargetState: (target: string) => void;
-  onRoomCleared?: () => void;
+  onRoomCleared?: (roomCode: string, isCurrentRoom: boolean) => void;
+  canCreate?: () => boolean;
 };
 
 type LeaveRoomRequest = {
@@ -70,12 +71,14 @@ export function useRoomSocket({
   playerName,
   setPlayerNameState,
   setJoinTargetState,
-  onRoomCleared
+  onRoomCleared,
+  canCreate
 }: UseRoomSocketProps) {
   const socketRef = useRef<RoomSocket | null>(null);
   const messagesRef = useRef(messages);
   const eventHandlersRef = useRef<RoomSocketEventHandlers>({});
   const onRoomClearedRef = useRef(onRoomCleared);
+  const canCreateRef = useRef(canCreate);
 
   const updateEventHandlers = useCallback((handlers: RoomSocketEventHandlers) => {
     eventHandlersRef.current = handlers;
@@ -83,6 +86,7 @@ export function useRoomSocket({
 
   const [connectionStatus, setConnectionStatus] = useState<"idle" | "connecting" | "connected" | "disconnected">("idle");
   const [room, setRoom] = useState<RoomClientState | null>(null);
+  const roomRef = useRef(room);
   const [error, setError] = useState<string | null>(null);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoomOverride, setIsJoiningRoom] = useState<boolean | null>(null);
@@ -103,6 +107,8 @@ export function useRoomSocket({
   useEffect(() => {
     messagesRef.current = messages;
     onRoomClearedRef.current = onRoomCleared;
+    canCreateRef.current = canCreate;
+    roomRef.current = room;
   });
 
   const getActivePlayer = useCallback((): PlayerAuthPayload => {
@@ -122,7 +128,12 @@ export function useRoomSocket({
   }, [account, playerName]);
 
   const clearClosedRoom = useCallback((roomCode: string) => {
-    onRoomClearedRef.current?.();
+    const isCurrentRoom = roomRef.current?.snapshot.code === roomCode;
+    onRoomClearedRef.current?.(roomCode, isCurrentRoom);
+    if (!isCurrentRoom) {
+      return;
+    }
+
     setRoom((currentRoom) => {
       if (currentRoom?.snapshot.code !== roomCode) {
         return currentRoom;
@@ -265,7 +276,11 @@ export function useRoomSocket({
   }, [applyRoomAck, clearClosedRoom, ensureSocket]);
 
   const createRoom = useCallback((visibility: RoomVisibility = "public") => {
-    if (!identityReady || createRequestInFlightRef.current || room) {
+    if (!enabled || !identityReady || createRequestInFlightRef.current || room) {
+      return;
+    }
+
+    if (canCreateRef.current && !canCreateRef.current()) {
       return;
     }
 
@@ -281,7 +296,7 @@ export function useRoomSocket({
       setIsCreatingRoom(false);
       applyRoomAck(response);
     });
-  }, [applyRoomAck, ensureSocket, getActivePlayer, identityReady, room, setPlayerNameState]);
+  }, [applyRoomAck, enabled, ensureSocket, getActivePlayer, identityReady, room, setPlayerNameState]);
 
   const joinRoomByCode = useCallback((roomCode: string, retryWithFreshIdentity = true) => {
     if (!enabled || !identityReady) {
@@ -427,12 +442,13 @@ export function useRoomSocket({
         return;
       }
 
+      const leftRoomCode = room.snapshot.code;
       clearRoomSession();
       clearRoomUrl();
       setIsJoiningRoom(false);
       setRoom(null);
       setError(null);
-      onRoomClearedRef.current?.();
+      onRoomClearedRef.current?.(leftRoomCode, true);
       completions.forEach((complete) => complete(true));
     });
   }, [ensureSocket, messages?.leaveRoomTimeout, room]);

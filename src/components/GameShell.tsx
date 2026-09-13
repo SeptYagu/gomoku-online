@@ -2,14 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, CircleDot, Users, Wifi } from "lucide-react";
-import {
-  chooseAiMove,
-  getAiTimeLimitMs,
-  getAiWorkerCount,
-  type AiDifficulty,
-  type AiMoveSource
-} from "@/game/ai";
-import { AiWorkerPool } from "@/game/ai-worker-pool";
 import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
@@ -19,49 +11,25 @@ import { useBootGameMode } from "./client-boot-state";
 import { InteractionConfirmation } from "./InteractionConfirmation";
 import {
   getModeChangeDecision,
-  requiresOnlineLeaveConfirmation,
-  resolveNextAiSettings,
-  shouldDeferAiSettingChange
+  requiresOnlineLeaveConfirmation
 } from "./interaction-guards";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { GameTableView } from "./online/GameTableView";
 import { OnlineJoiningView, OnlineLobbyView } from "./online/OnlineLobbyView";
+import { RoomProvider } from "./online/RoomContext";
 import { TableSidebar } from "./online/TableSidebar";
 import { createTableReplay, type TableReplayState } from "./online/table-replay";
 import { deriveGameWorkspace, isOnlineWorkspaceEnabled, type GameMode } from "./online/workspace-state";
 import { AiGameView, type FirstPlayer } from "./play/AiGameView";
 import { LocalGameView } from "./play/LocalGameView";
+import { useAiGame, replayMoves } from "./hooks/useAiGame";
 import { useFriendRoom, type FriendRoomController } from "./useFriendRoom";
+import type { AiDifficulty } from "@/game/ai";
 
 type GameShellProps = {
   dictionary: GameDictionary;
   locale: Locale;
-};
-
-type GameSnapshot = {
-  board: Board;
-  moves: Move[];
-  nextPlayer: Stone;
-  status: GameStatus;
-};
-
-type AiWorkerResponse = {
-  type: "best" | "done" | "error";
-  point: Point | null;
-  message?: string;
-  score?: number;
-  completedDepth?: number;
-  nodes?: number;
-  source?: AiMoveSource;
-};
-
-type AiWorkerDoneResult = {
-  point: Point | null;
-  score: number;
-  completedDepth: number;
-  nodes: number;
-  source: AiMoveSource;
 };
 
 type PendingTransition = {
@@ -69,8 +37,6 @@ type PendingTransition = {
   nextMode: GameMode | null;
 };
 
-const AI_WORKER_TIMEOUT_GRACE_MS = 750;
-const AI_EMERGENCY_TIME_LIMIT_MS = 50;
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
 
 export function GameShell({ dictionary, locale }: GameShellProps) {
@@ -78,24 +44,37 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const [nextPlayer, setNextPlayer] = useState<Stone>("black");
   const [status, setStatus] = useState<GameStatus>({ state: "playing", nextPlayer: "black" });
   const [moves, setMoves] = useState<Move[]>([]);
+
   // 模式由 URL 决定（带 ?room= 直接进联机），但 URL 只有浏览器能读：
   // 未显式切换过模式前先用启动快照，避免 SSR/CSR 首屏不一致。
   const bootMode = useBootGameMode();
   const [modeOverride, setMode] = useState<GameMode | null>(null);
   const mode = modeOverride ?? bootMode;
-  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("normal");
-  const [firstPlayer, setFirstPlayer] = useState<FirstPlayer>("human");
-  const [pendingDifficulty, setPendingDifficulty] = useState<AiDifficulty | null>(null);
-  const [pendingFirstPlayer, setPendingFirstPlayer] = useState<FirstPlayer | null>(null);
+
   const [pendingTransition, setPendingTransition] = useState<PendingTransition | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [tableReplay, setTableReplay] = useState<TableReplayState | null>(null);
-  const [isAiThinking, setIsAiThinking] = useState(false);
-  const aiWorkersRef = useRef<Worker[]>([]);
-  const aiWorkerPoolRef = useRef<AiWorkerPool | null>(null);
-  const aiWorkerTimeoutRef = useRef<number | null>(null);
-  const aiRequestIdRef = useRef(0);
-  const openingSeedRef = useRef(createOpeningSeed());
+
+  const resetGameRef = useRef<((options?: { nextMode?: GameMode; nextDifficulty?: AiDifficulty; nextFirstPlayer?: FirstPlayer }) => void) | null>(null);
+
+  const commitGameState = useCallback((nextBoard: Board, nextMoves: Move[], nextStatus: GameStatus) => {
+    setBoard(nextBoard);
+    setMoves(nextMoves);
+    setStatus(nextStatus);
+    setNextPlayer(nextStatus.state === "playing" ? nextStatus.nextPlayer : (nextMoves.at(-1)?.stone ?? "black"));
+  }, []);
+
+  const handleResetFromAi = useCallback((options?: { nextDifficulty?: AiDifficulty; nextFirstPlayer?: FirstPlayer }) => {
+    resetGameRef.current?.(options);
+  }, []);
+
+  const aiGame = useAiGame({
+    mode,
+    moves,
+    onCommitGameState: commitGameState,
+    onResetGame: handleResetFromAi
+  });
+
   const friendRoom = useFriendRoom({
     enabled: isOnlineWorkspaceEnabled(mode),
     messages: {
@@ -109,47 +88,40 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     }
   });
 
-  function resetGame({
+  const resetGame = useCallback(({
     nextMode = mode,
-    nextDifficulty = aiDifficulty,
-    nextFirstPlayer = firstPlayer
+    nextDifficulty = aiGame.aiDifficulty,
+    nextFirstPlayer = aiGame.firstPlayer
   }: {
     nextMode?: GameMode;
     nextDifficulty?: AiDifficulty;
     nextFirstPlayer?: FirstPlayer;
-  } = {}) {
-    cancelAiTurn();
-    const openingSeed = createOpeningSeed();
-    openingSeedRef.current = openingSeed;
-    const snapshot = createInitialGameState(nextMode, nextDifficulty, nextFirstPlayer, openingSeed);
+  } = {}) => {
+    aiGame.cancelAiTurn();
+    const snapshot = aiGame.createInitialSnapshot(nextMode, nextDifficulty, nextFirstPlayer);
 
     setBoard(snapshot.board);
     setNextPlayer(snapshot.nextPlayer);
     setStatus(snapshot.status);
     setMoves(snapshot.moves);
-  }
+  }, [aiGame, mode]);
+
+  useEffect(() => {
+    resetGameRef.current = resetGame;
+  });
 
   function completeModeChange(nextMode: GameMode) {
     if (nextMode === "room") {
-      cancelAiTurn();
+      aiGame.cancelAiTurn();
       setMode(nextMode);
       return;
     }
 
     setTableReplay(null);
 
-    const nextAiSettings = resolveNextAiSettings({
-      aiDifficulty,
-      firstPlayer,
-      pendingDifficulty,
-      pendingFirstPlayer
-    });
-
+    let nextAiSettings = { aiDifficulty: aiGame.aiDifficulty, firstPlayer: aiGame.firstPlayer };
     if (nextMode === "ai") {
-      setAiDifficulty(nextAiSettings.aiDifficulty);
-      setFirstPlayer(nextAiSettings.firstPlayer);
-      setPendingDifficulty(null);
-      setPendingFirstPlayer(null);
+      nextAiSettings = aiGame.applyPendingSettingsOnModeEnter();
     }
 
     setMode(nextMode);
@@ -208,43 +180,6 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     completeModeChange(nextMode);
   }
 
-  function handleDifficultyChange(difficulty: AiDifficulty) {
-    if (shouldDeferAiSettingChange(moves.length)) {
-      setPendingDifficulty(difficulty === aiDifficulty ? null : difficulty);
-      return;
-    }
-
-    setAiDifficulty(difficulty);
-    setPendingDifficulty(null);
-    resetGame({ nextDifficulty: difficulty });
-  }
-
-  function handleFirstPlayerChange(player: FirstPlayer) {
-    if (shouldDeferAiSettingChange(moves.length)) {
-      setPendingFirstPlayer(player === firstPlayer ? null : player);
-      return;
-    }
-
-    setFirstPlayer(player);
-    setPendingFirstPlayer(null);
-    resetGame({ nextFirstPlayer: player });
-  }
-
-  function handleAiReset() {
-    const nextSettings = resolveNextAiSettings({
-      aiDifficulty,
-      firstPlayer,
-      pendingDifficulty,
-      pendingFirstPlayer
-    });
-
-    setAiDifficulty(nextSettings.aiDifficulty);
-    setFirstPlayer(nextSettings.firstPlayer);
-    setPendingDifficulty(null);
-    setPendingFirstPlayer(null);
-    resetGame({ nextDifficulty: nextSettings.aiDifficulty, nextFirstPlayer: nextSettings.firstPlayer });
-  }
-
   function handleOnlineLeaveRequest() {
     if (
       requiresOnlineLeaveConfirmation(friendRoom.room?.role ?? null, friendRoom.room?.snapshot.status ?? null)
@@ -282,10 +217,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   }, []);
 
   function handleUndo() {
-    cancelAiTurn();
-    const aiStone = getAiStone(firstPlayer);
+    aiGame.cancelAiTurn();
+    const aiStone = aiGame.aiStone;
 
-    if (moves.length === 0 || (mode === "ai" && firstPlayer === "ai" && moves.length <= 1)) {
+    if (moves.length === 0 || (mode === "ai" && aiGame.firstPlayer === "ai" && moves.length <= 1)) {
       return;
     }
 
@@ -306,7 +241,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       return;
     }
 
-    const humanStone = getHumanStone(firstPlayer);
+    const humanStone = aiGame.humanStone;
 
     if (status.state !== "playing") {
       return;
@@ -333,7 +268,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
       if (mode === "ai") {
         commitGameState(nextBoard, nextMoves, result);
-        void commitAiTurn(nextBoard, nextMoves, aiDifficulty, firstPlayer);
+        void aiGame.commitAiTurn(nextBoard, nextMoves);
         return;
       }
 
@@ -341,204 +276,6 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     } catch {
       // Illegal clicks are intentionally ignored; the board remains authoritative.
     }
-  }
-
-  async function commitAiTurn(
-    currentBoard: Board,
-    currentMoves: Move[],
-    difficulty: AiDifficulty,
-    selectedFirstPlayer: FirstPlayer
-  ) {
-    const requestId = aiRequestIdRef.current + 1;
-    aiRequestIdRef.current = requestId;
-    setIsAiThinking(true);
-
-    const aiStone = getAiStone(selectedFirstPlayer);
-    const aiPoint = await requestAiMove(currentBoard, currentMoves, aiStone, difficulty, openingSeedRef.current);
-
-    if (aiRequestIdRef.current !== requestId) {
-      return;
-    }
-
-    setIsAiThinking(false);
-
-    if (!aiPoint) {
-      commitGameState(currentBoard, currentMoves, { state: "draw" });
-      return;
-    }
-
-    const aiBoard = placeStone(currentBoard, aiPoint, aiStone);
-    const aiMove = {
-      ...aiPoint,
-      stone: aiStone,
-      moveNumber: currentMoves.length + 1
-    };
-    const aiMoves = [...currentMoves, aiMove];
-    const aiResult = getGameResult(aiBoard, aiPoint, aiStone);
-
-    commitGameState(aiBoard, aiMoves, aiResult);
-  }
-
-  function commitGameState(nextBoard: Board, nextMoves: Move[], nextStatus: GameStatus) {
-    setBoard(nextBoard);
-    setMoves(nextMoves);
-    setStatus(nextStatus);
-    setNextPlayer(nextStatus.state === "playing" ? nextStatus.nextPlayer : (nextMoves.at(-1)?.stone ?? "black"));
-  }
-
-  function cancelAiTurn() {
-    aiRequestIdRef.current += 1;
-    setIsAiThinking(false);
-    terminateAiWorkers();
-    clearAiWorkerTimeout();
-  }
-
-  function getAiWorkerPool(): AiWorkerPool {
-    if (!aiWorkerPoolRef.current) {
-      aiWorkerPoolRef.current = new AiWorkerPool();
-    }
-    return aiWorkerPoolRef.current;
-  }
-
-  function terminateAiWorkers() {
-    if (aiWorkerPoolRef.current && aiWorkersRef.current.length > 0) {
-      aiWorkerPoolRef.current.terminateBusy(aiWorkersRef.current);
-    }
-    aiWorkersRef.current = [];
-  }
-
-  function clearAiWorkerTimeout() {
-    if (aiWorkerTimeoutRef.current === null) {
-      return;
-    }
-
-    window.clearTimeout(aiWorkerTimeoutRef.current);
-    aiWorkerTimeoutRef.current = null;
-  }
-
-  useEffect(() => {
-    return () => {
-      terminateAiWorkers();
-      aiWorkerPoolRef.current?.terminateAll();
-      clearAiWorkerTimeout();
-    };
-  }, []);
-
-  function requestAiMove(
-    currentBoard: Board,
-    currentMoves: Move[],
-    aiStone: Stone,
-    difficulty: AiDifficulty,
-    openingSeed: number
-  ): Promise<Point | null> {
-    const timeLimitMs = getAiTimeLimitMs(difficulty);
-
-    if (typeof Worker === "undefined") {
-      return Promise.resolve(
-        chooseAiMove(currentBoard, aiStone, { difficulty, moves: currentMoves, timeLimitMs, openingSeed })
-      );
-    }
-
-    return new Promise((resolve) => {
-      terminateAiWorkers();
-      clearAiWorkerTimeout();
-      let latestBestMove: Point | null = null;
-      let bestResult: AiWorkerDoneResult | null = null;
-      let completedWorkers = 0;
-      let settled = false;
-      const pool = getAiWorkerPool();
-      const workerCount = getAiWorkerCount(difficulty, navigator.hardwareConcurrency);
-      const workers = pool.acquire(workerCount);
-
-      aiWorkersRef.current = workers;
-
-      const finishAiRequest = (point: Point | null) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        pool.releaseAll(workers);
-        aiWorkersRef.current = aiWorkersRef.current.filter((activeWorker) => !workers.includes(activeWorker));
-
-        clearAiWorkerTimeout();
-        resolve(point);
-      };
-
-      const getEmergencyMove = () =>
-        latestBestMove ??
-        chooseAiMove(currentBoard, aiStone, {
-          difficulty,
-          moves: currentMoves,
-          timeLimitMs: AI_EMERGENCY_TIME_LIMIT_MS,
-          openingSeed
-        });
-
-      aiWorkerTimeoutRef.current = window.setTimeout(() => {
-        finishAiRequest(bestResult?.point ?? latestBestMove ?? getEmergencyMove());
-      }, timeLimitMs + AI_WORKER_TIMEOUT_GRACE_MS);
-
-      const markWorkerComplete = () => {
-        completedWorkers += 1;
-
-        if (completedWorkers >= workers.length) {
-          finishAiRequest(bestResult?.point ?? latestBestMove ?? getEmergencyMove());
-        }
-      };
-
-      workers.forEach((worker, index) => {
-        worker.onmessage = (event: MessageEvent<AiWorkerResponse>) => {
-          if (settled) {
-            return;
-          }
-
-          if (event.data.type === "best") {
-            latestBestMove = event.data.point ?? latestBestMove;
-            return;
-          }
-
-          if (event.data.type === "error") {
-            // The worker rejected its payload or threw; the other shards (or the
-            // watchdog) still get a chance to answer, so just retire this one.
-            markWorkerComplete();
-            return;
-          }
-
-          const result = normalizeAiWorkerResult(event.data);
-
-          if (isBetterAiWorkerResult(result, bestResult, currentBoard)) {
-            bestResult = result;
-          }
-
-          if (result.point) {
-            latestBestMove = result.point;
-          }
-
-          if (isDecisiveAiWorkerResult(result)) {
-            finishAiRequest(result.point);
-            return;
-          }
-
-          markWorkerComplete();
-        };
-
-        worker.onerror = () => {
-          if (!settled) {
-            markWorkerComplete();
-          }
-        };
-
-        worker.postMessage({
-          board: currentBoard,
-          moves: currentMoves,
-          aiStone,
-          difficulty,
-          timeLimitMs,
-          openingSeed,
-          rootCandidateShard: workerCount > 1 ? { index, total: workerCount } : undefined
-        });
-      });
-    });
   }
 
   const roomSnapshot = friendRoom.room?.snapshot ?? null;
@@ -560,17 +297,17 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     return new Set(activeStatus.line.map((point) => `${point.row}:${point.col}`));
   }, [activeStatus]);
   const lastMove = activeMoves.at(-1) ?? null;
-  const humanStone = getHumanStone(firstPlayer);
+  const humanStone = aiGame.humanStone;
   const canUndo =
-    mode !== "room" && !isAiThinking && (mode === "ai" && firstPlayer === "ai" ? moves.length > 1 : moves.length > 0);
+    mode !== "room" && !aiGame.isAiThinking && (mode === "ai" && aiGame.firstPlayer === "ai" ? moves.length > 1 : moves.length > 0);
   const canPlayPoint =
     mode === "room"
       ? friendRoom.canPlay
-      : !isAiThinking && status.state === "playing" && !(mode === "ai" && nextPlayer !== humanStone);
+      : !aiGame.isAiThinking && status.state === "playing" && !(mode === "ai" && nextPlayer !== humanStone);
   // 确认弹窗打开期间必须锁住模式切换：否则第二次点击会直接覆盖 pendingTransition，
   // 让用户以为自己在回答第一个问题时其实已经换了目标模式。
   const isModeSwitchLocked =
-    isAiThinking || friendRoom.isJoiningRoom || isTransitioning || pendingTransition !== null;
+    aiGame.isAiThinking || friendRoom.isJoiningRoom || isTransitioning || pendingTransition !== null;
 
   return (
     <>
@@ -665,68 +402,66 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
         {workspace === "ai" ? (
           <AiGameView
-            aiDifficulty={aiDifficulty}
+            aiDifficulty={aiGame.aiDifficulty}
             board={board}
             canPlay={canPlayPoint}
             canUndo={canUndo}
             dictionary={dictionary}
-            firstPlayer={firstPlayer}
-            isAiThinking={isAiThinking}
+            firstPlayer={aiGame.firstPlayer}
+            isAiThinking={aiGame.isAiThinking}
             lastMove={lastMove}
             nextPlayer={activeNextPlayer}
-            onCancelPendingSettings={() => {
-              setPendingDifficulty(null);
-              setPendingFirstPlayer(null);
-            }}
-            onDifficultyChange={handleDifficultyChange}
-            onFirstPlayerChange={handleFirstPlayerChange}
+            onCancelPendingSettings={aiGame.cancelPendingSettings}
+            onDifficultyChange={aiGame.handleDifficultyChange}
+            onFirstPlayerChange={aiGame.handleFirstPlayerChange}
             onPointSelect={handlePointSelect}
-            onReset={handleAiReset}
+            onReset={aiGame.handleAiReset}
             onUndo={handleUndo}
-            pendingDifficulty={pendingDifficulty}
-            pendingFirstPlayer={pendingFirstPlayer}
+            pendingDifficulty={aiGame.pendingDifficulty}
+            pendingFirstPlayer={aiGame.pendingFirstPlayer}
             winningKey={winningKey}
           />
         ) : null}
 
-        {workspace === "online-lobby" ? (
-          <OnlineLobbyView
-            dictionary={dictionary}
-            locale={locale}
-            onPlayAi={() => handleModeChange("ai")}
-            room={friendRoom}
-          />
-        ) : null}
+        <RoomProvider value={friendRoom}>
+          {workspace === "online-lobby" ? (
+            <OnlineLobbyView
+              dictionary={dictionary}
+              locale={locale}
+              onPlayAi={() => handleModeChange("ai")}
+            />
+          ) : null}
 
-        {workspace === "online-joining" ? (
-          <OnlineJoiningView dictionary={dictionary} locale={locale} room={friendRoom} />
-        ) : null}
+          {workspace === "online-joining" ? (
+            <OnlineJoiningView dictionary={dictionary} locale={locale} />
+          ) : null}
 
-        {workspace === "online-table" ? (
-          <GameTableView
-            board={activeBoard}
-            dictionary={dictionary}
-            isInteractive={canPlayPoint}
-            lastMove={lastMove}
-            onLeaveRequest={handleOnlineLeaveRequest}
-            onPointSelect={handlePointSelect}
-            onReplayChange={setTableReplay}
-            previewStone={activeNextPlayer}
-            replay={tableReplay}
-            room={friendRoom}
-            winningKey={winningKey}
-          />
-        ) : null}
+          {workspace === "online-table" ? (
+            <GameTableView
+              board={activeBoard}
+              dictionary={dictionary}
+              isInteractive={canPlayPoint}
+              lastMove={lastMove}
+              onLeaveRequest={handleOnlineLeaveRequest}
+              onPointSelect={handlePointSelect}
+              onReplayChange={setTableReplay}
+              previewStone={activeNextPlayer}
+              replay={tableReplay}
+              winningKey={winningKey}
+            />
+          ) : null}
+        </RoomProvider>
       </section>
 
       {workspace === "online-table" ? (
         <aside className="side-panel table-side-panel" aria-label={dictionary.room.panelLabel}>
-          <TableSidebar
-            dictionary={dictionary}
-            locale={locale}
-            onReplayGame={(gameId, replayMoves) => setTableReplay(createTableReplay(gameId, replayMoves))}
-            room={friendRoom}
-          />
+          <RoomProvider value={friendRoom}>
+            <TableSidebar
+              dictionary={dictionary}
+              locale={locale}
+              onReplayGame={(gameId, replayMovesList) => setTableReplay(createTableReplay(gameId, replayMovesList))}
+            />
+          </RoomProvider>
         </aside>
       ) : (
         <aside className="side-panel" aria-label={dictionary.status.panelLabel}>
@@ -738,9 +473,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
           <p className="status-copy">
             {mode === "room"
               ? getRoomStatusText(friendRoom, dictionary)
-              : isAiThinking
-                ? dictionary.ai.thinking
-                : getStatusText(status, dictionary)}
+              : getStatusText(activeStatus, dictionary)}
           </p>
           <p className="status-note">
             {mode === "room"
@@ -779,120 +512,6 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       <footer className="app-version">version: {APP_VERSION}</footer>
     </>
   );
-}
-
-function normalizeAiWorkerResult(response: AiWorkerResponse): AiWorkerDoneResult {
-  return {
-    point: response.point,
-    score: response.score ?? Number.NEGATIVE_INFINITY,
-    completedDepth: response.completedDepth ?? 0,
-    nodes: response.nodes ?? 0,
-    source: response.source ?? "none"
-  };
-}
-
-function isBetterAiWorkerResult(
-  next: AiWorkerDoneResult,
-  current: AiWorkerDoneResult | null,
-  board: Board
-): boolean {
-  if (!next.point) {
-    return false;
-  }
-
-  if (!current?.point) {
-    return true;
-  }
-
-  if (next.score !== current.score) {
-    return next.score > current.score;
-  }
-
-  if (next.completedDepth !== current.completedDepth) {
-    return next.completedDepth > current.completedDepth;
-  }
-
-  if (next.nodes !== current.nodes) {
-    return next.nodes > current.nodes;
-  }
-
-  return getCenterDistance(next.point, board) < getCenterDistance(current.point, board);
-}
-
-function isDecisiveAiWorkerResult(result: AiWorkerDoneResult): boolean {
-  return (
-    result.point !== null &&
-    result.source !== "search" &&
-    result.source !== "none" &&
-    result.source !== "empty-shard"
-  );
-}
-
-function getCenterDistance(point: Point, board: Board): number {
-  const center = Math.floor(board.length / 2);
-
-  return Math.abs(point.row - center) + Math.abs(point.col - center);
-}
-
-function replayMoves(moves: Move[]): Board {
-  return moves.reduce((currentBoard, move) => placeStone(currentBoard, move, move.stone), createBoard());
-}
-
-function createInitialGameState(
-  mode: GameMode,
-  aiDifficulty: AiDifficulty,
-  firstPlayer: FirstPlayer,
-  openingSeed: number
-): GameSnapshot {
-  const emptyBoard = createBoard();
-
-  if (mode !== "ai" || firstPlayer !== "ai") {
-    return {
-      board: emptyBoard,
-      moves: [],
-      nextPlayer: "black",
-      status: { state: "playing", nextPlayer: "black" }
-    };
-  }
-
-  const aiStone = getAiStone(firstPlayer);
-  const aiPoint = chooseAiMove(emptyBoard, aiStone, {
-    difficulty: aiDifficulty,
-    timeLimitMs: getAiTimeLimitMs(aiDifficulty),
-    openingSeed
-  });
-
-  if (!aiPoint) {
-    return {
-      board: emptyBoard,
-      moves: [],
-      nextPlayer: "black",
-      status: { state: "draw" }
-    };
-  }
-
-  const board = placeStone(emptyBoard, aiPoint, aiStone);
-  const moves: Move[] = [{ ...aiPoint, stone: aiStone, moveNumber: 1 }];
-  const status = getGameResult(board, aiPoint, aiStone);
-
-  return {
-    board,
-    moves,
-    nextPlayer: status.state === "playing" ? status.nextPlayer : aiStone,
-    status
-  };
-}
-
-function getHumanStone(firstPlayer: FirstPlayer): Stone {
-  return firstPlayer === "human" ? "black" : "white";
-}
-
-function getAiStone(firstPlayer: FirstPlayer): Stone {
-  return getOpponent(getHumanStone(firstPlayer));
-}
-
-function createOpeningSeed(): number {
-  return Math.floor(Math.random() * 0x1_0000_0000);
 }
 
 function getRoomGameStatus(snapshot: RoomSnapshot | null): GameStatus {

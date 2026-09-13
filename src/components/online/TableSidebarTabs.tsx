@@ -7,6 +7,7 @@ import type { Locale } from "@/i18n/config";
 import type { Move } from "@/game/types";
 import type { FriendRoomController } from "../useFriendRoom";
 import { getProfileUrl } from "../profile/profile-url";
+import { useOptionalRoomContext } from "./RoomContext";
 import { TableRoomChat } from "./TableRoomChat";
 
 type TableSidebarTab = "chat" | "history" | "info";
@@ -15,12 +16,13 @@ type TableSidebarTabsProps = {
   dictionary: GameDictionary;
   locale: Locale;
   onReplayGame: (gameId: string, moves: Move[]) => void;
-  room: FriendRoomController;
+  room?: FriendRoomController;
 };
 
 const TABS: TableSidebarTab[] = ["chat", "history", "info"];
 
-export function TableSidebarTabs({ dictionary, locale, onReplayGame, room }: TableSidebarTabsProps) {
+export function TableSidebarTabs({ dictionary, locale, onReplayGame, room: roomProp }: TableSidebarTabsProps) {
+  const room = useOptionalRoomContext(roomProp);
   const [activeTab, setActiveTab] = useState<TableSidebarTab>("chat");
   const snapshot = room.room?.snapshot;
 
@@ -151,7 +153,7 @@ function TableMoveHistory({
   );
 }
 
-function TableRoomInfo({ dictionary, room }: Omit<TableSidebarTabsProps, "locale" | "onReplayGame">) {
+function TableRoomInfo({ dictionary, room }: { dictionary: GameDictionary; room: FriendRoomController }) {
   const clientState = room.room;
 
   if (!clientState) {

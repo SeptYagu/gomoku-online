@@ -2,6 +2,7 @@ import type { GameDictionary } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/config";
 import type { Move } from "@/game/types";
 import type { FriendRoomController } from "../useFriendRoom";
+import { useOptionalRoomContext } from "./RoomContext";
 import { TablePlayers } from "./TablePlayers";
 import { TableSidebarTabs } from "./TableSidebarTabs";
 
@@ -9,10 +10,11 @@ type TableSidebarProps = {
   dictionary: GameDictionary;
   locale: Locale;
   onReplayGame: (gameId: string, moves: Move[]) => void;
-  room: FriendRoomController;
+  room?: FriendRoomController;
 };
 
-export function TableSidebar({ dictionary, locale, onReplayGame, room }: TableSidebarProps) {
+export function TableSidebar({ dictionary, locale, onReplayGame, room: roomProp }: TableSidebarProps) {
+  const room = useOptionalRoomContext(roomProp);
   const clientState = room.room;
 
   if (!clientState) {

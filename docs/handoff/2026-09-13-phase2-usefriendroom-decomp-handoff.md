@@ -37,12 +37,12 @@
 ```
 src/components/
 ├── hooks/
-│   ├── room-state-utils.ts   [NEW 316 行] 共享存储、URL、会话辅助与 useBootSnapshot Hook
-│   ├── useRoomSocket.ts      [NEW 457 行] 专注 Socket 连接生命周期、房间基础状态与创建/加入/退出流
-│   ├── useLobbyPresence.ts   [NEW 434 行] 专注大厅房间列表、在线 Presence、排行榜、Profile 与匹配
-│   ├── useRoomChat.ts        [NEW 153 行] 专注房间聊天、公共大厅聊天与聊天发送闸门
-│   └── useRoomGame.ts        [NEW 113 行] 专注棋局对弈交互（落子、准备、认输、悔棋、坐下）及权限守卫
-└── useFriendRoom.ts          [MODIFY 407 行] 蜕变为顶层轻量装配器
+│   ├── room-state-utils.ts   [NEW 397 行] 共享存储、URL、会话辅助与 useBootSnapshot Hook
+│   ├── useRoomSocket.ts      [NEW 539 行] 专注 Socket 连接生命周期、房间基础状态与创建/加入/退出流
+│   ├── useLobbyPresence.ts   [NEW 501 行] 专注大厅房间列表、在线 Presence、排行榜、Profile 与匹配
+│   ├── useRoomChat.ts        [NEW 180 行] 专注房间聊天、公共大厅聊天与聊天发送闸门
+│   └── useRoomGame.ts        [NEW 133 行] 专注棋局对弈交互（落子、准备、认输、悔棋、坐下）及权限守卫
+└── useFriendRoom.ts          [MODIFY 441 行] 蜕变为顶层轻量装配器
 ```
 
 1. **`room-state-utils.ts`**：
@@ -104,7 +104,7 @@ export function useBootSnapshot<T>(
 
 ### 2.4 顶层装配器蜕变与 API 零破坏保证
 
-`src/components/useFriendRoom.ts` 从 1776 行精简至 407 行，保留账户登录/注册/登出以及邀请链接复制等轻量状态，组合调用上述 4 个子 Hook，组装并返回类型完全一致的 `FriendRoomController`（79 个字段无缝保持）。
+`src/components/useFriendRoom.ts` 从 1776 行精简至 441 行，保留账户登录/注册/登出以及邀请链接复制等轻量状态，组合调用上述 4 个子 Hook，组装并返回类型完全一致的 `FriendRoomController`（79 个字段无缝保持）。
 
 **所有 6 个外部消费组件无需改动任何代码**：
 - `GameShell.tsx`

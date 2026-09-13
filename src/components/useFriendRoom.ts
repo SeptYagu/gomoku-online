@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Point } from "@/game/types";
 import type { AccountSession } from "@/server/accounts";
 import type {
@@ -148,6 +148,9 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
   const joinTarget = joinTargetOverride ?? bootJoinTarget;
   const identityReady = isAccountIdentityReady(accountStatus);
 
+  const lobbyPresenceRef = useRef<ReturnType<typeof useLobbyPresence> | null>(null);
+  const roomChatRef = useRef<ReturnType<typeof useRoomChat> | null>(null);
+
   const roomSocket = useRoomSocket({
     enabled,
     messages,
@@ -156,12 +159,13 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
     playerName,
     setPlayerNameState,
     setJoinTargetState,
-    onRoomCleared: () => {
-      roomChat.resetChatOnRoomClosed();
-      if (roomSocket.room) {
-        lobbyPresence.resetLobbyOnRoomClosed(roomSocket.room.snapshot.code);
+    onRoomCleared: (roomCode: string, isCurrentRoom: boolean) => {
+      lobbyPresenceRef.current?.resetLobbyOnRoomClosed(roomCode);
+      if (isCurrentRoom) {
+        roomChatRef.current?.resetChatOnRoomClosed();
       }
-    }
+    },
+    canCreate: () => lobbyPresenceRef.current?.canCreateRoom ?? (enabled && identityReady && !roomSocket.room)
   });
 
   const lobbyPresence = useLobbyPresence({
@@ -177,7 +181,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
     setRoom: roomSocket.setRoom,
     setIsJoiningRoom: roomSocket.setIsJoiningRoom,
     onMatchCancelled: () => {
-      roomChat.resetChatOnRoomClosed();
+      roomChatRef.current?.resetChatOnRoomClosed();
     }
   });
 
@@ -199,8 +203,10 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
     applyRoomAck: roomSocket.applyRoomAck
   });
 
-  // 通过 effect 同步更新 Socket 事件分发器，杜绝 render 阶段访问 ref
+  // 通过 effect 同步更新 Socket 事件分发器与 ref 委派，杜绝 render 阶段访问 ref
   useEffect(() => {
+    lobbyPresenceRef.current = lobbyPresence;
+    roomChatRef.current = roomChat;
     roomSocket.updateEventHandlers({
       onLobbyActivity: lobbyPresence.handleLobbyActivity,
       onLobbyRoomUpdated: lobbyPresence.handleLobbyRoomUpdated,

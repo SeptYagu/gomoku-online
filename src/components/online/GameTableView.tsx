@@ -4,6 +4,7 @@ import type { Board, Move, Point, Stone } from "@/game/types";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import { GomokuBoard } from "../GomokuBoard";
 import type { FriendRoomController } from "../useFriendRoom";
+import { useOptionalRoomContext } from "./RoomContext";
 import { TableActionBar } from "./TableActionBar";
 import { TableReplayBar } from "./TableReplayBar";
 import { TableTaskBar } from "./TableTaskBar";
@@ -25,7 +26,7 @@ type GameTableViewProps = {
   onReplayChange: (replay: TableReplayState | null) => void;
   previewStone: Stone;
   replay: TableReplayState | null;
-  room: FriendRoomController;
+  room?: FriendRoomController;
   winningKey: Set<string>;
 };
 
@@ -39,9 +40,10 @@ export function GameTableView({
   onReplayChange,
   previewStone,
   replay,
-  room,
+  room: roomProp,
   winningKey
 }: GameTableViewProps) {
+  const room = useOptionalRoomContext(roomProp);
   const labels = dictionary.room;
   const clientState = room.room;
 
