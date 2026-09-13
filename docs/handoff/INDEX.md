@@ -16,6 +16,7 @@
 
 | 交付日期 | 对应提交 / 变更主题 | 文档链接 | 核心交付成果 |
 | :--- | :--- | :--- | :--- |
+| **2026-09-13** | `785c8d4` 独立审查 Round 2（Phase 2） | [`2026-09-13-workbuddy-code-review-round2-handoff.md`](2026-09-13-workbuddy-code-review-round2-handoff.md) | 逐文件核验 4 子 Hook + 装配器等价性与 79 字段零破坏；0×P0/1/2，6×P3（STATUS 游离提交号、handoff 行数失真、`createRoom` 守卫弱化、`clearClosedRoom` 无条件清理、单测同义反复、陈旧注释） |
 | **2026-09-13** | Phase 2 前端状态 Hook 解耦与代码卫生收敛 | [`2026-09-13-phase2-usefriendroom-decomp-handoff.md`](2026-09-13-phase2-usefriendroom-decomp-handoff.md) | `useFriendRoom.ts` 拆解为 4 个专注子 Hook，消除 R6 模块级全局快照，收敛全部 4 项 P3 审查建议，四道门禁+联机烟测全绿 |
 | **2026-09-13** | `1e6ef36` 独立审查 Round 1（Phase 1） | [`2026-09-13-workbuddy-code-review-round1-handoff.md`](2026-09-13-workbuddy-code-review-round1-handoff.md) | 逐点位核验零取值漂移；0×P0/1/2，4×P3（`BOARD_SIZE` 双源、`WIN_STONE_COUNT` 未消费、单测有效性、文档偏差） |
 | **2026-09-13** | Phase 1 全局常量中枢与代码卫生治理 | [`2026-09-13-phase1-code-hygiene-handoff.md`](2026-09-13-phase1-code-hygiene-handoff.md) | 提取 `constants.ts`、`ThemeScript.tsx`、消除魔法值、规范访客与自由五子棋规则 |
