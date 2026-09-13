@@ -16,7 +16,7 @@
 
 | 交付日期 | 对应提交 / 变更主题 | 文档链接 | 核心交付成果 |
 | :--- | :--- | :--- | :--- |
-| **2026-09-13** | 全量代码审查 (Full Codebase Audit Review) | [`2026-09-13-full-codebase-audit-review-handoff.md`](2026-09-13-full-codebase-audit-review-handoff.md) | 依据 WorkBuddy 规范与证伪方法全仓深度审计；深入追踪四大调用链，设计并独立运行 11 项极端边界/故障验证场景（IV-01~11 行为全部符合预期）；四道门禁全绿；0×P0/1/2，**2×P3**（P3-1 悔棋超时死分支，P3-2 反代 XFF 采信部署说明）；**审查未通过、待修复闭环** |
+| **2026-09-13** | 全量代码审查 (Full Codebase Audit Review) | [`2026-09-13-full-codebase-audit-review-handoff.md`](2026-09-13-full-codebase-audit-review-handoff.md) | 依据优化后去噪规范完成全仓审计；通过项 10 行内极简概括；0×P0/1/2，**2×P3**（P3-1 悔棋超时死分支，P3-2 反代 XFF 采信部署说明）；**审查未通过、待修复闭环** |
 | **2026-09-13** | `ea0c0b9` 独立审查 Round 6（Phase 5 AI 引擎分层） | [`2026-09-13-workbuddy-code-review-round6-handoff.md`](2026-09-13-workbuddy-code-review-round6-handoff.md) | 声明级字节比对（base 134 声明 0 缺失 / 1 新增 / 2 等价变更）+ 36 项搜索差分 + 4500+ 项纯函数与配置边界差分证实零行为漂移；7/7 值导出零破坏 + 9 调用方零改动；四道门禁、Arena（含历史基线容错必要性反证）与 `verify:online` 复跑全绿；0×P0/1/2，**1×P3**（交付文档 4 项行数失真，跨 handoff/STATUS/INDEX 复用）；**未通过、待修复复审** |
 | **2026-09-13** | Phase 5 五子棋核心算法分层与 AI 引擎解耦 | [`2026-09-13-phase5-ai-engine-decomp-handoff.md`](2026-09-13-phase5-ai-engine-decomp-handoff.md) | `src/game/ai.ts`（2574 行）解耦为静态评估器 `ai-evaluator.ts`（564 行）、搜索引擎 `ai-search.ts`（1270 行）与策略调度器 `ai-scheduler.ts`（823 行），原文件蜕变为 27 行 Facade 门面，11 个公开方法与类型 100% 零破坏兼容，四道门禁全绿，Arena 天梯对战平局胜率稳定 |
 | **2026-09-13** | `23b03fb` 独立审查 Round 5（Phase 4 服务端领域解耦） | [`2026-09-13-workbuddy-code-review-round5-handoff.md`](2026-09-13-workbuddy-code-review-round5-handoff.md) | 逐块核验 98 base 块字节等价（仅 14 处等价改写）、41 方法/31 类型零破坏、691 项差分断言 + 116 项版本契约断言零差异、四道门禁与三套烟测复跑全绿；0×P0/1/2，**1×P3**（`STATUS.md:11` 阶段交付提交第三次滞后）；**未通过、待修复复审** |
