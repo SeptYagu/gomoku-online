@@ -63,9 +63,36 @@
 
 ---
 
-## 4. 智能体协作与审查协议 [待挂载]
+## 4. 双智能体协同与代码审查闭环（Antigravity ↔ WorkBuddy）
 
-> 此处预留给成熟的双智能体协同/独立代码审查模块。待接入后，将定义派发规则、审查模板与多轮自愈循环。
+当主开发智能体（Antigravity）完成功能开发或缺陷修复并推送到 Git 后，自动触发 WorkBuddy 独立审查，形成免人工干预的代码质量自愈闭环：
+
+### 4.1 审查派发规则（Dispatch Protocol）
+- **目标目录**：仓库根目录 `D:\OneDrive\AiPrograms\gomoku-online`。
+- **派发方式**：调用 `workbuddy-bridge` 技能（或 WorkBuddy CLI 工具），以非阻塞后台任务派发，主智能体挂起等待回传。
+- **调度策略**：模型选择（优先 `deepseek-v4.1-flash`，备用 `glm-5.3-flash`）、网络重试与执行权限自动遵循 `workbuddy-bridge` 插件规则。
+
+### 4.2 独立审查员标准提示词模板（Reviewer Prompt）
+派发给 WorkBuddy 的任务描述按如下标准模板组织：
+
+```text
+你是独立代码审查员（Independent Code Auditor）。
+
+【目标工作区】
+当前工作目录为：D:\OneDrive\AiPrograms\gomoku-online
+
+【审查任务】
+Antigravity 刚刚完成了任务「{TASK_DESCRIPTION}」的代码提交并已推送远端。请执行 `git pull --ff-only` 拉取最新代码，运行基线测试（`npx tsc --noEmit`、`npm run lint` 与 `npm test`），并对最新改动进行严格、独立的质量审查与缺陷核验：
+1. 若发现问题：请将缺陷定位、根因与方案写入新 handoff（`docs/handoff/{DATE}-workbuddy-code-review-round{N}-handoff.md`），更新 `STATUS.md` 与 `docs/handoff/INDEX.md`，并执行 `git commit` 与 `git push` 推送远端。
+2. 若无问题：简要回复说明审查通过与测试验证结论即可，无需额外生成文档与提交。
+```
+
+### 4.3 反馈决策与自愈循环（Resolution Loop）
+1. **唤醒与判断**：
+   - **分支 A（审查通过）**：WorkBuddy 简要回复确认通过且无新增缺陷 handoff ➔ 审查闭环完成，向用户汇报最终成果，流程结束。
+   - **分支 B（发现缺陷）**：WorkBuddy 发现问题并推送了新 handoff ➔ 主智能体执行 `git pull --ff-only` 同步交接文档 ➔ 根据 handoff 修复代码并补充测试 ➔ 本地门禁全绿 ➔ `git commit` & `git push` ➔ 再次派发 WorkBuddy 复审（轮次计数 `N = N + 1`）。
+2. **安全熔断（Safeguard）**：
+   - 最大自动循环次数为 **3 轮**。若达到 3 轮仍存在分歧或未闭环，自动中断循环，整理双方论据向用户汇报，由用户裁决。
 
 ---
 
