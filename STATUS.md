@@ -44,6 +44,7 @@
 - ✅ **Phase 3 缺陷修复与复审收敛**：解决 Round 3 审查指出的 P2-1（恢复侧栏 `dictionary.ai.thinking` 状态文案，消除 6 语种孤儿键）、P3-1（以 `wc -l` 精确校准 Phase 2 与 Phase 3 handoff 全部行数）与 P3-2（同步刷新权威基准提交 SHA）。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md)。
 - ✅ **Phase 3 修复独立复审（Round 4，被审 `3e201ec`）**：**审查通过**。0×P0/P1/P2；1×P3（`STATUS.md:11` 最新交付提交相对修复交付滞后一拍，Round-3 P3-2 同类问题的结构性复发，建议采用「当前 HEAD 指引 + 阶段交付提交」双字段收敛）。Round 3 全部 4 项发现确认闭环。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md)。
 - ✅ **Phase 4: 服务端领域服务解耦**：将 2414 行的服务端巨石单文件 `src/server/rooms.ts` 拆解为三大微领域服务（`RoomStateMachine` 2130 行、`PresenceTracker` 280 行、`LeaderboardService` 87 行），`rooms.ts` 蜕变为 324 行轻量 Facade 门面类，完整代理 41 个公开方法，重导出 31 个公开类型与 `createRoomCode`，外部调用方 `room-socket.ts`、`rooms.test.ts`（43 项用例）与 `online-server.ts` 100% 零改动兼容，四道门禁+全套联机烟测全绿通过。详见 [`docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md`](docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md)。
+- ✅ **Phase 4 领域解耦独立复审（Round 5，被审 `23b03fb`）**：**审查未通过**。0×P0/P1/P2；**1×P3**（`STATUS.md:11` 阶段交付提交滞后一拍，Round-3 P3-2 / Round-4 P3-1 同类问题第三次复发，双字段收敛方案仍未落地）。功能等价性经 98 块块级字节比对 + 691 项差分断言 + 116 项版本契约断言独立证实**零行为回归**，四道门禁与三套联机烟测独立复跑全绿，handoff 全部量化声明逐项属实。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round5-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round5-handoff.md)。
 
 ---
 
@@ -66,7 +67,8 @@
 - **最新单阶段交付单**：[`docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md`](docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md`](docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md`](docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md)
-- **最新独立审查（Round 4，被审 `3e201ec`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md)（0×P0/1/2，1×P3，**审查通过**，Round 3 全部 4 项闭环）
+- **最新独立审查（Round 5，被审 `23b03fb`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round5-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round5-handoff.md)（0×P0/1/2，**1×P3**，**审查未通过**，待修复后 Round 6 复审）
+- **前序独立审查（Round 4，被审 `3e201ec`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md)（0×P0/1/2，1×P3，**审查通过**，Round 3 全部 4 项闭环）
 - **前序独立审查（Round 3，被审 `b45e3fb`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md)（0×P0/1，**1×P2**，3×P3，已在 Round 4 闭环）
 - **前序独立审查（Round 2，被审 `785c8d4`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round2-handoff.md)（0×P0/1/2，6×P3，其中 4 项已在 Phase 3 完全闭环、2 项部分闭环）
 - **前序独立审查（Round 1，被审 `1e6ef36`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round1-handoff.md)（P3 建议已在 Phase 2 全部收敛）
