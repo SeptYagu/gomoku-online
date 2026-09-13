@@ -16,6 +16,7 @@
 
 | 交付日期 | 对应提交 / 变更主题 | 文档链接 | 核心交付成果 |
 | :--- | :--- | :--- | :--- |
+| **2026-09-13** | Phase 5 五子棋核心算法分层与 AI 引擎解耦 | [`2026-09-13-phase5-ai-engine-decomp-handoff.md`](2026-09-13-phase5-ai-engine-decomp-handoff.md) | `src/game/ai.ts`（2574 行）解耦为静态评估器 `ai-evaluator.ts`（564 行）、搜索引擎 `ai-search.ts`（1270 行）与策略调度器 `ai-scheduler.ts`（820 行），原文件蜕变为 24 行 Facade 门面，11 个公开方法与类型 100% 零破坏兼容，四道门禁全绿，Arena 天梯对战平局胜率稳定 |
 | **2026-09-13** | `23b03fb` 独立审查 Round 5（Phase 4 服务端领域解耦） | [`2026-09-13-workbuddy-code-review-round5-handoff.md`](2026-09-13-workbuddy-code-review-round5-handoff.md) | 逐块核验 98 base 块字节等价（仅 14 处等价改写）、41 方法/31 类型零破坏、691 项差分断言 + 116 项版本契约断言零差异、四道门禁与三套烟测复跑全绿；0×P0/1/2，**1×P3**（`STATUS.md:11` 阶段交付提交第三次滞后）；**未通过、待修复复审** |
 | **2026-09-13** | `23b03fb` Phase 4 服务端领域服务解耦 | [`2026-09-13-phase4-server-rooms-decomp-handoff.md`](2026-09-13-phase4-server-rooms-decomp-handoff.md) | `src/server/rooms.ts`（2414 行）解耦为 RoomStateMachine（2130 行）、PresenceTracker（280 行）、LeaderboardService（87 行）三大微领域服务，原文件蜕变为 324 行 Facade 门面，41 个方法与 31 个类型 100% 零破坏兼容，四道门禁+全套联机烟测全绿 |
 | **2026-09-13** | `3e201ec` 独立审查 Round 4（Phase 3 修复收敛） | [`2026-09-13-workbuddy-code-review-round4-handoff.md`](2026-09-13-workbuddy-code-review-round4-handoff.md) | 核验侧栏 AI 思考中文案恢复、消除 6 语种孤儿键、精确校准 handoff 行数与权威提交；0×P0/1/2，1×P3（STATUS 提交双字段方案）；**审查通过**，Round 3 全部 4 项闭环 |

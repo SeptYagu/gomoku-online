@@ -127,7 +127,15 @@ type SideStats = {
 
 const ROOT_DIR = process.cwd();
 const CENTER = Math.floor(BOARD_SIZE / 2);
-const SOURCE_FILES = ["ai.ts", "board.ts", "types.ts"] as const;
+const SOURCE_FILES = [
+  "ai.ts",
+  "ai-evaluator.ts",
+  "ai-search.ts",
+  "ai-scheduler.ts",
+  "board.ts",
+  "types.ts",
+  "opening-book.ts"
+] as const;
 const CENTRAL_OPENING_POOL: Point[] = [
   { row: CENTER, col: CENTER },
   { row: CENTER - 1, col: CENTER - 1 },
@@ -282,12 +290,17 @@ async function loadEngine(id: EngineId, spec: string): Promise<Engine> {
   await mkdir(cacheDir, { recursive: true });
 
   for (const file of SOURCE_FILES) {
-    const source = execFileSync("git", ["show", `${spec}:src/game/${file}`], {
-      cwd: ROOT_DIR,
-      encoding: "utf8"
-    });
+    try {
+      const source = execFileSync("git", ["show", `${spec}:src/game/${file}`], {
+        cwd: ROOT_DIR,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"]
+      });
 
-    await writeFile(path.join(cacheDir, file), source, "utf8");
+      await writeFile(path.join(cacheDir, file), source, "utf8");
+    } catch {
+      // 容错兼容早期未拆分的 commit（如缺少分层模块或生成文件）
+    }
   }
 
   const modulePath = path.join(cacheDir, "ai.ts");
