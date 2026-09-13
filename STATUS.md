@@ -6,9 +6,9 @@
 
 ## 1. 当前版本与环境快照
 
-- **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准）
+- **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`3e201ec fix(refactor): restore ai thinking indicator in GameShell and converge review findings`
+- **最新阶段交付提交**：`23b03fb feat(refactor): phase 4 - decouple server rooms into micro domain services`
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
