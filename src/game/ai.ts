@@ -1,5 +1,6 @@
 import {
   BOARD_SIZE,
+  WIN_STONE_COUNT,
   getGameResult,
   getLegalMoves,
   getNearbyMoves,
@@ -1630,7 +1631,7 @@ function hasFiveAt(board: Board, point: Point, stone: Stone): boolean {
       col: -direction.col
     });
 
-    if (forward.count + backward.count + 1 >= 5) {
+    if (forward.count + backward.count + 1 >= WIN_STONE_COUNT) {
       return true;
     }
   }

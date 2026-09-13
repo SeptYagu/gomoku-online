@@ -8,7 +8,7 @@
 
 - **当前分支**：`main`
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新交付提交**：`19f2974 docs: establish AGENTS.md prompt hub, STATUS.md, and decouple handoffs with zero information loss`
+- **最新交付提交**：`401db34 feat(refactor): phase 2 - decouple useFriendRoom into focused domain hooks`
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -21,10 +21,11 @@
 
 ## 2. 门禁基线指标（当前全绿）
 
-- **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（已彻底清除测试环境类型逆变与缺失属性）
-- **代码规范检查** (`npm run lint`)：0 错误，0 警告
-- **单元测试** (`npm test`)：27 个测试套件 / 233 项用例 100% 通过
+- **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
+- **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则）
+- **单元测试** (`npm test`)：27 个测试套件 / 235 项用例 100% 通过
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常
+- **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：全绿通过
 
 ---
 
@@ -38,6 +39,7 @@
 - ✅ **双智能体协同与代码审查闭环挂载**：在 `AGENTS.md` 完整集成 Antigravity ↔ WorkBuddy 独立审查派发、提示词模板与 3 轮自愈闭环协议。
 - ✅ **全量技术债分阶段重构蓝图落地**：基于审查文档制定 5 阶段渐进解耦规划交接单，支持后续单阶段独立执行。
 - ✅ **Phase 1: 全局常量中枢与代码卫生治理**：提取 `src/lib/constants.ts` 与单测、封装 `ThemeScript.tsx` 消除布局内联脚本重复、全仓替换魔法值并补充自由五子棋规则说明。
+- ✅ **Phase 2: 前端状态 Hook 解耦与代码卫生收敛**：`useFriendRoom.ts` 拆解为 4 个专注子 Hook（407 行装配器），根除 R6 模块级全局快照缺陷，收敛 Phase 1 全部 4 项 P3 审查建议，外部 API 零破坏。
 
 ---
 
@@ -46,7 +48,7 @@
 > 详细分阶段执行方案与边界请查阅：[`2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
 
 1. ✅ ~~**Phase 1: 全局常量中枢与代码卫生治理**~~（已完成）
-2. **Phase 2: 前端状态 Hook 解耦**（`useFriendRoom.ts` 1772 行拆分为 4 个专注子 Hook，消除 R6 模块级快照）
+2. ✅ ~~**Phase 2: 前端状态 Hook 解耦**~~（已完成：`useFriendRoom.ts` 拆解为 `useRoomSocket`、`useLobbyPresence`、`useRoomChat`、`useRoomGame` 与 `room-state-utils`，消除 R6 模块级快照）
 3. **Phase 3: 联机大厅与表现层组件化**（`GameShell.tsx` 抽离 `useAiGame`，`OnlineLobbyView.tsx` 拆分子视图并引入 `RoomContext`）
 4. **Phase 4: 服务端领域服务解耦**（`rooms.ts` 2415 行拆分为 PresenceTracker、LeaderboardService、RoomStateMachine）
 5. **Phase 5: 五子棋核心算法分层**（`ai.ts` 2574 行拆分为评估器、$\alpha\text{-}\beta$ 搜索器、开局调度器，并通过 Arena 自动化天梯评测）
@@ -57,6 +59,6 @@
 
 - 详细交接单索引请查阅：[`docs/handoff/INDEX.md`](docs/handoff/INDEX.md)
 - **全局分阶段重构总纲**：[`docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
-- 最新单阶段交付单：[`docs/handoff/2026-09-13-phase1-code-hygiene-handoff.md`](docs/handoff/2026-09-13-phase1-code-hygiene-handoff.md)
-- **最新独立审查（Round 1，被审 `1e6ef36`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round1-handoff.md)（0×P0/1/2，4×P3，非阻塞）
+- 最新单阶段交付单：[`docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md`](docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md)
+- **前序独立审查（Round 1，被审 `1e6ef36`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round1-handoff.md)（P3 建议已在 Phase 2 全部收敛）
 - 原始全量档案：[`docs/archive/LEGACY_HANDOFF_ARCHIVE.md`](docs/archive/LEGACY_HANDOFF_ARCHIVE.md)

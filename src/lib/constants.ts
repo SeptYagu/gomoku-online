@@ -3,9 +3,8 @@
  * 集中管理棋盘规则、字符限制、分页、时序超时与默认配置
  */
 
-// ─── 棋盘与规则 ───
-export const BOARD_SIZE = 15;
-export const WIN_STONE_COUNT = 5;
+// ─── 棋盘与规则 (单一真源：从纯领域核心 board.ts 重导出) ───
+export { BOARD_SIZE, WIN_STONE_COUNT } from "@/game/board";
 
 // ─── 长度限制 ───
 export const MAX_CHAT_MESSAGE_LENGTH = 160;

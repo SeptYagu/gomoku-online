@@ -1,6 +1,7 @@
 import type { Board, Cell, GameStatus, Point, Stone } from "./types";
 
 export const BOARD_SIZE = 15;
+export const WIN_STONE_COUNT = 5;
 
 const DIRECTIONS: Point[] = [
   { row: 0, col: 1 },
@@ -137,7 +138,7 @@ export function getWinLine(board: Board, lastMove: Point, stone: Stone): Point[]
     });
     const line = [...backward.reverse(), lastMove, ...forward];
 
-    if (line.length >= 5) {
+    if (line.length >= WIN_STONE_COUNT) {
       return line;
     }
   }
