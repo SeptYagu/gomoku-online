@@ -17,7 +17,7 @@
 2. **α-β 极小极大搜索引擎**：包含增量位置状态机 `SearchPosition`、置换表 TTL 淘汰、静态评估缓存、战术空当延伸与候选排序；
 3. **策略调度与开局编排**：包含 4 档难度 Profile 配置、开局库加权与 8 种对称变换采样、全盘必胜/必挡判定、算杀（VCF/VCT）威胁搜索与根候选分片。
 
-本阶段严格按照 Master Plan §3.5 要求，将 `src/game/ai.ts` 解耦为三个高内聚、职责单一的纯函数微领域模块，并将原文件蜕变为 24 行轻量 Facade 门面，实现对全仓外部调用方 **100% 零破坏无感知兼容**。
+本阶段严格按照 Master Plan §3.5 要求，将 `src/game/ai.ts` 解耦为三个高内聚、职责单一的纯函数微领域模块，并将原文件蜕变为 27 行轻量 Facade 门面，实现对全仓外部调用方 **100% 零破坏无感知兼容**（除 11 项原公开 API 与核心类型外，门面新增导出 2 项内部类型 `ThreatSummary` 与 `ChooseAiMoveOptions`，保持完全向后兼容）。
 
 ---
 
@@ -25,9 +25,9 @@
 
 ```mermaid
 flowchart TD
-    Facade["src/game/ai.ts (Facade 门面层, 24 行)<br/>向后 100% 兼容 11 项公开方法与类型"]
+    Facade["src/game/ai.ts (Facade 门面层, 27 行)<br/>向后 100% 兼容 11 项公开方法与类型"]
     
-    Scheduler["src/game/ai-scheduler.ts (策略调度器, 820 行)<br/>chooseAiMove, chooseAiMoveResult, 开局库, VCF/VCT, 难度配置"]
+    Scheduler["src/game/ai-scheduler.ts (策略调度器, 823 行)<br/>chooseAiMove, chooseAiMoveResult, 开局库, VCF/VCT, 难度配置"]
     Searcher["src/game/ai-search.ts (搜索引擎, 1270 行)<br/>minimax, SearchPosition, 候选排序, 置换表, 战术延伸"]
     Evaluator["src/game/ai-evaluator.ts (静态评估器, 564 行)<br/>evaluateBoard, scoreAiMove, 威胁分析, Zobrist 散列, 窗口评分"]
     
@@ -49,10 +49,10 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- |
 | `src/game/ai-evaluator.ts` | **NEW** 静态评估领域 | — | **564 行** | 棋盘评估、威胁分析、Zobrist 散列与坐标索引工具 |
 | `src/game/ai-search.ts` | **NEW** 搜索引擎领域 | — | **1270 行** | $\alpha\text{-}\beta$ 剪枝、`SearchPosition` 增量状态、置换表与候选排序 |
-| `src/game/ai-scheduler.ts` | **NEW** 调度编排领域 | — | **820 行** | 难度 Profile、开局库加权、VCF/VCT 算杀与并行分片 |
-| `src/game/ai.ts` | **REFACTOR** 门面 Facade | 2574 行 | **24 行** | 完整重导出 11 项公开 API 与核心类型，消除巨石 |
-| `tools/engine-arena.ts` | **UPDATE** 天梯评测工具 | 740 行 | **752 行** | 扩充 `SOURCE_FILES` 并添加 `try-catch` 容错兼容历史旧 commit |
-| **总计 / 净变化** | — | **2574 行** | **2678 行** (+104 行) | 结构清晰，净增加行数主要为显式类型声明与模块导入导出边界 |
+| `src/game/ai-scheduler.ts` | **NEW** 调度编排领域 | — | **823 行** | 难度 Profile、开局库加权、VCF/VCT 算杀与并行分片 |
+| `src/game/ai.ts` | **REFACTOR** 门面 Facade | 2574 行 | **27 行** | 完整重导出 11 项公开 API 与核心类型，消除巨石 |
+| `tools/engine-arena.ts` | **UPDATE** 天梯评测工具 | 739 行 | **752 行** | 扩充 `SOURCE_FILES` 并添加 `try-catch` 容错兼容历史旧 commit |
+| **总计 / 净变化** | — | **2574 行** | **2684 行** (+110 行) | 结构清晰，净增加行数主要为显式类型声明与模块导入导出边界 |
 
 ---
 
@@ -63,7 +63,7 @@ flowchart TD
   - `evaluateBoard(board, aiStone)`：棋盘静态局势评估（攻防加权差值）
   - `scoreAiMove(board, point, aiStone)`：单一着法攻防启发式打分
   - `getThreatSummaryAfterMove(board, point, stone)`：模拟落子后的威胁分析
-  - `ThreatSummary` 类型：`{ wins, openFours, simpleFours, openThrees, score }`
+  - `ThreatSummary` 类型：`{ wins, openFours, simpleFours, openThrees, score }`（门面新增导出的内部类型，保持完全向后兼容）
 - **棋型与窗口打分**：
   - `scorePattern`、`getWindowPoints`、`getWindowOpenEnds`、`scoreWindow`、`scoreWindowsThroughPoint`、`scoreBoardForStone`、`scoreStonePlacement`、`scorePointForStone`、`scorePointForPlacedStone`、`countDirection`
 - **威胁研判**：
@@ -88,13 +88,13 @@ flowchart TD
 - **内部契约类型**：
   - `SearchProfile`、`TranspositionFlag`、`TranspositionEntry`、`SearchDeadline`、`SearchState`、`TacticalCandidate`、`RankedCandidate`、`CandidateSnapshot`、`SearchMoveRecord`、`SearchMoveResult`
 
-### 3.3 `src/game/ai-scheduler.ts` — 策略调度与开局编排（820 行）
+### 3.3 `src/game/ai-scheduler.ts` — 策略调度与开局编排（823 行）
 - **公开 Export**：
   - `chooseAiMove(board, aiStone, options)`：顶层决策方法
   - `chooseAiMoveResult(board, aiStone, options)`：带走法分析指标的完整结果
   - `getAiTimeLimitMs(difficulty, overrideMs)`：各难度思考时间上限
   - `getAiWorkerCount(difficulty, hardwareConcurrency)`：多线程并行 Worker 调度容量
-  - 类型：`AiDifficulty`、`AiRootCandidateShard`、`AiMoveSource`、`AiMoveResult`、`ChooseAiMoveOptions`
+  - 类型：`AiDifficulty`、`AiRootCandidateShard`、`AiMoveSource`、`AiMoveResult`、`ChooseAiMoveOptions`（其中 `ChooseAiMoveOptions` 为门面新增导出的内部类型，保持完全向后兼容）
 - **编排辅助**：
   - `createAiMoveResult`、`shardRootCandidates`、`normalizeShardIndex`
 - **开局库驱动**：
@@ -105,8 +105,8 @@ flowchart TD
   - `findForcedThreatMove`、`canForceThreatWin`、`getThreatAttackMoves`、`getThreatDefenseMoves`、`isThreatSearchThreat`、`isThreatSearchCounterThreat`、`getThreatSearchDepth`
 - **配置常量**：`SEARCH_PROFILES`（4 档深度与节点上限）、`OPENING_BOOK_PLIES`、`AI_TIME_LIMIT_MS`、`AI_PARALLEL_WORKERS`、`DIFFICULTY_RANK`
 
-### 3.4 `src/game/ai.ts` — 零破坏 Facade 门面（24 行）
-完整透传重导出：
+### 3.4 `src/game/ai.ts` — 零破坏 Facade 门面（27 行）
+完整透传重导出（除 11 项原公开 API 与核心类型外，门面新增导出 2 项内部类型 `ThreatSummary` 与 `ChooseAiMoveOptions`，保持完全向后兼容）：
 ```typescript
 export {
   evaluateBoard,
