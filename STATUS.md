@@ -43,6 +43,7 @@
 - ✅ **Phase 3: 联机大厅与表现层组件化**：`GameShell.tsx` 抽离 `useAiGame` 领域 Hook（593 行，-39.0%），建立 `RoomContext` 消除 Props 逐层透传，`OnlineLobbyView.tsx` 拆解为 6 个高内聚独立子面板（191 行纯容器），收敛 Phase 2 全部 6 项 P3 审查建议。
 - ✅ **Phase 3 缺陷修复与复审收敛**：解决 Round 3 审查指出的 P2-1（恢复侧栏 `dictionary.ai.thinking` 状态文案，消除 6 语种孤儿键）、P3-1（以 `wc -l` 精确校准 Phase 2 与 Phase 3 handoff 全部行数）与 P3-2（同步刷新权威基准提交 SHA）。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md)。
 - ✅ **Phase 3 修复独立复审（Round 4，被审 `3e201ec`）**：**审查通过**。0×P0/P1/P2；1×P3（`STATUS.md:11` 最新交付提交相对修复交付滞后一拍，Round-3 P3-2 同类问题的结构性复发，建议采用「当前 HEAD 指引 + 阶段交付提交」双字段收敛）。Round 3 全部 4 项发现确认闭环。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md)。
+- ✅ **Phase 4: 服务端领域服务解耦**：将 2414 行的服务端巨石单文件 `src/server/rooms.ts` 拆解为三大微领域服务（`RoomStateMachine` 2130 行、`PresenceTracker` 280 行、`LeaderboardService` 87 行），`rooms.ts` 蜕变为 324 行轻量 Facade 门面类，完整代理 41 个公开方法，重导出 31 个公开类型与 `createRoomCode`，外部调用方 `room-socket.ts`、`rooms.test.ts`（43 项用例）与 `online-server.ts` 100% 零改动兼容，四道门禁+全套联机烟测全绿通过。详见 [`docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md`](docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md)。
 
 ---
 
@@ -53,7 +54,7 @@
 1. ✅ ~~**Phase 1: 全局常量中枢与代码卫生治理**~~（已完成）
 2. ✅ ~~**Phase 2: 前端状态 Hook 解耦**~~（已完成：`useFriendRoom.ts` 拆解为 `useRoomSocket`、`useLobbyPresence`、`useRoomChat`、`useRoomGame` 与 `room-state-utils`，消除 R6 模块级快照）
 3. ✅ ~~**Phase 3: 联机大厅与表现层组件化**~~（已完成：`GameShell.tsx` 抽离 `useAiGame`，建立 `RoomContext`，`OnlineLobbyView.tsx` 拆解为 6 个独立子面板，收敛 Phase 2 全部审查建议）
-4. **Phase 4: 服务端领域服务解耦**（`rooms.ts` 拆分为 PresenceTracker、LeaderboardService、RoomStateMachine）
+4. ✅ ~~**Phase 4: 服务端领域服务解耦**~~（已完成：`rooms.ts` 拆解为 PresenceTracker、LeaderboardService、RoomStateMachine 三大微领域服务与 Facade 门面，外部 API 零破坏）
 5. **Phase 5: 五子棋核心算法分层**（`ai.ts` 拆分为评估器、$\alpha\text{-}\beta$ 搜索器、开局调度器，并通过 Arena 自动化天梯评测）
 
 ---
@@ -62,7 +63,8 @@
 
 - 详细交接单索引请查阅：[`docs/handoff/INDEX.md`](docs/handoff/INDEX.md)
 - **全局分阶段重构总纲**：[`docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
-- **最新单阶段交付单**：[`docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md`](docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md)
+- **最新单阶段交付单**：[`docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md`](docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md)
+- 前序阶段交付单：[`docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md`](docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md`](docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md)
 - **最新独立审查（Round 4，被审 `3e201ec`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round4-handoff.md)（0×P0/1/2，1×P3，**审查通过**，Round 3 全部 4 项闭环）
 - **前序独立审查（Round 3，被审 `b45e3fb`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md)（0×P0/1，**1×P2**，3×P3，已在 Round 4 闭环）
