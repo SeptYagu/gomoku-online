@@ -79,7 +79,8 @@
 - **调度策略**：模型选择（优先 `deepseek-v4.1-flash`，备用 `glm-5.3-flash`）、网络重试与执行权限自动遵循 `workbuddy-bridge` 插件规则。
 
 ### 4.2 独立审查员提示词规范（Reviewer Prompt Reference）
-代码审查提示词已外置并收敛于 WorkBuddy 技能基座的标准规范文件中，项目内仅做路径引用：
+代码审查提示词已外置并收敛于 WorkBuddy 技能基座的标准规范文件中，项目内工作流契约亦已固化为模板：
+- **项目内标准工作流规范**：[`docs/templates/DUAL_AGENT_REVIEW_WORKFLOW.md`](docs/templates/DUAL_AGENT_REVIEW_WORKFLOW.md)（固化状态机生命周期、开发/审查/修复契约与提示词模板）
 - **规范模板文件**：`C:\Users\12915\.gemini\config\plugins\workbuddy-plugin\skills\workbuddy-bridge\code-review-prompt.md`
 
 **派发调用约定**：

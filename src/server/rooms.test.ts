@@ -786,7 +786,7 @@ describe("RoomStore", () => {
     });
   });
 
-  it("expires pending undo requests as rejected after ten seconds", () => {
+  it("expires pending undo requests as rejected after ten seconds and rejects late response", () => {
     let now = 1_780_000_000_000;
     const store = new RoomStore({
       codeGenerator: () => "ROOM01",
@@ -800,18 +800,63 @@ describe("RoomStore", () => {
     expectOk(store.applyMove(created.code, { playerId: "player-1", point: { row: 7, col: 7 } }));
 
     const requested = expectOk(store.requestUndo(created.code, "player-1"));
+    const requestId = requested.undoRequest?.id ?? "";
 
     expect(requested.undoRequest?.expiresAt).toBe(now + 10_000);
 
     now += 10_001;
 
+    // Late response must fail with undo-request-missing and keep the board intact
+    const lateResponse = store.respondToUndo(created.code, "player-2", requestId, true);
+    expect(lateResponse).toMatchObject({
+      ok: false,
+      error: { code: "undo-request-missing" }
+    });
+
     const expired = expectOk(store.getSnapshot(created.code));
 
+    expect(expired.board[7][7]).toBe("black");
+    expect(expired.moveSeq).toBe(1);
+    expect(expired.moves).toHaveLength(1);
     expect(expired.undoRequest).toBeNull();
     expect(store.requestUndo(created.code, "player-1")).toMatchObject({
       ok: false,
       error: { code: "undo-request-rejected-position" }
     });
+  });
+
+  it("atomically processes respondToUndo when request was active upon entering lifecycle advance", () => {
+    let now = 1_780_000_000_000;
+    // Step clock by 1ms on every now() invocation
+    const store = new RoomStore({
+      codeGenerator: () => "ROOM02",
+      now: () => {
+        const current = now;
+        now += 1;
+        return current;
+      }
+    });
+    const created = expectOk(store.createRoom({ playerId: "player-1", playerName: "Alice" }));
+    expectOk(store.joinRoom(created.code, { playerId: "player-2", playerName: "Bob" }));
+    expectOk(store.setPlayerReady(created.code, "player-1"));
+    expectOk(store.setPlayerReady(created.code, "player-2"));
+    expectOk(store.applyMove(created.code, { playerId: "player-1", point: { row: 7, col: 7 } }));
+
+    const requested = expectOk(store.requestUndo(created.code, "player-1"));
+    const reqId = requested.undoRequest?.id ?? "";
+    const expiresAt = requested.undoRequest?.expiresAt ?? 0;
+
+    // Position clock at boundary edge: getRoom entrance will read < expiresAt,
+    // while subsequent now() calls advance across expiresAt
+    now = expiresAt - 2;
+
+    const result = store.respondToUndo(created.code, "player-2", reqId, true);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.board[7][7]).toBeNull();
+      expect(result.value.moveSeq).toBe(0);
+      expect(result.value.undoRequest).toBeNull();
+    }
   });
 
   it("detects wins from the authoritative board and locks finished games", () => {

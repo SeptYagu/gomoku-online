@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则）
-- **单元测试** (`npm test`)：28 个测试套件 / 242 项用例 100% 通过
+- **单元测试** (`npm test`)：28 个测试套件 / 243 项用例 100% 通过（新增 1 项悔棋超时边界与步进时钟原子性测试）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：全绿通过
 
@@ -49,6 +49,7 @@
 - ✅ **Phase 5 AI 引擎分层独立复审（Round 6，被审 `ea0c0b9`）**：0×P0/P1/P2；**1×P3**（Phase 5 交付文档 4 项行数量化数据失真）。功能等价性经声明级字节比对（base 134 声明 0 缺失/1 新增/2 等价变更）+ 36 项搜索差分 + 4500+ 项纯函数与配置边界差分独立证实**零行为漂移**，四道门禁、Arena 与 `verify:online` 独立复跑全绿；所报 4 项行数失真已在 `3d4a1a1` 统一校准闭环。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round6-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round6-handoff.md)。
 - ✅ **全量项目独立代码审查（Full Codebase Audit Review，被审 `3d4a1a1`）**：依据 WorkBuddy 规范与证伪方法完成全仓无盲区审计。追踪四大关键业务调用链，设计并独立运行 11 项负向/极端边界验证场景，四道门禁基线全绿（28 套 / 242 项测试 100% 通过，生产构建全通）。0×P0/1/2，**2×P3**（P3-1: `room-state-machine.ts:798` 悔棋超时死分支；P3-2: `client-address.ts:38` 多级反代 XFF 采信策略配置约束）；**已全部修复闭环**（P3-1 移除死分支，P3-2 完善 README 与 OpenResty 反代契约文档）。详见 [`docs/handoff/2026-09-13-full-codebase-audit-review-handoff.md`](docs/handoff/2026-09-13-full-codebase-audit-review-handoff.md)。
 - ⚠️ **全量审计 P3 修复与工作流契约固化独立复审（Round 7，被审 `948d239`）**：**审查未通过**。0×P0/P1/P2；**4×P3**（P3-1 `README.md:91`/`openresty-gomoku.conf.example:8-10` 单级反代 XFF 可伪造论证与末位采信策略自相矛盾；P3-2 `README.md:94`/`openresty-gomoku.conf.example:16-17` 的 `$http_cf_connecting_ip` 备选方案缺 CDN 源站白名单前置条件、源站可直连时限流键可任意铸造；P3-3 `room-state-machine.ts:798` 移除超时分支非严格行为等价（跨 `expiresAt` 边界语义由拒变收）且该路径 242 项测试零覆盖；P3-4 新增 `docs/templates/DUAL_AGENT_REVIEW_WORKFLOW.md` 为孤儿文档、全仓零入站引用）。独立复跑 `tsc`/`lint`/`vitest`(28 套 242 项) 全绿，并以可控时钟与 nginx XFF 变量语义仿真探针完成证伪。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round7-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round7-handoff.md)。
+- 🔄 **Round 7 审查缺陷修复与规范索引挂载**：针对 Round 7 审查提出的 4 项 P3（单级 XFF 论证、`$http_cf_connecting_ip` CDN 回源白名单前置条件、悔棋超时边界原子语义与测试守门、消除规范文档孤儿引用）完成定向修复与文档对齐，四道门禁全绿（243 项测试通过），准备送审 Round 8。详见 [`docs/handoff/2026-09-13-round7-findings-remediation-handoff.md`](docs/handoff/2026-09-13-round7-findings-remediation-handoff.md)。
 
 ---
 

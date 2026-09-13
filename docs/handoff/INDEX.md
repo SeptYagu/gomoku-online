@@ -16,6 +16,7 @@
 
 | 交付日期 | 对应提交 / 变更主题 | 文档链接 | 核心交付成果 |
 | :--- | :--- | :--- | :--- |
+| **2026-09-13** | Round 7 审查缺陷修复（P3-1 至 P3-4）与规范索引闭环 | [`2026-09-13-round7-findings-remediation-handoff.md`](2026-09-13-round7-findings-remediation-handoff.md) | 纠正反代单级 XFF 论证，补齐 `$http_cf_connecting_ip` CDN 回源白名单前置条件；补充悔棋超时生命周期推进注释与测试守门（超期响应 `undo-request-missing` 及步进时钟原子性）；消除孤儿引用，在 AGENTS/README/INDEX 挂载工作流规范；四道门禁全绿（243 项测试通过） |
 | **2026-09-13** | `948d239` 独立审查 Round 7（全量审计 P3 修复 + Push for Review 契约固化） | [`2026-09-13-workbuddy-code-review-round7-handoff.md`](2026-09-13-workbuddy-code-review-round7-handoff.md) | 逐文件核验 8 文件 diff；`IV-07` 孤儿引用确已清零、`room-state-machine.ts:798` 死分支确已移除；独立复跑 `tsc`/`lint`/`vitest`(28 套 242 项) 全绿并以可控时钟 + nginx XFF 语义仿真探针证伪；0×P0/1/2，**4×P3**（单级 XFF 论证自相矛盾、`$http_cf_connecting_ip` 缺来源白名单前置、超时分支移除非行为等价且零测试守门、新增规范文档孤儿零引用）；**未通过、待修复复审** |
 | **2026-09-13** | 全量代码审查 (Full Codebase Audit Review) | [`2026-09-13-full-codebase-audit-review-handoff.md`](2026-09-13-full-codebase-audit-review-handoff.md) | 依据优化后去噪规范完成全仓审计；通过项 10 行内极简概括；0×P0/1/2，2×P3（P3-1 悔棋超时死分支，P3-2 反代 XFF 采信部署说明）；**已全部修复闭环** |
 | **2026-09-13** | `ea0c0b9` 独立审查 Round 6（Phase 5 AI 引擎分层） | [`2026-09-13-workbuddy-code-review-round6-handoff.md`](2026-09-13-workbuddy-code-review-round6-handoff.md) | 声明级字节比对（base 134 声明 0 缺失 / 1 新增 / 2 等价变更）+ 36 项搜索差分 + 4500+ 项纯函数与配置边界差分证实零行为漂移；7/7 值导出零破坏 + 9 调用方零改动；四道门禁、Arena（含历史基线容错必要性反证）与 `verify:online` 复跑全绿；0×P0/1/2，1×P3（交付文档 4 项行数失真，**已在 `3d4a1a1` 校准闭环**） |
@@ -46,3 +47,5 @@
    - 生成文档后，在此文件上方表格顶部追加新记录；
    - 同步更新根目录 [`STATUS.md`](../../STATUS.md) 的指标与近期里程碑；
    - 执行 Git 提交并推送远端。
+4. **标准协同审查工作流规范**：
+   - 遵循 [`docs/templates/DUAL_AGENT_REVIEW_WORKFLOW.md`](../templates/DUAL_AGENT_REVIEW_WORKFLOW.md) 的状态机生命周期、开发/审查/修复契约与提示词模板。

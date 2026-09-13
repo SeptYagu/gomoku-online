@@ -88,10 +88,10 @@ npm start
 
 同时给 Node 进程设置 `GOMOKU_TRUST_PROXY=1`。服务端（`src/server/client-address.ts`）在信任反代模式下会读取 `X-Forwarded-For` 的**末位 IP**（`split(',').at(-1)`）作为真实客户端地址：
 
-- **单级反向代理（如独立 Nginx/OpenResty）**：下面的 `X-Forwarded-For` 必须用 `$remote_addr` **覆盖**客户端传入值，**绝不能**使用会拼接客户端传入值的 `$proxy_add_x_forwarded_for`；否则攻击者可通过伪造 XFF 绕过速率限制。
-- **多级代理与 CDN 架构（如 CDN/Cloudflare ➔ Nginx ➔ Node）**：若使用 `$proxy_add_x_forwarded_for` 追加，末位 IP 将是 CDN 节点 IP 而非客户端真实 IP，导致该 CDN 节点下的所有用户共享同一个限流配额。解决方案：
-  1. 在 Nginx 配置 `ngx_http_realip_module`（如 `set_real_ip_from <CDN_CIDR>; real_ip_header CF-Connecting-IP;`）还原 `$remote_addr`，再通过 `proxy_set_header X-Forwarded-For $remote_addr;` 传递；
-  2. 或直接用 CDN 提供的受信真实 IP 头覆盖：`proxy_set_header X-Forwarded-For $http_cf_connecting_ip;`。
+- **单级反向代理（如独立 Nginx/OpenResty）**：推荐使用 `$remote_addr` **直接覆盖**客户端传入的 `X-Forwarded-For`（如 `proxy_set_header X-Forwarded-For $remote_addr;`）。虽然单级代理下 `$proxy_add_x_forwarded_for` 追加后的末位元素仍为 `$remote_addr`，但直接覆盖可彻底消除客户端伪造前缀/格式异常带来的歧义，并与统一传输契约保持一致。
+- **多级代理与 CDN 架构（如 CDN/Cloudflare ➔ Nginx ➔ Node）**：若直接使用 `$proxy_add_x_forwarded_for` 追加，末位 IP 将是 CDN 回源节点 IP 而非客户端真实 IP，导致该 CDN 节点下的所有用户共享同一个限流配额。解决方案：
+  1. **首选方案（自带来源白名单校验）**：在 Nginx 配置 `ngx_http_realip_module`（如 `set_real_ip_from <CDN_CIDR>; real_ip_header CF-Connecting-IP;`）仅对受信任的 CDN 网段还原 `$remote_addr`，再通过 `proxy_set_header X-Forwarded-For $remote_addr;` 传递；
+  2. **备选方案（必须强制前置防火墙限制）**：**仅当源站防火墙/安全组已严格限制仅允许 CDN 回源 IP 访问时**，方可直接用受信头覆盖：`proxy_set_header X-Forwarded-For $http_cf_connecting_ip;`。若源站允许公网直连且未做回源限制，攻击者可绕过 CDN 直连源站伪造 `CF-Connecting-IP` 随意轮换限流键。
 
 ```bash
 GOMOKU_TRUST_PROXY=1 npm start
@@ -104,7 +104,7 @@ location /socket.io/ {
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection "upgrade";
   proxy_set_header Host $host;
-  # 单级代理用 $remote_addr 覆盖；若前置 CDN 则使用 realip 还原或用 $http_cf_connecting_ip 覆盖
+  # 单级代理用 $remote_addr 覆盖；若前置 CDN 则首选 realip 还原（或在源站仅限 CDN 回源时用 $http_cf_connecting_ip 覆盖）
   proxy_set_header X-Forwarded-For $remote_addr;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 60s;
@@ -321,6 +321,7 @@ npm run opening-book -- --limit 2 --plies 5 --time-limit-ms 100 --output .arena-
 - `docs/FEEDBACK_AND_LOG_COLLECTION_PLAN.md`：Feedback 页面、浏览器/服务端日志、专属存储和管理员增量拉取计划。
 - `docs/STANDARD_RESEARCH_WORKFLOW.md`：以后参考项目研究和子代理分工的标准流程。
 - `docs/STANDARD_DEVELOPMENT_WORKFLOW.md`：主控、实现子代理、验证子代理的标准开发流程。
+- `docs/templates/DUAL_AGENT_REVIEW_WORKFLOW.md`：双智能体（Antigravity ↔ WorkBuddy）协同审查与 Push for Review 生命周期状态机规范。
 - `docs/COMPETITOR_INTERACTION_RESEARCH.md`：竞品界面逻辑和用户路径研究。
 - `docs/INTERACTION_REDESIGN_PLAN.md`：交互重构任务、依赖和当前实施进度。
 - `docs/INTERACTION_REDESIGN_IX00_IX01_VERIFICATION.md`：首批互斥工作区实施验证。

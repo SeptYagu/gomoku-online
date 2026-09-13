@@ -793,6 +793,9 @@ export class RoomStateMachine {
       return failure("not-undo-request-target", "Only the opponent can answer this undo request.");
     }
 
+    // 存活状态统一由 getRoom() 入口处的 advanceRoomLifecycle() 推进。
+    // 一旦 getRoom 判定请求有效且存活，本次同步操作内视为原子有效，不再重复二次校验 TTL，
+    // 避免时钟微秒级漂移导致同一个同步方法内部产生决策分歧。
     room.undoRequest = null;
 
     if (!accepted) {
