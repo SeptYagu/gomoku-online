@@ -3,6 +3,7 @@
 import { Send } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import { formatChatMessageTime } from "@/lib/date-format";
+import { MAX_CHAT_MESSAGE_LENGTH } from "@/lib/constants";
 import type { FriendRoomController } from "../useFriendRoom";
 
 type TableRoomChatProps = {
@@ -40,7 +41,7 @@ export function TableRoomChat({ dictionary, room }: TableRoomChatProps) {
         }}
       >
         <input
-          maxLength={160}
+          maxLength={MAX_CHAT_MESSAGE_LENGTH}
           onChange={(event) => room.setChatText(event.target.value)}
           placeholder={labels.chatPlaceholder}
           type="text"

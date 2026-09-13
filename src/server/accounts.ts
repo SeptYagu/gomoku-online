@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { resolve } from "node:path";
+import { MAX_PLAYER_NAME_LENGTH } from "../lib/constants";
 import { appendJsonlLine, JsonlCompactionTracker, readJsonlFile, rewriteJsonlFile } from "./jsonl-file";
 
 export type PlayerIdentityKind = "guest" | "registered";
@@ -80,7 +81,7 @@ const ACCOUNT_LAST_SEEN_PERSIST_INTERVAL_MS = 60_000;
 const GUEST_PLAYER_ID_PREFIX = "guest_";
 const GUEST_SESSION_MAX_ENTRIES = 10_000;
 const GUEST_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
-const MAX_DISPLAY_NAME_LENGTH = 24;
+const MAX_DISPLAY_NAME_LENGTH = MAX_PLAYER_NAME_LENGTH;
 const MAX_PLAYER_ID_LENGTH = 128;
 const MAX_PUBLIC_HANDLE_LENGTH = 20;
 const MIN_PUBLIC_HANDLE_LENGTH = 3;

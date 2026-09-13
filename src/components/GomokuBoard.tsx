@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { Board, Move, Point, Stone } from "@/game/types";
+import { BOARD_SIZE } from "@/lib/constants";
 
 type GomokuBoardProps = {
   board: Board;
@@ -236,7 +237,7 @@ function getPointSelector(point: Point): string {
 
 function getStarStyle(point: Point): CSSProperties {
   return {
-    left: `${((point.col + 0.5) / 15) * 100}%`,
-    top: `${((point.row + 0.5) / 15) * 100}%`
+    left: `${((point.col + 0.5) / BOARD_SIZE) * 100}%`,
+    top: `${((point.row + 0.5) / BOARD_SIZE) * 100}%`
   };
 }

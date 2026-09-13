@@ -30,6 +30,7 @@ import type {
 } from "@/server/game-records";
 import type { PresenceStatus, RoomListItem, RoomSnapshot, UserPresenceSnapshot } from "@/server/rooms";
 import { formatChatMessageTime } from "@/lib/date-format";
+import { MAX_CHAT_MESSAGE_LENGTH, MAX_PLAYER_NAME_LENGTH } from "@/lib/constants";
 import { getProfileUrl } from "../profile/profile-url";
 import type { FriendRoomController } from "../useFriendRoom";
 
@@ -93,7 +94,7 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room }: OnlineLo
             <label className="room-field">
               <span>{labels.playerName}</span>
               <input
-                maxLength={24}
+                maxLength={MAX_PLAYER_NAME_LENGTH}
                 onChange={(event) => room.setPlayerName(event.target.value)}
                 placeholder={labels.playerNamePlaceholder}
                 type="text"
@@ -592,7 +593,7 @@ function PublicChatPanel({ dictionary, room }: { dictionary: GameDictionary; roo
         }}
       >
         <input
-          maxLength={160}
+          maxLength={MAX_CHAT_MESSAGE_LENGTH}
           onChange={(event) => room.setPublicChatText(event.target.value)}
           placeholder={labels.publicChatPlaceholder}
           type="text"

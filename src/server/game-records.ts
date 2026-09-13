@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { DEFAULT_PLAYER_NAME, PAGINATION } from "../lib/constants";
 import type { PlayerIdentityKind } from "./accounts";
 import { appendJsonlLine, JsonlCompactionTracker, readJsonlFile, rewriteJsonlFile } from "./jsonl-file";
 import type { RoomVisibility } from "./rooms";
@@ -196,7 +197,7 @@ export class GameRecordStore {
     this.loadFromFile();
   }
 
-  listRecords(limit = 50): SavedGameRecord[] {
+  listRecords(limit: number = PAGINATION.PLAYER_PROFILE_RECORDS): SavedGameRecord[] {
     return [...this.records.values()]
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, Math.max(1, Math.min(MAX_GAME_RECORD_LIST_LIMIT, Math.floor(limit))));
@@ -315,8 +316,8 @@ export class GameRecordStore {
 
   getPlayerProfile(
     playerId: string,
-    displayName = "Player",
-    limit = 20,
+    displayName = DEFAULT_PLAYER_NAME,
+    limit: number = PAGINATION.DEFAULT_PROFILE_RECORDS,
     fallbackIdentity: PlayerIdentityKind = "guest"
   ): PlayerProfileSnapshot {
     const normalizedPlayerId = playerId.trim();
@@ -331,7 +332,7 @@ export class GameRecordStore {
       wins: 0
     };
     const latestRecordPlayer = records[0]?.players.find((player) => player.playerId === normalizedPlayerId);
-    const latestPlayerName = (latestRecordPlayer?.name ?? displayName.trim()) || "Player";
+    const latestPlayerName = (latestRecordPlayer?.name ?? displayName.trim()) || DEFAULT_PLAYER_NAME;
 
     for (const record of records) {
       if (record.recordStatus === "verified") {
@@ -363,7 +364,7 @@ export class GameRecordStore {
     };
   }
 
-  listRecordsForPlayer(playerId: string, limit = 50): SavedGameRecord[] {
+  listRecordsForPlayer(playerId: string, limit: number = PAGINATION.PLAYER_PROFILE_RECORDS): SavedGameRecord[] {
     const normalizedPlayerId = playerId.trim();
     const clampedLimit = Math.max(1, Math.min(200, Math.floor(limit)));
 

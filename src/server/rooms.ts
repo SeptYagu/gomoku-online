@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { DEFAULT_PLAYER_NAME, DISCONNECT_GRACE_MS, MAX_CHAT_MESSAGE_LENGTH } from "../lib/constants";
 import { createBoard, getGameResult, getOpponent, isValidMove, placeStone } from "../game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "../game/types";
 import type { PlayerIdentityKind } from "./accounts";
@@ -327,10 +328,9 @@ const DEFAULT_ROOM_CODE_LENGTH = 6;
 const MAX_ROOM_CODE_ATTEMPTS = 50;
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const COMPLETED_ROOM_TTL_MS = 30 * 60 * 1000;
-const DISCONNECT_GRACE_MS = 60 * 1000;
 const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
 const MAX_ROOM_CHAT_MESSAGES = 50;
-const MAX_ROOM_CHAT_TEXT_LENGTH = 160;
+const MAX_ROOM_CHAT_TEXT_LENGTH = MAX_CHAT_MESSAGE_LENGTH;
 const MAX_ROOM_LIST_LIMIT = 100;
 const MAX_TRANSIENT_IDENTITIES = 10_000;
 const PRESENCE_RETENTION_MS = 6 * 60 * 60 * 1000;
@@ -1852,7 +1852,7 @@ function getRoomListItem(room: RoomState): RoomListItem {
     canWatch: room.status === "playing" || playerCount >= 2,
     code: room.code,
     createdAt: room.createdAt,
-    hostName: host?.name ?? "Player",
+    hostName: host?.name ?? DEFAULT_PLAYER_NAME,
     playerCount,
     spectatorCount,
     status: room.status,

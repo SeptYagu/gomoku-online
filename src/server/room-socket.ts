@@ -1,4 +1,5 @@
 import type { Point } from "../game/types";
+import { EMPTY_ROOM_GRACE_MS, LIFECYCLE_SWEEP_INTERVAL_MS } from "../lib/constants";
 import { AccountStore, GuestSessionStore, resolvePlayerIdentity } from "./accounts";
 import { resolveClientAddress, shouldTrustProxy } from "./client-address";
 import type {
@@ -31,7 +32,6 @@ import {
 const LOBBY_ROOM = "lobby";
 const PRESENCE_ROOM = "presence";
 const PUBLIC_CHAT_ROOM = "public-chat";
-const EMPTY_ROOM_GRACE_MS = 60_000;
 
 type PlayerAuthPayload = {
   accountToken?: null | string;
@@ -195,7 +195,7 @@ export function registerRoomSocketHandlers(
 ) {
   const accountStore = options.accountStore ?? new AccountStore({ filePath: false });
   const guestSessionStore = options.guestSessionStore ?? new GuestSessionStore();
-  const lifecycleIntervalMs = options.lifecycleIntervalMs ?? 10_000;
+  const lifecycleIntervalMs = options.lifecycleIntervalMs ?? LIFECYCLE_SWEEP_INTERVAL_MS;
   const trustProxy = options.trustProxy ?? shouldTrustProxy();
   const connections = new RoomConnectionTracker();
   const joinTargetLimiter = new FixedWindowRateLimiter({ limit: 20, windowMs: 60_000 });

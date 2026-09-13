@@ -16,6 +16,7 @@
 
 | 交付日期 | 对应提交 / 变更主题 | 文档链接 | 核心交付成果 |
 | :--- | :--- | :--- | :--- |
+| **2026-09-13** | Phase 1 全局常量中枢与代码卫生治理 | [`2026-09-13-phase1-code-hygiene-handoff.md`](2026-09-13-phase1-code-hygiene-handoff.md) | 提取 `constants.ts`、`ThemeScript.tsx`、消除魔法值、规范访客与自由五子棋规则 |
 | **2026-09-13** | 全量技术债与代码卫生分阶段重构蓝图 | [`2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](2026-09-13-comprehensive-refactoring-master-plan-handoff.md) | 制定涵盖 Nit 与四大巨石模块（rooms/useFriendRoom/GameShell/ai）的 5 阶段渐进解耦蓝图 |
 | **2026-09-11** | `9505216` 全量审查修复与大厅实时汇总 | [`2026-09-11-full-review-and-lobby-summary-handoff.md`](2026-09-11-full-review-and-lobby-summary-handoff.md) | 修复焦点与Profile残留、AI Worker复用池、开局库四档分级、IX-07实时统计 |
 

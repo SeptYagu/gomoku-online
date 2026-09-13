@@ -37,6 +37,11 @@ import { isAccountIdentityReady } from "./account-identity";
 import { subscribeToBootState } from "./client-boot-state";
 import { createChatSendGate, type ChatSendGate } from "./chat-send-gate";
 import { createLeaveRoomAttempt, type LeaveRoomAttempt } from "./leave-room-attempt";
+import {
+  COPY_FEEDBACK_DURATION_MS,
+  DEFAULT_PLAYER_NAME,
+  PAGINATION
+} from "@/lib/constants";
 
 type RoomSocket = {
   disconnect: () => void;
@@ -165,17 +170,16 @@ const PLAYER_NAME_STORAGE_KEY = "gomoku-room-player-name";
 const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
 const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
 const GUEST_TOKEN_STORAGE_KEY = "gomoku-guest-token";
-const LEADERBOARD_PAGE_SIZE = 10;
+const LEADERBOARD_PAGE_SIZE = PAGINATION.LEADERBOARD;
 const DEFAULT_CHAT_SEND_TIMEOUT_ERROR = "Message not sent: no response from the server. Please try again.";
 const DEFAULT_LEAVE_ROOM_TIMEOUT_ERROR = "Leaving the room timed out. Please try again.";
 const DEFAULT_CONNECTION_FAILED_ERROR = "Realtime connection failed: {message}";
+// 开发态/无字典回退诊断信息：告知部署运维排查 Socket.IO 反向代理与构建模式（生产多语言文案由 dictionaries.ts 提供）
 const DEFAULT_CONNECTION_XHR_ERROR =
   "Realtime connection failed: xhr poll error. Deploy with npm start after npm run build, and make sure /socket.io is proxied with WebSocket upgrade support.";
 const DEFAULT_JOIN_TARGET_REQUIRED_ERROR = "Enter a room link, code, @handle, or account ID.";
 const DEFAULT_ROOM_CODE_REQUIRED_ERROR = "Enter a room code.";
 const DEFAULT_ROOM_ERROR = "Room error.";
-// 首屏默认展示名，必须与服务端渲染的结果一致（真实名字挂载后再从存储恢复）。
-const DEFAULT_PLAYER_NAME = "Player";
 
 export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions = {}): FriendRoomController {
   const socketRef = useRef<RoomSocket | null>(null);
@@ -418,7 +422,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
       return;
     }
 
-    const acknowledgedPlayerName = response.value.name || "Player";
+    const acknowledgedPlayerName = response.value.name || DEFAULT_PLAYER_NAME;
     const existingSession = readRoomSession();
     const acknowledgedGuestToken =
       response.value.identity === "guest"
@@ -633,7 +637,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
 
   const refreshLobby = useCallback(() => {
     setLobbyStatus("loading");
-    ensureSocket().emit("lobby:join", { limit: 20 }, (response: RoomListAck) => {
+    ensureSocket().emit("lobby:join", { limit: PAGINATION.LOBBY_ROOMS }, (response: RoomListAck) => {
       if (!response.ok) {
         setLobbyStatus("error");
         setError(response.error.message);
@@ -676,7 +680,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
       "presence:join",
       {
         ...player,
-        limit: 30,
+        limit: PAGINATION.PRESENCE_USERS,
       },
       (response: PresenceAck) => {
         if (!response.ok) {
@@ -754,7 +758,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
 
     const player = getActivePlayer();
     const params = new URLSearchParams({
-      limit: "10",
+      limit: String(PAGINATION.LEADERBOARD),
       name: player.playerName,
       playerId: player.playerId
     });
@@ -1327,7 +1331,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
       return;
     }
 
-    const timeout = window.setTimeout(() => setCopiedInvite(false), 1800);
+    const timeout = window.setTimeout(() => setCopiedInvite(false), COPY_FEEDBACK_DURATION_MS);
 
     return () => window.clearTimeout(timeout);
   }, [copiedInvite]);
@@ -1573,6 +1577,10 @@ function getInitialJoinTarget(): string {
   return normalizeRoomCode(roomFromUrl ?? readRoomSession()?.roomCode ?? "");
 }
 
+// 多标签页访客隔离说明：
+// 访客 playerId 存储于 sessionStorage，确保同一浏览器打开多个标签页时，
+// 各自拥有独立的游客身份与连接会话，避免本地多开测试或单人多开对弈时身份互相覆盖。
+// 若当前标签页拥有活跃房间对局会话（readRoomSession），则优先继承对应房间对局者的 playerId。
 function getOrCreatePlayerId(): string {
   const storedPlayerId = window.sessionStorage.getItem(PLAYER_ID_STORAGE_KEY) ?? readRoomSession()?.playerId;
 
@@ -1735,7 +1743,7 @@ function clearRoomSession() {
 }
 
 function createGuestPlayerName(): string {
-  return `Player ${createRandomNumber(1000, 9999)}`;
+  return `${DEFAULT_PLAYER_NAME} ${createRandomNumber(1000, 9999)}`;
 }
 
 function isLegacyDefaultPlayerName(playerName: string): boolean {

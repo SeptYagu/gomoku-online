@@ -11,6 +11,7 @@ import { replayBoardAtMove } from "@/game/record-replay";
 import type { Board, Move } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
+import { PAGINATION } from "@/lib/constants";
 import type {
   GameRecordFinishReason,
   GameRecordStatus,
@@ -47,7 +48,7 @@ export function PlayerProfilePage({ dictionary, initialName, locale, playerId }:
   const records = profile?.recentRecords ?? [];
   const profileUrl = useMemo(() => {
     const params = new URLSearchParams({
-      limit: "50",
+      limit: String(PAGINATION.PLAYER_PROFILE_RECORDS),
       playerId
     });
 

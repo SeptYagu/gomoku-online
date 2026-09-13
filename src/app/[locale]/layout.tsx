@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDirection, isLocale } from "@/i18n/config";
+import { ThemeScript } from "@/components/ThemeScript";
 import "../globals.css";
 
 export const metadata: Metadata = {
@@ -25,11 +26,7 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
   return (
     <html lang={locale} dir={getDirection(locale)} suppressHydrationWarning>
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var stored=localStorage.getItem("gomoku-theme");var theme=stored==="light"||stored==="dark"?stored:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=theme;}catch(e){document.documentElement.dataset.theme="light";}})();`
-          }}
-        />
+        <ThemeScript />
       </head>
       <body>{children}</body>
     </html>
