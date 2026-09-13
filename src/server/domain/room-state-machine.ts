@@ -795,7 +795,7 @@ export class RoomStateMachine {
 
     room.undoRequest = null;
 
-    if (!accepted || now >= undoRequest.expiresAt) {
+    if (!accepted) {
       markUndoRequestRejected(room, undoRequest, now);
       this.markRoomListed(room);
       return success(getRoomSnapshot(room));

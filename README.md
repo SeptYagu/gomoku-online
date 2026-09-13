@@ -86,9 +86,12 @@ npm start
 
 如果前面有 Nginx/OpenResty 反向代理，确认 `/socket.io/` 和普通页面都代理到同一个 Node 端口，并保留 WebSocket upgrade：
 
-同时给 Node 进程设置 `GOMOKU_TRUST_PROXY=1`。下面的 `X-Forwarded-For` 必须用
-`$remote_addr` **覆盖**客户端传入值，不能使用会把客户端 XFF 拼进去的
-`$proxy_add_x_forwarded_for`；否则攻击者仍可伪造限流地址。
+同时给 Node 进程设置 `GOMOKU_TRUST_PROXY=1`。服务端（`src/server/client-address.ts`）在信任反代模式下会读取 `X-Forwarded-For` 的**末位 IP**（`split(',').at(-1)`）作为真实客户端地址：
+
+- **单级反向代理（如独立 Nginx/OpenResty）**：下面的 `X-Forwarded-For` 必须用 `$remote_addr` **覆盖**客户端传入值，**绝不能**使用会拼接客户端传入值的 `$proxy_add_x_forwarded_for`；否则攻击者可通过伪造 XFF 绕过速率限制。
+- **多级代理与 CDN 架构（如 CDN/Cloudflare ➔ Nginx ➔ Node）**：若使用 `$proxy_add_x_forwarded_for` 追加，末位 IP 将是 CDN 节点 IP 而非客户端真实 IP，导致该 CDN 节点下的所有用户共享同一个限流配额。解决方案：
+  1. 在 Nginx 配置 `ngx_http_realip_module`（如 `set_real_ip_from <CDN_CIDR>; real_ip_header CF-Connecting-IP;`）还原 `$remote_addr`，再通过 `proxy_set_header X-Forwarded-For $remote_addr;` 传递；
+  2. 或直接用 CDN 提供的受信真实 IP 头覆盖：`proxy_set_header X-Forwarded-For $http_cf_connecting_ip;`。
 
 ```bash
 GOMOKU_TRUST_PROXY=1 npm start
@@ -101,6 +104,7 @@ location /socket.io/ {
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection "upgrade";
   proxy_set_header Host $host;
+  # 单级代理用 $remote_addr 覆盖；若前置 CDN 则使用 realip 还原或用 $http_cf_connecting_ip 覆盖
   proxy_set_header X-Forwarded-For $remote_addr;
   proxy_set_header X-Forwarded-Proto $scheme;
   proxy_read_timeout 60s;
