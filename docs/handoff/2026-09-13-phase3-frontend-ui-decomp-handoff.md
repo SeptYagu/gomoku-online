@@ -46,7 +46,7 @@
   - 难度与先手设置状态及推迟切换机制（`handleDifficultyChange`, `handleFirstPlayerChange`, `handleAiReset`）；
   - AI 走子提交（`commitAiTurn`）与取消（`cancelAiTurn`）。
 - **`GameShell.tsx` 效果**：
-  - 从 **973 行** 缩减至 **592 行**（净减 381 行，降幅 39.2%）；
+  - 从 **972 行** 缩减至 **593 行**（净减 379 行，降幅 39.0%）；
   - 彻底移除了所有 Web Worker、线程池管理、AI 分片逻辑与纯函数辅助代码；
   - 严格遵守 React 19 `react-hooks/refs` 规范，杜绝在 render 阶段访问或写入 ref。
 
@@ -54,7 +54,7 @@
 
 ### 2.3 Phase 3.2: 建立 `RoomContext` 消除 Props 逐层钻透
 
-新建 `src/components/online/RoomContext.tsx`（37 行）：
+新建 `src/components/online/RoomContext.tsx`（36 行）：
 - 提供 `RoomContext`、`RoomProvider`、`useRoomContext()` 以及灵活的 `useOptionalRoomContext(roomProp)` 兼容解析函数；
 - **自适应兼容**：
   - 组件既可以在 `<RoomProvider value={friendRoom}>` 内直接消费上下文，也可通过 props 显式传入 `room` 保持向下兼容；
@@ -69,15 +69,15 @@
 
 ```
 src/components/online/
-├── RoomContext.tsx                   [NEW 37 行] RoomContext / RoomProvider
-├── OnlineLobbyView.tsx               [MODIFY 192 行] 纯容器组件（原 889 行）
+├── RoomContext.tsx                   [NEW 36 行] RoomContext / RoomProvider
+├── OnlineLobbyView.tsx               [MODIFY 191 行] 纯容器组件（原 888 行）
 └── lobby/
-    ├── LobbyUsersPanel.tsx           [NEW 84 行] 在线用户列表与 Presence 刷新（原 OnlineUsersPanel）
-    ├── LobbyProfilePanel.tsx         [NEW 155 行] 个人对局战绩与历史记录（原 RoomProfilePanel）
-    ├── LobbyLeaderboard.tsx          [NEW 221 行] 天梯排行榜、分页、搜索与身份切换（原 LeaderboardPanel）
-    ├── LobbyPublicChat.tsx           [NEW 77 行] 公共大厅聊天与消息发送（原 PublicChatPanel）
-    ├── LobbyMatchmaking.tsx          [NEW 101 行] 快速匹配按钮与好友私密房面板（原 RoomMatchmakingPanel）
-    └── LobbyRoomList.tsx             [NEW 181 行] 可用房间列表、大厅活动条与空状态（原 LobbyPanel）
+    ├── LobbyUsersPanel.tsx           [NEW 83 行] 在线用户列表与 Presence 刷新（原 OnlineUsersPanel）
+    ├── LobbyProfilePanel.tsx         [NEW 154 行] 个人对局战绩与历史记录（原 RoomProfilePanel）
+    ├── LobbyLeaderboard.tsx          [NEW 220 行] 天梯排行榜、分页、搜索与身份切换（原 LeaderboardPanel）
+    ├── LobbyPublicChat.tsx           [NEW 76 行] 公共大厅聊天与消息发送（原 PublicChatPanel）
+    ├── LobbyMatchmaking.tsx          [NEW 100 行] 快速匹配按钮与好友私密房面板（原 RoomMatchmakingPanel）
+    └── LobbyRoomList.tsx             [NEW 180 行] 可用房间列表、大厅活动条与空状态（原 LobbyPanel）
 ```
 
 - **兼容性与 Smoke 测试选择器 100% 保障**：
@@ -106,19 +106,19 @@ src/components/online/
 
 ```
 新增文件 (8):
-  src/components/hooks/useAiGame.ts (486 行)
-  src/components/hooks/useAiGame.test.ts (177 行)
-  src/components/online/RoomContext.tsx (37 行)
-  src/components/online/lobby/LobbyLeaderboard.tsx (221 行)
-  src/components/online/lobby/LobbyMatchmaking.tsx (101 行)
-  src/components/online/lobby/LobbyProfilePanel.tsx (155 行)
-  src/components/online/lobby/LobbyPublicChat.tsx (77 行)
-  src/components/online/lobby/LobbyRoomList.tsx (181 行)
-  src/components/online/lobby/LobbyUsersPanel.tsx (84 行)
+  src/components/hooks/useAiGame.ts (485 行)
+  src/components/hooks/useAiGame.test.ts (176 行)
+  src/components/online/RoomContext.tsx (36 行)
+  src/components/online/lobby/LobbyLeaderboard.tsx (220 行)
+  src/components/online/lobby/LobbyMatchmaking.tsx (100 行)
+  src/components/online/lobby/LobbyProfilePanel.tsx (154 行)
+  src/components/online/lobby/LobbyPublicChat.tsx (76 行)
+  src/components/online/lobby/LobbyRoomList.tsx (180 行)
+  src/components/online/lobby/LobbyUsersPanel.tsx (83 行)
 
 重构修改文件 (9):
-  src/components/GameShell.tsx (973 -> 592 行, -381 行)
-  src/components/online/OnlineLobbyView.tsx (889 -> 192 行, -697 行)
+  src/components/GameShell.tsx (972 -> 593 行, -379 行)
+  src/components/online/OnlineLobbyView.tsx (888 -> 191 行, -697 行)
   src/components/online/GameTableView.tsx
   src/components/online/TableSidebar.tsx
   src/components/online/TableSidebarTabs.tsx

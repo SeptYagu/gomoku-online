@@ -104,7 +104,7 @@ export function useBootSnapshot<T>(
 
 ### 2.4 顶层装配器蜕变与 API 零破坏保证
 
-`src/components/useFriendRoom.ts` 从 1776 行精简至 441 行，保留账户登录/注册/登出以及邀请链接复制等轻量状态，组合调用上述 4 个子 Hook，组装并返回类型完全一致的 `FriendRoomController`（79 个字段无缝保持）。
+`src/components/useFriendRoom.ts` 从 1775 行精简至 441 行，保留账户登录/注册/登出以及邀请链接复制等轻量状态，组合调用上述 4 个子 Hook，组装并返回类型完全一致的 `FriendRoomController`（79 个字段无缝保持）。
 
 **所有 6 个外部消费组件无需改动任何代码**：
 - `GameShell.tsx`

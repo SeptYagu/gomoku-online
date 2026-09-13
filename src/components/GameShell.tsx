@@ -473,7 +473,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
           <p className="status-copy">
             {mode === "room"
               ? getRoomStatusText(friendRoom, dictionary)
-              : getStatusText(activeStatus, dictionary)}
+              : aiGame.isAiThinking
+                ? dictionary.ai.thinking
+                : getStatusText(activeStatus, dictionary)}
           </p>
           <p className="status-note">
             {mode === "room"

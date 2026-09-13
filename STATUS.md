@@ -8,7 +8,7 @@
 
 - **当前分支**：`main`
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新交付提交**：`785c8d4 feat(refactor): phase 2 - decouple useFriendRoom into focused domain hooks`
+- **最新交付提交**：`b45e3fb feat(refactor): phase 3 - componentize lobby views and extract ai game hook`
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -40,8 +40,8 @@
 - ✅ **全量技术债分阶段重构蓝图落地**：基于审查文档制定 5 阶段渐进解耦规划交接单，支持后续单阶段独立执行。
 - ✅ **Phase 1: 全局常量中枢与代码卫生治理**：提取 `src/lib/constants.ts` 与单测、封装 `ThemeScript.tsx` 消除布局内联脚本重复、全仓替换魔法值并补充自由五子棋规则说明。
 - ✅ **Phase 2: 前端状态 Hook 解耦与代码卫生收敛**：`useFriendRoom.ts` 拆解为 4 个专注子 Hook（441 行装配器），根除 R6 模块级全局快照缺陷，收敛 Phase 1 全部 4 项 P3 审查建议，外部 API 零破坏。
-- ✅ **Phase 3: 联机大厅与表现层组件化**：`GameShell.tsx` 抽离 `useAiGame` 领域 Hook（592 行，-39.2%），建立 `RoomContext` 消除 Props 逐层透传，`OnlineLobbyView.tsx` 拆解为 6 个高内聚独立子面板（192 行纯容器），收敛 Phase 2 全部 6 项 P3 审查建议。
-- ⏳ **Phase 3 独立审查（Round 3，被审 `b45e3fb`）**：**未通过，待复审**。0×P0 / 0×P1 / **1×P2**（AI 模式侧栏 `dictionary.ai.thinking` 文案在抽离 `useAiGame` 时被静默移除）/ 3×P3（Phase 3 文档行数声明系统性 +1、`STATUS.md:11` 提交号仍指向 Phase 2、i18n `ai.thinking` 六语种成为孤儿键）。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md)。
+- ✅ **Phase 3: 联机大厅与表现层组件化**：`GameShell.tsx` 抽离 `useAiGame` 领域 Hook（593 行，-39.0%），建立 `RoomContext` 消除 Props 逐层透传，`OnlineLobbyView.tsx` 拆解为 6 个高内聚独立子面板（191 行纯容器），收敛 Phase 2 全部 6 项 P3 审查建议。
+- ✅ **Phase 3 缺陷修复与复审收敛**：解决 Round 3 审查指出的 P2-1（恢复侧栏 `dictionary.ai.thinking` 状态文案，消除 6 语种孤儿键）、P3-1（以 `wc -l` 精确校准 Phase 2 与 Phase 3 handoff 全部行数）与 P3-2（同步刷新权威基准提交 SHA）。详见 [`docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round3-handoff.md)。
 
 ---
 
