@@ -36,25 +36,25 @@
 - ✅ **IX-07 精确大厅实时汇总**：在线人数、空台数、对局数、观战人数实现单调版本化增量同步，多语言与自适应样式补齐。
 - ✅ **提示词中枢与交接解耦落地**：建立 `AGENTS.md` 规则中枢、`STATUS.md` 动态状态表与 `docs/handoff/` 增量归档体系，历史 5152 行记录无损迁移至 `docs/archive/LEGACY_HANDOFF_ARCHIVE.md`。
 - ✅ **双智能体协同与代码审查闭环挂载**：在 `AGENTS.md` 完整集成 Antigravity ↔ WorkBuddy 独立审查派发、提示词模板与 3 轮自愈闭环协议。
+- ✅ **全量技术债分阶段重构蓝图落地**：基于审查文档制定 5 阶段渐进解耦规划交接单，支持后续单阶段独立执行。
 
 ---
 
 ## 4. 当前技术债与架构路线图（Roadmap）
 
-1. **`src/server/rooms.ts`（2360 行）模块解耦**：
-   - 现状：房间生命周期、Presence 在线用户追踪、全服天梯排行榜与单调版本管理耦合在同一大文件中。
-   - 目标：拆分为 `PresenceTracker`、`LeaderboardAggregator`、`RoomStateMachine` 三个子服务。
-2. **`src/components/useFriendRoom.ts`（1731 行）Hook 瘦身**：
-   - 现状：单个 Hook 承载了 Socket 握手重连、对局状态机、聊天同步、大厅列表与弹窗控制。
-   - 目标：分拆出 `useRoomSocket`、`useRoomChat`、`useLobbyPresence` 等专注子 Hook。
-3. **`src/game/ai.ts`（2575 行）算法分层**：
-   - 现状：棋型评估模型、$\alpha\text{-}\beta$ 极大极小值搜索和开局引导逻辑混杂。
-   - 目标：解耦为纯数学评估器、搜索器与开局策略调度器。
+> 详细分阶段执行方案与边界请查阅：[`2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
+
+1. **Phase 1: 全局常量中枢与代码卫生治理**（常量中枢抽离、主题脚本去重、多标签页访客隔离策略）
+2. **Phase 2: 前端状态 Hook 解耦**（`useFriendRoom.ts` 1731 行拆分为 4 个专注子 Hook，消除 R6 模块级快照）
+3. **Phase 3: 联机大厅与表现层组件化**（`GameShell.tsx` 抽离 `useAiGame`，`OnlineLobbyView.tsx` 拆分子视图并引入 `RoomContext`）
+4. **Phase 4: 服务端领域服务解耦**（`rooms.ts` 2360 行拆分为 PresenceTracker、LeaderboardService、RoomStateMachine）
+5. **Phase 5: 五子棋核心算法分层**（`ai.ts` 2575 行拆分为评估器、$\alpha\text{-}\beta$ 搜索器、开局调度器，并通过 Arena 自动化天梯评测）
 
 ---
 
 ## 5. 交接文档索引
 
 - 详细交接单索引请查阅：[`docs/handoff/INDEX.md`](docs/handoff/INDEX.md)
-- 最新交接单：[`docs/handoff/2026-09-11-full-review-and-lobby-summary-handoff.md`](docs/handoff/2026-09-11-full-review-and-lobby-summary-handoff.md)
+- **全局分阶段重构总纲**：[`docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
+- 最新单阶段交付单：[`docs/handoff/2026-09-11-full-review-and-lobby-summary-handoff.md`](docs/handoff/2026-09-11-full-review-and-lobby-summary-handoff.md)
 - 原始全量档案：[`docs/archive/LEGACY_HANDOFF_ARCHIVE.md`](docs/archive/LEGACY_HANDOFF_ARCHIVE.md)
