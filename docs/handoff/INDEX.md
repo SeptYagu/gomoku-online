@@ -16,6 +16,7 @@
 
 | 交付日期 | 对应提交 / 变更主题 | 文档链接 | 核心交付成果 |
 | :--- | :--- | :--- | :--- |
+| **2026-09-13** | `3e201ec` 独立审查 Round 4（Phase 3 修复收敛） | [`2026-09-13-workbuddy-code-review-round4-handoff.md`](2026-09-13-workbuddy-code-review-round4-handoff.md) | 核验侧栏 AI 思考中文案恢复、消除 6 语种孤儿键、精确校准 handoff 行数与权威提交；0×P0/1/2，1×P3（STATUS 提交双字段方案）；**审查通过**，Round 3 全部 4 项闭环 |
 | **2026-09-13** | `b45e3fb` 独立审查 Round 3（Phase 3） | [`2026-09-13-workbuddy-code-review-round3-handoff.md`](2026-09-13-workbuddy-code-review-round3-handoff.md) | 逐文件核验 `useAiGame` 抽离等价性、`RoomContext` 双路径兼容与 6 面板 14 项选择器契约；0×P0/1，**1×P2**（AI 思考中文案被静默移除），3×P3（行数声明 +1、STATUS 提交号过期、i18n 孤儿键）；**未通过、待复审** |
 | **2026-09-13** | Phase 3 联机大厅与表现层组件化 | [`2026-09-13-phase3-frontend-ui-decomp-handoff.md`](2026-09-13-phase3-frontend-ui-decomp-handoff.md) | `GameShell.tsx` 抽离 `useAiGame` Hook（瘦身 39.2%），新建 `RoomContext` 消除多层 Props 钻透，`OnlineLobbyView.tsx` 拆解为 6 个独立子面板，完整收敛 Phase 2 全部审查建议，四道门禁+联机烟测全绿 |
 | **2026-09-13** | `785c8d4` 独立审查 Round 2（Phase 2） | [`2026-09-13-workbuddy-code-review-round2-handoff.md`](2026-09-13-workbuddy-code-review-round2-handoff.md) | 逐文件核验 4 子 Hook + 装配器等价性与 79 字段零破坏；0×P0/1/2，6×P3（STATUS 游离提交号、handoff 行数失真、`createRoom` 守卫弱化、`clearClosedRoom` 无条件清理、单测同义反复、陈旧注释） |
