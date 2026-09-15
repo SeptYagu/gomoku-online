@@ -1,5 +1,11 @@
 # gomoku-online 项目长期备忘
 
+## 0. 项目定位（最重要，先读这条）
+- **面向公众的商业化公开站点，不是个人自用工具**。真实测试站 `http://gomoku.yagu.ddns-ip.net`，商业目标是 AdSense / Google H5 Games Ads 变现 + SEO 自然流量（`WEBSITE_BUILD_PLAN.md` 第 1/7/14 节），因此六语（en/zh/fr/es/ru/ar）+ 浅色暗色 + RTL 是硬性基线，商业发布优先、不打包 GPL/AGPL 资产（README「复用原则」）。
+- 「单人项目」只描述**协作方式**（solo dev、不走 PR/分支、直接提交 main），**不代表可以按自用标准做取舍**。凡面向匿名公网用户的接口，防滥用/限流/脱敏/合规页面都是底线，不是可选项。曾因把这条读成「个人自用」而误判 `FEEDBACK_AND_LOG_COLLECTION_PLAN.md` 为过度设计，勿重犯。
+- 当前处在 build plan **阶段 3 功能已完成 → 阶段 4（广告变现与合规）尚未开始**的窗口：`src/app` 下**没有任何 Privacy Policy / Terms / Cookie Notice / Contact / About 页面**，无 `ads.txt`，i18n 字典里 `ads` 只有占位文案（"Future ad placement"）。合规页面是 AdSense 审核硬阻塞。
+- `docs/FEEDBACK_AND_LOG_COLLECTION_PLAN.md` 的实际职责是「**Contact 合规页 + M3 公开测试问题收集 + 运维日志**」三合一，不是单纯的反馈表单；`docs/M3_PUBLIC_TEST_LOG.md` 现有条目全部来自开发机脚本，**零真实用户反馈**（缺用户自助渠道）。
+
 ## 测试环境（Windows 本机）
 - **vitest 必须在大写盘符目录下运行**：cwd 为 `d:/...`（小写）时 vitest 4.1.9 所有测试报 `Cannot read properties of undefined (reading 'config')`（vitest#10692）。先 `cd "D:/OneDrive/AiPrograms/gomoku-online"` 再 `npx vitest run`。
 - **`npx tsc --noEmit` 已恢复 0 错误通过**：先前 8 条基线错误已全量解决（`1d763a0`），类型检查门禁全面生效。
