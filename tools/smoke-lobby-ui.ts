@@ -1215,7 +1215,7 @@ async function assertFriendsSectionStructure(cdp: CdpClient): Promise<void> {
       hintText: string;
       noHorizontalOverflow: boolean;
       orderValid: boolean;
-    }>(
+    } | null>(
       cdp,
       `(() => {
         const createBtn = document.querySelector('[data-lobby-action="create-unlisted"]');
@@ -1225,24 +1225,25 @@ async function assertFriendsSectionStructure(cdp: CdpClient): Promise<void> {
         const joinInput = document.querySelector('[data-lobby-section="friends"] input');
         const joinForm = document.querySelector('.lobby-join-form');
 
-        const hintId = hint?.getAttribute('id');
-        const createDescribedBy = createBtn?.getAttribute('aria-describedby');
-        const joinHeadingId = joinHeading?.getAttribute('id');
-        const formLabelledBy = joinForm?.getAttribute('aria-labelledby');
+        if (!createBtn || !hint || !divider || !joinHeading || !joinInput || !joinForm) {
+          return null;
+        }
+
+        const hintId = hint.getAttribute('id');
+        const createDescribedBy = createBtn.getAttribute('aria-describedby');
+        const joinHeadingId = joinHeading.getAttribute('id');
+        const formLabelledBy = joinForm.getAttribute('aria-labelledby');
 
         const orderValid = Boolean(
-          createBtn &&
-          divider &&
-          joinInput &&
           (createBtn.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING) &&
           (divider.compareDocumentPosition(joinInput) & Node.DOCUMENT_POSITION_FOLLOWING)
         );
 
         return {
           ariaDescribedByMatches: Boolean(hintId && createDescribedBy === hintId),
-          dividerText: (divider?.textContent || '').trim(),
-          hasJoinHeading: Boolean(joinHeading && (joinHeading.textContent || '').trim() && joinHeadingId && formLabelledBy === joinHeadingId),
-          hintText: (hint?.textContent || '').trim(),
+          dividerText: (divider.textContent || '').trim(),
+          hasJoinHeading: Boolean((joinHeading.textContent || '').trim() && joinHeadingId && formLabelledBy === joinHeadingId),
+          hintText: (hint.textContent || '').trim(),
           noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
           orderValid
         };

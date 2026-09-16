@@ -77,15 +77,15 @@ export function LobbyMatchmaking({
               </div>
             </div>
 
-            <div className="lobby-friend-divider">
+            <div className="lobby-friend-divider" aria-hidden="true">
               <span>{labels.orJoinExisting}</span>
             </div>
 
             <div className="lobby-friend-join-card">
               <div className="lobby-friend-join-header">
-                <h3 className="lobby-friend-subtitle" id={joinExistingHeadingId}>
+                <h2 className="lobby-friend-subtitle" id={joinExistingHeadingId}>
                   {labels.joinExistingRoom}
-                </h3>
+                </h2>
               </div>
               <form
                 aria-labelledby={joinExistingHeadingId}

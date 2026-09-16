@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`800a3cb fix(lobby): resolve round 1 review findings for unlisted room creation disambiguation`（本字段记录本字段所在提交的直接前驱阶段交付；本提交为不公开房间创建/加入交互解耦 Round 2 复查审查交接单，其 SHA 由下一次交付回填）
+- **最新阶段交付提交**：`800a3cb fix(lobby): resolve round 1 review findings for unlisted room creation disambiguation`（本字段记录本字段所在提交的直接前驱阶段交付；本提交为不公开房间创建/加入交互解耦 Round 2 审查缺陷修复交接单，其 SHA 由下一次交付回填）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,7 @@
 
 ## 3. 近期已交付里程碑
 
+- 🔄 **Round 2 审查缺陷修复与标题大纲连续化（2026-09-16）**：针对 Round 2 复查指出的 4 项 P3 缺陷完成闭环：P3-1 按规则将 `STATUS.md:11` 回填为被审产品交付 `800a3cb`（跳过紧邻的 review 提交）；P3-2 加入卡片小标题升级为 `<h2 className="lobby-friend-subtitle">`，消除全站 h1→h3 标题层级跳跃，文档大纲规范连续；P3-3 6 语种 `orJoinExisting` 收敛为纯连接词（or/或/ou/o/или/أو），分隔带恢复 `aria-hidden="true"` 纯视觉分隔，彻底消除与加入小标题的语义重叠与重复播报；P3-4 `tools/smoke-lobby-ui.ts` 的 `assertFriendsSectionStructure` 回调增加元素缺失立即 `return null` 分支，恢复 20s 轮询等待契约；四道门禁全绿（29 套 / 248 项单测 100% 通过，生产构建打包完全成功）。详见 [`docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md)。
 - ⚠️ **不公开房间创建/加入交互解耦 Round 2 复查（被审 `800a3cb`）**：**审查未通过**。0×P0/P1/P2；**4×P3**（P3-1 `STATUS.md:11` 记录的是审查提交 `30410c7` 而非被审产品交付 `bb3be08`，与 `165c56d`/`3e201ec`/`87ae2e6`/`655c667` 四项先例及 Round 1 交接单 §4 的明确指令相悖；P3-2 `LobbyMatchmaking.tsx:86` 新增 `<h3>` 造成全站标题层级跳跃 h1→h3（全仓无任何 `<h2>`），axe `heading-order` 判罚，属本轮新引入无障碍回归；P3-3 `.lobby-friend-divider` 文案与新增小标题在 **6/6 语种**下语义完全重复（仅差一个连接词，如 ar `أو الانضمام إلى غرفة موجودة`/`الانضمام إلى غرفة موجودة`），视觉与 AX 树双通道重复播报；P3-4 `tools/smoke-lobby-ui.ts:1210` 误用 `waitForValue`，回调恒返回非 null 致 20s 等待退化为单次求值，慢渲染下会误报失败）。Round 1 四项 P3 的功能修复经独立证伪确认**真实生效**（组件回退到 `165c56d` 后新增单测 2/3 失败；CDP AX 实测创建按钮 `description` = hint 文案、表单 `role=form/name` 正确；6 语种去私有化文案齐备）；审查方独立复跑 `vitest --pool=vmForks` **29 套 / 248 例全绿**、`npm run build` 成功（11 页），并实跑 `smoke:lobby-ui` 于 dev/prod 两模式确认本轮新增断言通过（该套件既有 `assertRoomError` 离线超时断言失败，已以基线 A/B 证伪归因为既有环境问题）。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-unlisted-room-round2-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-unlisted-room-round2-handoff.md)。
 - 🔄 **Round 1 审查缺陷修复与大厅交互自动化守门（2026-09-16）**：针对 Round 1 审查指出的 4 项 P3 缺陷完成闭环：P3-1 接入 `joinExistingRoom` 消除 6 语种死键并作为加入卡片可见标题；P3-2 创建按钮接入 `aria-describedby` 关联 hint，移除 divider 上的 `aria-hidden` 保障无障碍可达，表单绑定 `aria-labelledby`；P3-3 新增 `LobbyMatchmaking.test.ts` 纯 Node 服务端渲染单元测试及 `tools/smoke-lobby-ui.ts` 展开态结构与 390px RTL 移动端无横向溢出断言，硬性守门结构性回退；P3-4 6 语种 `createUnlistedRoomHint` 去除 "private/专属" 访问保护暗示词与免责声明对齐；四道门禁全绿（29 套 / 248 项单测 100% 通过，生产构建打包完全成功）。详见 [`docs/handoff/2026-09-16-unlisted-room-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round1-findings-remediation-handoff.md)。
 - ⚠️ **不公开房间创建/加入交互解耦独立审查（Round 1，被审 `bb3be08`）**：**审查未通过**。0×P0/P1/P2；**4×P3**（P3-1 `joinExistingRoom` 六语种文案已扩充但从未渲染，`src/` 内除 `dictionaries.ts` 外零引用，交接单 §2.1 却称其已交付；P3-2 承载区分语义的 `.lobby-friend-divider` 被 `aria-hidden` 整体移出无障碍树（AX `role=none`/`name=null`），创建按钮的 `.lobby-friend-hint` 无 `aria-describedby`（AX `description=null`），读屏焦点导航下本次解耦文案失效；P3-3 验收标准 1 零自动化守门——把 `LobbyMatchmaking.tsx` 整体回退到 `165c56d` 后 28 套 / 245 例仍 100% 通过；P3-4 `createUnlistedRoomHint` 的 "private share link/приватную ссылку" 与同面板 `unlistedRoomNotice`「这不是访问保护」语义相悖）。审查方以 CDP 无头 Chrome 在 `en/zh/ar/ru × 390/641/1280` 共 8 组视口实测完成独立验证（DOM/几何顺序一致、无横向溢出、RTL 正常），并独立复跑 `tsc`/`lint` 0 问题、`vitest --pool=vmForks` 28 套 / 245 例全绿；`npm run build` 与联机烟测未复跑。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-unlisted-room-round1-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-unlisted-room-round1-handoff.md)。
@@ -77,7 +78,8 @@
 
 - 详细交接单索引请查阅：[`docs/handoff/INDEX.md`](docs/handoff/INDEX.md)
 - **全局分阶段重构总纲**：[`docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
-- **最新单阶段交付单**：[`docs/handoff/2026-09-16-unlisted-room-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round1-findings-remediation-handoff.md)
+- **最新单阶段交付单**：[`docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md)
+- 前序阶段交付单：[`docs/handoff/2026-09-16-unlisted-room-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round1-findings-remediation-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-16-unlisted-room-creation-disambiguation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-creation-disambiguation-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-16-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-round1-findings-remediation-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md`](docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md)

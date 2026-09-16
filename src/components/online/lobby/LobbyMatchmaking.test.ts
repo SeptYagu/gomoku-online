@@ -52,17 +52,17 @@ describe("LobbyMatchmaking", () => {
     expect(html).toContain('class="lobby-friend-hint"');
     expect(html).toContain(dictionary.room.createUnlistedRoomHint);
 
-    // 4. Accessibility: join heading id matches form aria-labelledby
-    const headingMatch = html.match(/<h3[^>]*class="lobby-friend-subtitle"[^>]*id="([^"]+)"/);
+    // 4. Accessibility: join heading id matches form aria-labelledby (h2 heading level)
+    const headingMatch = html.match(/<h2[^>]*class="lobby-friend-subtitle"[^>]*id="([^"]+)"/);
     expect(headingMatch).toBeTruthy();
     const headingId = headingMatch![1];
     expect(html).toContain(`aria-labelledby="${headingId}"`);
 
-    // 5. Accessibility: divider does not hide text behind aria-hidden="true"
+    // 5. Accessibility: divider is visual separator with aria-hidden="true" and connector text
     const dividerIndex = html.indexOf('class="lobby-friend-divider"');
     expect(dividerIndex).toBeGreaterThan(-1);
     const dividerSubstring = html.slice(dividerIndex, dividerIndex + 150);
-    expect(dividerSubstring).not.toContain('aria-hidden="true"');
+    expect(dividerSubstring).toContain('aria-hidden="true"');
     expect(dividerSubstring).toContain(dictionary.room.orJoinExisting);
 
     // 6. DOM Order: create button appears before divider, which appears before join input
