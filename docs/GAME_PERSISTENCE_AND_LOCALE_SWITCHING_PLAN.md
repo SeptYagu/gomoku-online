@@ -1,7 +1,7 @@
 # 对局持久化、语言平滑切换与外观保持方案设计
 
 更新日期：2026-09-16  
-状态：方案设计与规划（Round 1 审查缺陷闭环版）
+状态：方案设计与规划（Round 2 审查缺陷闭环版）
 
 ---
 
@@ -16,23 +16,26 @@
    - 当用户在子页面（例如个人主页 `/[locale]/profile/[playerId]`）切换语言时，会被强制导航回首页 `/[newLocale]`。
    - 当用户在进行在线对局（`/[locale]?room=XXXXXX`）时切换语言，查询参数 `?room=...` 被完全抹除。
    - 因为 URL 中失去了房间标识，页面重新挂载后启动模式从 `room` 跌落回默认的 `local`，导致玩家断开房间且看不到正在进行的联机对局，产生“在线数据全丢了”的假象。
-3. **切换语言导致暗色外观主题被剥离（P2-1 根因）**：
-   - 在 Next.js App Router 软导航切语言时，React 重渲染根布局 `<html>` 节点，非受控的 `data-theme` 属性被移除；且 `<head>` 内的 `ThemeScript` 不会在客户端软导航时重新执行，导致暗色界面翻转回默认浅色且无法自愈。
+3. **切换语言导致暗色外观主题被剥离（P2-1 / P3-1 / P3-2 根因）**：
+   - 在 Next.js App Router 软导航切语言时，React 重渲染根布局 `<html>` 节点，非受控的 `data-theme` 属性被移除；且 `<head>` 内的 `ThemeScript` 不会在客户端软导航时重新执行。
+   - 若回写机制仅读取 `localStorage`，则“仅靠系统偏好 `prefers-color-scheme: dark`”的默认暗色用户会取到 `null`，导致暗色丢失。
+   - 若兜底 CSS 媒体查询未加 `:not([data-theme])` 属性守卫，则在手选浅色 + 系统暗色用户切换语言的属性间隙内，会被反向劫持为暗色闪烁。
+   - 若回写机制落在浏览器绘制后的被动 `useEffect`，则在剥离后的首帧产生白屏闪烁。
 
 ### 1.2 预期目标
-1. **全模式对局防丢（刷新 & 切换语言）**：
+1. **全模式对局与工作区防丢（刷新 & 切换语言）**：
    - **双人本地对战**：刷新或切换语言后，完整恢复棋盘、所有落子历史与当前轮次。
-   - **人机对战**：刷新或切换语言后，完整恢复落子历史、AI 难度与先后手设置；若在 AI 思考期间刷新，恢复后自动唤醒 Web Worker 重新开始思考，实现无感续弈。
-   - **在线好友房**：修正语言切换时的 URL 保留逻辑，配合现有的 60 秒服务端断线宽限期与 `room:rejoin` 机制，实现刷新与切语言均不脱离房间。
+   - **人机对战**：刷新或切换语言后，完整恢复落子历史、AI 难度与先后手设置；若在 AI 思考期间刷新，恢复后自动唤醒 Web Worker 重新开始思考，实现无感续弈；0 手未落子时刷新或切语言仍保留在人机工作区。
+   - **在线模式（大厅与好友房）**：修正语言切换时的 URL 保留逻辑，配合现有的 60 秒服务端断线宽限期与 `room:rejoin` 机制，实现刷新与切语言均不脱离房间；联机大厅 0 手未建房时切语言或刷新依然保留在大厅工作区。
 2. **语言与外观设置完备保留**：
-   - 外观主题（`light` / `dark`）在刷新、切换语言和跨会话访问时始终保持，软导航切语言时持续保持暗色，首屏无样式闪烁（FOUC）。
+   - 外观主题（`light` / `dark`）在刷新、切换语言和跨会话访问时始终保持，软导航切语言时持续保持目标色调，预绘制阶段同步回写，首屏与切语言实现 100% 零闪烁。
    - 切换语言时保留当前路径（Pathname）与查询参数（Search Params），并在 Storage 与 Cookie 中同步持久化，再次访问根目录 `/` 时精准直达目标语言。
 
 ---
 
 ## 2. 根因剖析与架构解法
 
-### 2.1 语言切换跳回首页的根因与 SSG 安全读取（P3-1 闭环）
+### 2.1 语言切换跳回首页的根因与确定的 SSG 安全读取契约（P3-3 闭环）
 `src/components/LocaleSwitcher.tsx` 现有实现：
 ```tsx
 // 现有代码：硬编码了仅包含语言代码的根路径
@@ -43,14 +46,22 @@
 ```
 由于缺少对当前 `pathname` 和 `searchParams` 的提取与替换，导致用户当前路由上下文被无条件丢弃。
 
-**SSG 契约与解法**：
+**确定性读取与渲染架构（消灭 SSG Bailout 与水合不一致，兼顾中键/复制链接）**：
 - `src/app/[locale]/page.tsx` 是带有 `generateStaticParams` 的 SSG 静态预渲染路由。如果在预渲染树中裸调 `useSearchParams()`，会触发 Next.js 的 `BailoutToCSRError` 导致构建（门禁 4）失败。
-- 引入纯函数 `computeLocaleSwitchHref(pathname, search, targetLocale)`：
-  - `pathname` 通过 SSG 安全的 `usePathname()` 获取；
-  - `search` 在客户端渲染环境从 `window.location.search` 读取（或在链接点击/客户端挂载时动态注入），彻底规避 SSG Bailout；
+- 引入纯函数 `computeLocaleSwitchHref(pathname: string, search: string, targetLocale: string): string`：
   - 识别并替换开头的 `/${currentLocale}` 语言前缀为 `/${targetLocale}`，保持后续路径（如 `/profile/xxx`）不变；
-  - 继承现有的查询字符串（如 `?room=AB12CD`）；
+  - 拼接查询字符串 `search`（若非空则拼装 `?room=AB12CD`）；
   - 生成目标 URL：`/${targetLocale}/subpath?room=AB12CD`。
+- **确定性的客户端执行契约（三阶段执行流，消除模糊选项）**：
+  1. **首屏与 SSG 服务端预渲染**：
+     - `LocaleSwitcher` 内部使用 `usePathname()`，初始 `search` 置为空字符串 `""`；
+     - 预渲染输出的静态 HTML 包含合法的纯路径链接 `href={`/${targetLocale}${subpath}`}`，无任何动态客户端查询依赖，0 Bailout 风险，100% 保证 SSG 静态构建通过；
+  2. **客户端挂载与水合补齐（Client Mount Hydration）**：
+     - 组件挂载后，在客户端 `useEffect` 中读取一次 `window.location.search` 并更新内部状态 `clientSearch`；
+     - `<Link href>` 响应式更新为包含 `?room=...` 的完整 URL；
+     - 这一设计使首帧 HTML 与客户端首帧水合完全一致（零 Hydration Mismatch 警告），同时在组件挂载就绪后即刻支持用户通过鼠标中键、`Ctrl+点击`、“在新标签页中打开”或“复制链接地址”带参导航；
+  3. **交互点击兜底（Click Handler Live Fallback）**：
+     - 在 `<Link onClick>` 触发时，实时读取最新的 `window.location.search`，确保通过常规左键点击切换语言时，即使查询参数刚刚发生微秒级变化，也能 100% 透传至目标 URL 并同步写入 `persistLocale`。
 
 ### 2.2 本地与人机对战易失性根因
 在 `GameShell.tsx` 中，`board`、`moves`、`status`、`nextPlayer` 均为 `useState` 内存状态，页面卸载即消亡。
@@ -96,13 +107,18 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
   3. 验证 `stone` 属于 `"black" | "white"`，且相邻落子颜色交替、`moveNumber` 从 1 开始单调递增；
   4. 校验不通过或数据损坏时，**静默丢弃损坏记录并安全回退为初始空局**，绝不将非法落子传给底层 `placeStone` 避免页面抛错崩溃。
 
-### 3.2 启动与水合安全：实例级求值粒度（P2-2 闭环）
-为规避现有 `client-boot-state.ts` 中模块级单例闭包（`let cache`）在软导航切语言时产生陈旧缓存的问题，建立明确的挂载求值契约：
-1. **实例级快照粒度**：启动模式与活跃对局快照统一基于 `room-state-utils.ts:158-173` 的 `useBootSnapshot` 模式（使用 `useRef` 隔离实例缓存），**按 `GameShell` 每次组件挂载（包含初次首屏与切语言软导航重挂载）重新求值**；
-2. **启动模式判定优先级**：
-   - 优先级 1：当前 URL 带有 `?room=` $\rightarrow$ 强制启动为 `"room"`；
-   - 优先级 2：`sessionStorage` 存在通过校验的活跃单机对局 $\rightarrow$ 启动为对应模式（`"ai"` 或 `"local"`）；
-   - 优先级 3：默认兜底 $\rightarrow$ `"local"`。
+### 3.2 启动与水合安全：实例级求值与工作区持久化（P2-2 / P3-5 闭环）
+为规避单例闭包陈旧缓存，并解决联机大厅与 0 手人机对局在软导航/刷新后跌落 `local` 的问题，建立完备的启动契约：
+1. **工作区状态持久化键名**：
+   - 在 `sessionStorage` 中引入轻量键 `gomoku-selected-workspace`，取值为 `"local" | "ai" | "room"`；
+   - 每次玩家显式进入对应模式（通过 `completeModeChange` 或直接点击模式标签）时同步写入。
+2. **实例级快照粒度**：
+   - 启动模式与活跃对局快照统一基于 `room-state-utils.ts:158-173` 的 `useBootSnapshot` 模式（使用 `useRef` 隔离实例缓存），**按 `GameShell` 每次组件挂载（包含初次首屏与切语言软导航重挂载）重新求值**；
+3. **四级启动模式判定优先级（Boot Mode Resolution Priority）**：
+   - **优先级 1（URL 显式参数）**：当前 URL 包含有效 `?room=XXXXXX` $\rightarrow$ 强制启动为 `"room"`；
+   - **优先级 2（活跃单机/人机对局数据）**：`sessionStorage` 存在通过校验的活跃单机对局（`moves.length > 0`） $\rightarrow$ 恢复对应模式（`"ai"` 或 `"local"`）；
+   - **优先级 3（用户选中的工作区记录）**：`sessionStorage` 存在合法的 `gomoku-selected-workspace`（值为 `"room"`、`"ai"` 或 `"local"`） $\rightarrow$ 恢复为该工作区（**使联机大厅 0 手、人机模式 0 手切语言或刷新后依然停留在原工作区，`friendRoom.enabled` 保持开启，Socket 订阅不被误拆**）；
+   - **优先级 4（全局默认兜底）**：默认回落为 `"local"`。
 
 ### 3.3 各模式对局恢复时序流与 AI 自愈握手（P3-3 闭环）
 
@@ -124,6 +140,7 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
        initialOpeningSeed?: number;
        onCommitGameState: ...;
        onResetGame: ...;
+       onModeChange?: ...;
      };
      ```
    - `useAiGame` 内部的 `aiDifficulty`、`firstPlayer` 与 `openingSeedRef` 在**首帧渲染**时直接以恢复的值初始化，严禁在挂载后依赖无守卫的 `setState`，保证 `aiStone` 与人类颜色自首帧起 100% 准确；
@@ -132,7 +149,8 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
    - 若 `status.state === "playing"` 且当前轮到 AI 落子（例如人类落子后立即刷新，或在 AI 思考中被刷新）；
    - 握手调用必须**显式传入恢复后的目标参数**：
      `commitAiTurn(board, moves, restoredDifficulty, restoredFirstPlayer)`；
-   - 严禁省略参数导致回退到 Hook 内部的默认值，确保 AI 以正确的棋子颜色与思考时限接续计算。
+   - 严禁省略参数导致回退到 Hook 内部的默认值，确保 AI 以正确的棋子颜色与思考时限接续计算；
+   - 握手逻辑使用一次性 `hasHealedRef` 守卫，并在 `aiRequestIdRef` 递增保护下执行，杜绝重复触发。
 
 #### C. 在线好友房（Online Room）
 1. 语言切换时，`computeLocaleSwitchHref` 将 `?room=CODE` 完好透传至新语言 URL；
@@ -140,28 +158,86 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
 3. `useRoomSocket` 读取 `sessionStorage` 中的 `gomoku-room-session`，自动发起 `room:rejoin`；
 4. 服务端由于 60 秒宽限期未超时，无缝回写 `room:state`，对局继续。
 
-### 3.4 状态机控制流与存储清理矩阵（P3-2 闭环）
-为避免将清理逻辑片面绑定在“确认弹窗”而导致无弹窗分支（如 `direct`）产生脏数据复活，建立与 `interaction-guards.ts` 严格对齐的清理矩阵：
+### 3.4 状态机控制流与清晰解耦的清理契约（P3-4 闭环）
+为杜绝“模式切换”与“单模式内重置”共享函数导致的数据误删或不可达分支，建立两条完全正交的清理与状态流转规则：
 
-| 控制流入口 | 分支场景 / 决策 | 对局存储清理策略 | 目标 Key 归属 |
-|---|---|---|---|
-| `completeModeChange("room")` | `direct` 或弹窗确认后切入联机大厅 | 立即清除单机/人机活跃对局存储，防止后续刷新复活旧局顶掉联机大厅 | `gomoku-active-game` |
-| `completeModeChange("ai")` | `direct` 或弹窗确认后切入人机 | 清除本地对局存储；若无匹配的人机存储则初始化新局 | `gomoku-active-game` |
-| `completeModeChange("local")` | `direct` 或弹窗确认后切入本地 | 清除人机对局存储；若无匹配的本地存储则初始化新局 | `gomoku-active-game` |
-| `resetGame` / `handleAiReset` | 点击“重置棋盘 / 再来一局” | 立即清除当前模式的活跃对局存储，重置为空盘 | `gomoku-active-game` |
-| `leaveRoom` | 退出联机房间 | 仅清除联机 Session（`gomoku-room-session`）与 URL，不影响已隔离的单机状态 | `gomoku-room-session` |
+1. **规则 A：模式切换（Mode Switch，由 `completeModeChange(nextMode)` 执行）**：
+   - 当用户从模式 A 切换到模式 B（无论走 `direct` 还是弹窗确认分支）：
+   - **清除所有其他模式的持久化状态**（移除 `gomoku-active-game` 中属于旧模式的记录）；
+   - **一律为目标模式初始化全新空局**（不复用目标模式遗留的旧 session，符合用户切换模式开新盘的直觉预期）；
+   - 同步记录工作区：`sessionStorage.setItem("gomoku-selected-workspace", nextMode)`；
+2. **规则 B：单模式内重开（In-Mode Reset，由 `resetGame` 或 `handleAiReset` 执行）**：
+   - 当用户在当前对局中点击“重置棋盘”或“再来一局”：
+   - **仅清除当前活跃模式的对局存储**（移除 `gomoku-active-game`），重置当前棋盘为空盘；
+   - **绝对不触碰**其他模式的存储，保留当前 `gomoku-selected-workspace`；
+
+| 控制流入口 | 触发场景 / 行为 | 活跃对局清理 (`gomoku-active-game`) | 工作区记录 (`gomoku-selected-workspace`) | 联机 Session (`gomoku-room-session`) |
+|---|---|---|---|---|
+| `completeModeChange("room")` | 切入联机大厅（`direct` 或弹窗确认） | 立即清除（防止旧单机局顶掉大厅） | 写入 `"room"` | 保持不变（未建房） |
+| `completeModeChange("ai")` | 切入人机对战（`direct` 或弹窗确认） | 立即清除，初始化新的人机空局 | 写入 `"ai"` | 不触碰 |
+| `completeModeChange("local")` | 切入本地双人（`direct` 或弹窗确认） | 立即清除，初始化新的本地空局 | 写入 `"local"` | 不触碰 |
+| `resetGame`（本地局内） | 本地模式下点击“重置棋盘” | 仅清除当前本地对局，重置为空盘 | 保持 `"local"` | 不触碰 |
+| `handleAiReset`（人机局内） | 人机模式下点击“再来一局 / 重置” | 仅清除当前人机对局，重置为空盘 | 保持 `"ai"` | 不触碰 |
+| `leaveRoom` | 退出联机房间 | 不触碰单机对局存储 | 保持 `"room"`（停留在联机大厅） | 仅清除联机 Session 并移除 URL `?room=` |
 
 ---
 
 ## 4. 语言与外观设置契约
 
-### 4.1 外观设置（Theme Mode）与软导航防剥离（P2-1 闭环）
+### 4.1 外观设置（Theme Mode）与预绘制前回写（P2-1 / P3-1 / P3-2 闭环）
 - **存储介质**：`localStorage`（Key: `gomoku-theme`）。
-- **软导航防剥离机制（新补实现项）**：
-  1. 在 `DocumentLocaleSync.tsx`（或专属主题保持 Hook）中，监听 `locale` 路由切换与组件挂载事件；
-  2. 软导航重挂载后，自动从 `localStorage` 读取当前主题并在客户端立即执行 `document.documentElement.dataset.theme = theme`，补齐 React 重建 `<html>` 时丢失的 `data-theme` 属性；
-  3. 在 `src/app/globals.css` 中配置 `@media (prefers-color-scheme: dark)` 兜底样式，即使在属性绑定的微秒级间隙，暗色背景与文字也能无缝衔接，杜绝翻白闪烁；
-  4. 首屏加载依然受 `<head>` 内的 `ThemeScript.tsx` 阻塞保护。
+- **权威主题解析源（Theme Resolution Source，P2-1 闭环）**：
+  与 `src/components/ThemeScript.tsx:3` 和 `src/components/ThemeToggle.tsx:36-38` 保持 100% 严格一致，严禁仅读 `localStorage`：
+  ```ts
+  export function resolveCurrentTheme(): "light" | "dark" {
+    if (typeof window === "undefined") return "light";
+    const stored = localStorage.getItem("gomoku-theme");
+    if (stored === "light" || stored === "dark") {
+      return stored;
+    }
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  ```
+  在没有存储记录时，完整继承系统偏好，返回合法的 `"light" | "dark"`，绝不产生 `null` 或字符串 `"null"`。
+
+- **预绘制前回写契约（Pre-paint Layout Sync，P3-2 闭环）**：
+  - 在 `DocumentLocaleSync.tsx` 中，采用**布局阶段同步执行**（`useLayoutEffect` / Next.js SSR 安全的 `useIsomorphicLayoutEffect`），严禁使用绘制后异步调度的被动 `useEffect`：
+    ```ts
+    useIsomorphicLayoutEffect(() => {
+      const theme = resolveCurrentTheme();
+      if (document.documentElement.dataset.theme !== theme) {
+        document.documentElement.dataset.theme = theme;
+      }
+    }, [locale]);
+    ```
+  - **调度与绘制保证**：`useLayoutEffect` 在 React DOM mutation 提交后、浏览器渲染管线执行 Paint 之前同步运行。由于属性写回在第一帧屏幕光栅化绘制之前已完成，彻底消灭首帧无属性渲染白屏。
+
+- **CSS 兜底限定选择器（Scoped CSS Fallback，P3-1 闭环）**：
+  - 在 `src/app/globals.css` 中，暗色媒体查询必须限定为 `:root:not([data-theme])`，严禁使用裸 `:root`：
+    ```css
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) {
+        --bg: #121417;
+        --panel: #1a1d22;
+        --card: #20242a;
+        --card-subtle: #272c33;
+        --border: #303740;
+        --border-subtle: #242930;
+        --text: #f0f3f6;
+        --text-subtle: #c4cbd4;
+        --text-muted: #8b95a2;
+        --accent: #d4a359;
+        --accent-hover: #b8863b;
+        --shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+      }
+    }
+    ```
+  - **效果与证伪验证**：
+    - 当系统为暗色、用户在应用内手选浅色（`data-theme="light"`）时，`:root:not([data-theme])` 不匹配，背景保持浅色，**绝不被媒体兜底反向劫持**；
+    - 当系统为暗色、无存储记录且 `data-theme` 属性在软导航重建瞬间暂时脱落时，`:root:not([data-theme])` 命中，直接呈现暗色背景，与 `useLayoutEffect` 形成双重保险。
+
+- **首屏阻塞保护**：
+  - 首次整页访问依然受 `<head>` 内同步执行的 `ThemeScript.tsx` 阻塞保护。
 
 ### 4.2 语言设置（Locale Mode）
 - **双写持久化**：
@@ -175,8 +251,8 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
 
 ## 5. 验证与回归测试计划
 
-### 5.1 自动化单元测试（增补 P2-1/P2-2/P3-3 守门项）
-1. `computeLocaleSwitchHref` 纯函数测试：
+### 5.1 自动化单元测试（全闭环守门项）
+1. `computeLocaleSwitchHref` 纯函数测试（P3-3 守门）：
    - 首页 `/zh` 切换到 `/en` $\rightarrow$ `/en`；
    - 子路径 `/zh/profile/p1` 切换到 `/en` $\rightarrow$ `/en/profile/p1`；
    - 带参路径 `/zh?room=ABC` 切换到 `/en` $\rightarrow$ `/en?room=ABC`；
@@ -185,26 +261,34 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
    - 非法或损坏的 storage 容错丢弃并回退默认局；
    - 坐标越界、颜色交替异常的防御性拦截；
    - `replayMoves` 状态完全一致性比对。
-3. `client-boot-state` 启动与软导航测试（P2-2 守门）：
-   - 验证实例级缓存按挂载求值；
-   - 模拟软导航重新挂载，断言若缓存退化为模块级则测试必定失败。
+3. `client-boot-state` 启动与软导航测试（P2-2 / P3-5 守门）：
+   - 验证实例级缓存按挂载重新求值；
+   - 验证联机大厅（0 手未建房）切换语言后仍为 `"room"` 工作区，不跌落 `local`；
+   - 验证人机对战（0 手未落子）切换语言后仍为 `"ai"` 工作区，不跌落 `local`。
 4. `useAiGame` 首帧注入与自愈握手测试（P3-3 守门）：
    - 覆盖 `firstPlayer: "ai"` 场景，断言恢复后 AI 执黑先手落子颜色完全正确；
-   - 验证 `initialAiDifficulty` 与 `initialOpeningSeed` 首帧注入有效性。
-5. 外观主题软导航保持测试（P2-1 守门）：
-   - 模拟切语言软导航后 `DocumentLocaleSync` 正确回写 `document.documentElement.dataset.theme`。
+   - 验证 `initialAiDifficulty` 与 `initialOpeningSeed` 首帧注入有效性；
+   - 验证 `commitAiTurn` 显式传参且单次防重入。
+5. 外观主题软导航保持测试（P2-1 / P3-1 / P3-2 守门）：
+   - **用例 A**：`localStorage` 为空 + 系统偏好暗色 $\rightarrow$ 切换语言后同步回写 `dataset.theme = "dark"`，背景色恒为暗色；
+   - **用例 B**：`localStorage === "light"` + 系统偏好暗色 $\rightarrow$ 切换语言后回写 `dataset.theme = "light"`，CSS 兜底不触发，背景恒为浅色；
+   - **用例 C**：重放切语言时序，断言回写发生在 DOM 提交时（`useLayoutEffect` 粒度），不存在任何 `hasAttribute('data-theme') === false` 的已绘制帧。
 
 ### 5.2 本地工程门禁验证
 1. `npx tsc --noEmit`：0 错误；
 2. `npm run lint`：0 错误 0 警告；
 3. `npm test`：全测试通过（包含新增测试用例）；
-4. `npm run build`：生产构建通过（验证 SSG 路由零 Bailout 报错）；
+4. `npm run build`：生产构建通过（验证 SSG 路由零 Bailout 报错，且 `/[locale]` 保持 SSG）；
 5. `npm run verify:online`：在线联机时序烟测全绿。
 
 ### 5.3 关键场景手工与真机 CDP 走查
 1. **场景 1**：本地双人对战走 5 步 $\rightarrow$ 刷新网页 $\rightarrow$ 验证 5 步依然存在、黑白轮次正确、落子可继续。
 2. **场景 2**：人机对战人类落子 $\rightarrow$ AI 倒计时中立即按 F5 刷新 $\rightarrow$ 验证页面恢复且 AI 自动继续思考落子。
-3. **场景 3（P3-3 实测）**：人机对战选择 AI 先手（执黑），玩家落子后在 AI 思考中切换语言 $\rightarrow$ 验证页面保持在人机模式、AI 依然执黑且自动落黑子，文本变为新语言。
+3. **场景 3**：人机对战选择 AI 先手（执黑），玩家落子后在 AI 思考中切换语言 $\rightarrow$ 验证页面保持在人机模式、AI 依然执黑且自动落黑子，文本变为新语言。
 4. **场景 4**：在个人主页 `/zh/profile/[id]` 切换为英文 $\rightarrow$ 验证跳转到 `/en/profile/[id]`，未跳回首页。
 5. **场景 5**：在线好友房正在下棋中切换语言 $\rightarrow$ 验证房间号未丢、无缝重连成功，对局继续。
-6. **场景 6（P2-1 独立复核）**：暗色模式下（含生产构建）切换语言 $\rightarrow$ 以 CDP 探针高频采样，验证 `data-theme` 全程恒为 `dark`，背景色恒为暗色 `rgb(18, 20, 23)`，零浅色白屏闪烁。
+6. **场景 6（P2-1 / P3-1 / P3-2 闭环走查）**：
+   - **6a（系统偏好暗色无存储）**：清空 `localStorage`，注入 `Emulation.setEmulatedMedia{prefers-color-scheme: "dark"}`，从 `/en` 点击切语言链接到 `/fr` $\rightarrow$ CDP 高频采样，验证 `data-theme` 恒为 `"dark"`，背景色恒为暗色 `rgb(18, 20, 23)`，零浅色白屏闪烁；
+   - **6b（手选浅色 + 系统偏好暗色）**：用户手选 `light`，注入系统偏好暗色，切换语言 $\rightarrow$ CDP 高频采样，验证 `data-theme` 恒为 `"light"`，背景色恒为浅色 `rgb(246, 247, 242)`，零暗色闪烁。
+7. **场景 7（P3-5 闭环走查）**：
+   - 在联机大厅（已选“联机”，尚未建房/进房，URL 无 `?room=`）切换语言或刷新 $\rightarrow$ 验证恢复后依然停留在联机大厅，`friendRoom.enabled` 为 `true`，大厅 Presence 正常连接，未跌落至本地空盘。
