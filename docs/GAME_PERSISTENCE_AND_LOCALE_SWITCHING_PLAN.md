@@ -1,7 +1,7 @@
 # 对局持久化、语言平滑切换与外观保持方案设计
 
 更新日期：2026-09-16  
-状态：方案设计与规划（Round 2 审查缺陷闭环版）
+状态：方案设计与规划（Round 3 审查定稿与落地收敛版）
 
 ---
 
@@ -61,7 +61,7 @@
      - `<Link href>` 响应式更新为包含 `?room=...` 的完整 URL；
      - 这一设计使首帧 HTML 与客户端首帧水合完全一致（零 Hydration Mismatch 警告），同时在组件挂载就绪后即刻支持用户通过鼠标中键、`Ctrl+点击`、“在新标签页中打开”或“复制链接地址”带参导航；
   3. **交互点击兜底（Click Handler Live Fallback）**：
-     - 在 `<Link onClick>` 触发时，实时读取最新的 `window.location.search`，确保通过常规左键点击切换语言时，即使查询参数刚刚发生微秒级变化，也能 100% 透传至目标 URL 并同步写入 `persistLocale`。
+     - 在 `<Link onClick>` 触发时，实时读取最新的 `window.location.search`，若检测到与当前 `href` 中的 search 存在微秒级差异，通过 `router.push(liveTargetHref)` 或同步赋值确保即时导航参数 100% 完整，并同步写入 `persistLocale`。
 
 ### 2.2 本地与人机对战易失性根因
 在 `GameShell.tsx` 中，`board`、`moves`、`status`、`nextPlayer` 均为 `useState` 内存状态，页面卸载即消亡。
@@ -109,9 +109,12 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
 
 ### 3.2 启动与水合安全：实例级求值与工作区持久化（P2-2 / P3-5 闭环）
 为规避单例闭包陈旧缓存，并解决联机大厅与 0 手人机对局在软导航/刷新后跌落 `local` 的问题，建立完备的启动契约：
-1. **工作区状态持久化键名**：
+1. **工作区状态持久化键名与完整写入契约（P3-2 闭环）**：
    - 在 `sessionStorage` 中引入轻量键 `gomoku-selected-workspace`，取值为 `"local" | "ai" | "room"`；
-   - 每次玩家显式进入对应模式（通过 `completeModeChange` 或直接点击模式标签）时同步写入。
+   - **写入点全覆盖**：
+     - (a) 玩家显式切换模式（通过 `completeModeChange` 或直接点击模式标签）时，同步写入目标模式；
+     - (b) 启动解析命中 URL `?room=XXXXXX` 或通过邀请链接加入房间成功时，同步写入 `"room"`；
+     - (c) 退出房间 `leaveRoom` 时，显式写入并保持 `"room"`（确保邀请链接进房的玩家在退房后刷新或切语言依然停留在联机大厅工作区，不跌落 `local` 单机空盘）。
 2. **实例级快照粒度**：
    - 启动模式与活跃对局快照统一基于 `room-state-utils.ts:158-173` 的 `useBootSnapshot` 模式（使用 `useRef` 隔离实例缓存），**按 `GameShell` 每次组件挂载（包含初次首屏与切语言软导航重挂载）重新求值**；
 3. **四级启动模式判定优先级（Boot Mode Resolution Priority）**：
@@ -178,7 +181,7 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
 | `completeModeChange("local")` | 切入本地双人（`direct` 或弹窗确认） | 立即清除，初始化新的本地空局 | 写入 `"local"` | 不触碰 |
 | `resetGame`（本地局内） | 本地模式下点击“重置棋盘” | 仅清除当前本地对局，重置为空盘 | 保持 `"local"` | 不触碰 |
 | `handleAiReset`（人机局内） | 人机模式下点击“再来一局 / 重置” | 仅清除当前人机对局，重置为空盘 | 保持 `"ai"` | 不触碰 |
-| `leaveRoom` | 退出联机房间 | 不触碰单机对局存储 | 保持 `"room"`（停留在联机大厅） | 仅清除联机 Session 并移除 URL `?room=` |
+| `leaveRoom` | 退出联机房间 | 不触碰单机对局存储 | 显式写入并保持 `"room"`（停留在联机大厅） | 仅清除联机 Session 并移除 URL `?room=` |
 
 ---
 
@@ -213,28 +216,48 @@ export type StoredActiveGame = StoredLocalGameSession | StoredAiGameSession;
   - **调度与绘制保证**：`useLayoutEffect` 在 React DOM mutation 提交后、浏览器渲染管线执行 Paint 之前同步运行。由于属性写回在第一帧屏幕光栅化绘制之前已完成，彻底消灭首帧无属性渲染白屏。
 
 - **CSS 兜底限定选择器（Scoped CSS Fallback，P3-1 闭环）**：
-  - 在 `src/app/globals.css` 中，暗色媒体查询必须限定为 `:root:not([data-theme])`，严禁使用裸 `:root`：
+  - 在 `src/app/globals.css` 中，暗色媒体查询必须限定为 `:root:not([data-theme])`，其声明集与权威暗色主题 `:root[data-theme="dark"]`（`globals.css:35-67`）保持 100% 逐项完全等价（含 `color-scheme: dark`），严禁使用未经定义的外部变量名：
     ```css
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme]) {
+        color-scheme: dark;
         --bg: #121417;
-        --panel: #1a1d22;
-        --card: #20242a;
-        --card-subtle: #272c33;
-        --border: #303740;
-        --border-subtle: #242930;
-        --text: #f0f3f6;
-        --text-subtle: #c4cbd4;
-        --text-muted: #8b95a2;
-        --accent: #d4a359;
-        --accent-hover: #b8863b;
-        --shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+        --bg-radial-a: rgba(30, 41, 59, 0.4);
+        --bg-radial-b: rgba(15, 23, 42, 0.6);
+        --ink: #edf2f7;
+        --muted: #8b9ab0;
+        --panel: #1b2027;
+        --panel-soft: #232a34;
+        --panel-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+        --line: #2d3748;
+        --line-strong: #4a5568;
+        --accent: #45b39d;
+        --accent-deep: #2e8b77;
+        --accent-ink: #071e19;
+        --hover: #262f3c;
+        --board: #9f6b36;
+        --board-border: #6d461f;
+        --board-line: #523416;
+        --board-grain-1: rgba(255, 255, 255, 0.04);
+        --board-grain-2: rgba(0, 0, 0, 0.15);
+        --board-felt-a: rgba(140, 90, 45, 0.15);
+        --board-felt-b: rgba(0, 0, 0, 0.25);
+        --board-glow: rgba(0, 0, 0, 0.45);
+        --board-shadow-edge: rgba(0, 0, 0, 0.6);
+        --board-inner-line: rgba(255, 255, 255, 0.03);
+        --board-edge-line: rgba(0, 0, 0, 0.35);
+        --black-stone: #11141a;
+        --white-stone: #edf1f7;
+        --white-stone-line: #b0b8c4;
+        --last-move: #e55353;
+        --win-line: #f6c445;
+        --ad-surface: #1e242d;
       }
     }
     ```
   - **效果与证伪验证**：
     - 当系统为暗色、用户在应用内手选浅色（`data-theme="light"`）时，`:root:not([data-theme])` 不匹配，背景保持浅色，**绝不被媒体兜底反向劫持**；
-    - 当系统为暗色、无存储记录且 `data-theme` 属性在软导航重建瞬间暂时脱落时，`:root:not([data-theme])` 命中，直接呈现暗色背景，与 `useLayoutEffect` 形成双重保险。
+    - 当系统为暗色、无存储记录且 `data-theme` 属性在软导航重建瞬间暂时脱落时，`:root:not([data-theme])` 命中，文字、棋盘与背景均呈现完整权威暗色，对比度达标且无破版；配合 `useLayoutEffect` 形成双重保险。
 
 - **首屏阻塞保护**：
   - 首次整页访问依然受 `<head>` 内同步执行的 `ThemeScript.tsx` 阻塞保护。
