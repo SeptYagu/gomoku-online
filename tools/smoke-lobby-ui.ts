@@ -96,6 +96,7 @@ async function main(): Promise<void> {
       await assertLobbyRowContains(cdp, preparedRooms.waitingCode, "Join room");
       await assertLobbyRoomGroup(cdp, preparedRooms.waitingCode, "joinable");
       await clickLobbySection(cdp, "friends");
+      await assertFriendsSectionStructure(cdp);
       await setFriendRoomCode(cdp, preparedRooms.waitingCode);
       await clickButton(cdp, "Join room");
       await waitForRoomUrl(cdp, preparedRooms.waitingCode);
@@ -1205,6 +1206,62 @@ async function assertRtlMobileTable(cdp: CdpClient): Promise<void> {
   }
 }
 
+async function assertFriendsSectionStructure(cdp: CdpClient): Promise<void> {
+  const result = await waitForValue(async () => {
+    return evaluate<{
+      ariaDescribedByMatches: boolean;
+      dividerText: string;
+      hasJoinHeading: boolean;
+      hintText: string;
+      noHorizontalOverflow: boolean;
+      orderValid: boolean;
+    }>(
+      cdp,
+      `(() => {
+        const createBtn = document.querySelector('[data-lobby-action="create-unlisted"]');
+        const hint = document.querySelector('.lobby-friend-hint');
+        const divider = document.querySelector('.lobby-friend-divider');
+        const joinHeading = document.querySelector('.lobby-friend-subtitle');
+        const joinInput = document.querySelector('[data-lobby-section="friends"] input');
+        const joinForm = document.querySelector('.lobby-join-form');
+
+        const hintId = hint?.getAttribute('id');
+        const createDescribedBy = createBtn?.getAttribute('aria-describedby');
+        const joinHeadingId = joinHeading?.getAttribute('id');
+        const formLabelledBy = joinForm?.getAttribute('aria-labelledby');
+
+        const orderValid = Boolean(
+          createBtn &&
+          divider &&
+          joinInput &&
+          (createBtn.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+          (divider.compareDocumentPosition(joinInput) & Node.DOCUMENT_POSITION_FOLLOWING)
+        );
+
+        return {
+          ariaDescribedByMatches: Boolean(hintId && createDescribedBy === hintId),
+          dividerText: (divider?.textContent || '').trim(),
+          hasJoinHeading: Boolean(joinHeading && (joinHeading.textContent || '').trim() && joinHeadingId && formLabelledBy === joinHeadingId),
+          hintText: (hint?.textContent || '').trim(),
+          noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+          orderValid
+        };
+      })()`
+    );
+  }, STEP_TIMEOUT_MS);
+
+  if (
+    !result.orderValid ||
+    !result.hintText ||
+    !result.dividerText ||
+    !result.ariaDescribedByMatches ||
+    !result.hasJoinHeading ||
+    !result.noHorizontalOverflow
+  ) {
+    throw new Error(`Friends section structure assertion failed: ${JSON.stringify(result)}`);
+  }
+}
+
 async function assertRtlMobileLobby(cdp: CdpClient): Promise<void> {
   try {
     await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -1252,6 +1309,11 @@ async function assertRtlMobileLobby(cdp: CdpClient): Promise<void> {
     if (layout.direction !== "rtl" || !layout.noHorizontalOverflow || !layout.criticalTargetsLargeEnough || !ordered) {
       throw new Error(`RTL mobile lobby layout failed: ${JSON.stringify(layout)}`);
     }
+
+    // Verify 390px RTL friends panel expanded state without horizontal overflow
+    await clickLobbySection(cdp, "friends");
+    await assertFriendsSectionStructure(cdp);
+    await clickLobbySection(cdp, "friends");
 
     const captureDir = process.env.GOMOKU_SMOKE_CAPTURE_DIR;
 

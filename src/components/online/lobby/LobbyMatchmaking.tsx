@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { ChevronDown, LogIn, Search, Users, Wifi } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import { useOptionalRoomContext } from "../RoomContext";
@@ -20,6 +21,8 @@ export function LobbyMatchmaking({
 }: LobbyMatchmakingProps) {
   const room = useOptionalRoomContext(roomProp);
   const labels = dictionary.room;
+  const createUnlistedHintId = useId();
+  const joinExistingHeadingId = useId();
 
   return (
     <>
@@ -58,6 +61,7 @@ export function LobbyMatchmaking({
             <div className="lobby-friend-create-card">
               <div className="lobby-friend-card-content">
                 <button
+                  aria-describedby={createUnlistedHintId}
                   className="mode-pill"
                   data-lobby-action="create-unlisted"
                   disabled={!room.canCreateRoom}
@@ -67,16 +71,24 @@ export function LobbyMatchmaking({
                   <Wifi aria-hidden="true" focusable={false} />
                   {labels.createUnlistedRoom}
                 </button>
-                <p className="lobby-friend-hint">{labels.createUnlistedRoomHint}</p>
+                <p className="lobby-friend-hint" id={createUnlistedHintId}>
+                  {labels.createUnlistedRoomHint}
+                </p>
               </div>
             </div>
 
-            <div className="lobby-friend-divider" aria-hidden="true">
+            <div className="lobby-friend-divider">
               <span>{labels.orJoinExisting}</span>
             </div>
 
             <div className="lobby-friend-join-card">
+              <div className="lobby-friend-join-header">
+                <h3 className="lobby-friend-subtitle" id={joinExistingHeadingId}>
+                  {labels.joinExistingRoom}
+                </h3>
+              </div>
               <form
+                aria-labelledby={joinExistingHeadingId}
                 className="lobby-join-form"
                 onSubmit={(event) => {
                   event.preventDefault();
