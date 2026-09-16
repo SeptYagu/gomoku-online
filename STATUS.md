@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`3a226f1 feat(ai): add countdown timer prompt during AI thinking in PvE mode`（本字段记录本字段所在提交的直接前驱阶段交付；本提交为 Round 1 审查缺陷修复交接单，其 SHA 由下一次交付回填）
+- **最新阶段交付提交**：`165c56d fix(ai): resolve round 1 review findings for ai thinking countdown`（本字段记录本字段所在提交的直接前驱阶段交付；本提交为不公开房间创建与加入交互解耦交接单，其 SHA 由下一次交付回填）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则）
-- **单元测试** (`npm test`)：28 个测试套件 / 245 项用例 100% 通过（新增 2 项 AI 思考倒计时计算边界与定时器生命周期守门测试）
+- **单元测试** (`npm test`)：28 个测试套件 / 245 项用例 100% 通过（保持 6 语种同构与倒计时调度器全绿）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：全绿通过
 
@@ -31,6 +31,7 @@
 
 ## 3. 近期已交付里程碑
 
+- 🧩 **不公开房间创建与加入交互解耦及文案歧义消除（2026-09-16）**：针对用户反馈的大厅输入框被误认为“可自定义不公开房间字段/房间码”的问题，将“与好友游玩”面板重构为独立创建卡片与独立加入卡片，增加横向分隔带与微文案提示；6 语种字典同步扩充 `createUnlistedRoomHint`、`joinExistingRoom` 与 `orJoinExisting` 并优化 `createOrJoin` 副标题；四道门禁全绿（28 套 / 245 项单测 100% 通过，生产构建全通）。详见 [`docs/handoff/2026-09-16-unlisted-room-creation-disambiguation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-creation-disambiguation-handoff.md)。
 - 🔄 **Round 1 审查缺陷修复与定时器调度器接缝抽取（2026-09-16）**：针对 Round 1 审查指出的 5 项 P3 缺陷完成闭环：P3-1 按契约回填 `STATUS.md:11` 前驱交付并重写括注；P3-2 `AiGameView` 活区采用 `aria-label` 稳定标签与内部 `aria-hidden`，消除每秒读屏播报；P3-3 `commitAiTurn` 的 `finally` 清理纳入 `requestId` 归属守卫；P3-4 抽出无 DOM 依赖的 `createAiCountdownScheduler` 纯调度器，补充可控时钟生命周期与防误杀自动化测试；P3-5 `computeAiThinkingSeconds` 补齐上界与非有限值截断；四道门禁全绿（28 套 / 245 项单测 100% 通过，Next 生产构建成功）。详见 [`docs/handoff/2026-09-16-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-round1-findings-remediation-handoff.md)。
 - ⚠️ **AI 思考倒计时提示功能独立审查（Round 1，被审 `3a226f1`）**：**审查未通过**。0×P0/P1/P2；**5×P3**（P3-1 `STATUS.md:11` 双字段规则未回填、括注残留上一交付说明；P3-2 `AiGameView.tsx:125/128` 每秒跳动的数值被置于 `role="status"`+`aria-live="polite"` 活区，读屏逐秒播报且与本仓 `TableTaskBar.tsx:75` 既有惯例相悖；P3-3 `useAiGame.ts:304-309` `finally` 清理未按 `requestId` 守卫，被取代请求会误杀新请求的倒计时定时器（当前被 UI 守卫遮蔽）；P3-4 验收标准 2「无定时器泄漏」零测试守门，删除 `setInterval`/任一 `clearInterval` 后 244 项测试仍全绿；P3-5 `computeAiThinkingSeconds` 无上界约束，负 elapsed 实测返回 6/8/65 秒、`NaN` 入参返回 `NaN`）。独立复跑 `tsc`/`lint`/`build` 全绿，`vitest` 243/244（唯一失败为 `game-records.test.ts` Windows EPERM 环境 flake，单跑 10/10 通过），并以真实模块执行 15 组边界探针完成证伪。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-round1-handoff.md)。
 - ⏱️ **人机对战 AI 思考倒计时提示（2026-09-16）**：为 PvE AI 思考状态建立毫秒级周期采样与防抖机制，新增 `computeAiThinkingSeconds` 纯函数计算与 `aiThinkingCountdown` 秒级倒计时状态；在 6 语种字典同步补齐 `thinkingCountdown`（`{seconds}`）；侧边栏状态卡片与棋盘上方 action-bar 双通道展示带有脉冲微动画与 A11y 属性的倒计时指示器；四道门禁全绿（28 套 / 244 项单测 100% 通过，生产构建全通）。详见 [`docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md`](docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md)。
@@ -73,7 +74,8 @@
 
 - 详细交接单索引请查阅：[`docs/handoff/INDEX.md`](docs/handoff/INDEX.md)
 - **全局分阶段重构总纲**：[`docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
-- **最新单阶段交付单**：[`docs/handoff/2026-09-16-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-round1-findings-remediation-handoff.md)
+- **最新单阶段交付单**：[`docs/handoff/2026-09-16-unlisted-room-creation-disambiguation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-creation-disambiguation-handoff.md)
+- 前序阶段交付单：[`docs/handoff/2026-09-16-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-round1-findings-remediation-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md`](docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase5-ai-engine-decomp-handoff.md`](docs/handoff/2026-09-13-phase5-ai-engine-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md`](docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md)

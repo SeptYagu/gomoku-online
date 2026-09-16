@@ -64,6 +64,7 @@ export type GameDictionary = {
     createOrJoin: string;
     createRoom: string;
     createUnlistedRoom: string;
+    createUnlistedRoomHint: string;
     disconnected: string;
     downloadSgf: string;
     editIdentity: string;
@@ -77,6 +78,7 @@ export type GameDictionary = {
     gamesCount: string;
     guestAccount: string;
     hostHandle: string;
+    joinExistingRoom: string;
     joinRoom: string;
     joinTarget: string;
     joinTargetPlaceholder: string;
@@ -120,6 +122,7 @@ export type GameDictionary = {
     notReady: string;
     onlineUsers: string;
     opponentTurn: string;
+    orJoinExisting: string;
     panelLabel: string;
     playerName: string;
     playerNamePlaceholder: string;
@@ -290,9 +293,10 @@ const en = {
       cancelRematch: "Cancel rematch",
       copied: "Copied",
       copyInvite: "Copy invite",
-      createOrJoin: "Create an unlisted room or enter a link, code, or @handle.",
+      createOrJoin: "Create an unlisted room with a random code, or enter a link, code, or @handle.",
       createRoom: "Create room",
       createUnlistedRoom: "Create unlisted room",
+      createUnlistedRoomHint: "Allocates a random room code and private share link.",
       disconnected: "Disconnected",
       downloadSgf: "Download SGF",
       editIdentity: "Edit identity",
@@ -306,6 +310,7 @@ const en = {
       gamesCount: "Games {count}",
       guestAccount: "Guest",
       hostHandle: "Host handle",
+      joinExistingRoom: "Join existing room",
       joinRoom: "Join room",
       joinTarget: "Room link, code, or @handle",
       joinTargetPlaceholder: "https://… / ABC123 / @alice",
@@ -349,6 +354,7 @@ const en = {
       notReady: "Not ready",
       onlineUsers: "Online users",
       opponentTurn: "Opponent to move",
+      orJoinExisting: "Or join an existing room",
       panelLabel: "Friend room",
       playerName: "Name",
       playerNamePlaceholder: "Player 1234",
@@ -515,9 +521,10 @@ const zh = {
       cancelRematch: "取消再战",
       copied: "已复制",
       copyInvite: "复制邀请",
-      createOrJoin: "创建不公开列出房间，或输入链接、房间码、@标识。",
+      createOrJoin: "创建自动生成随机房间码的不公开房间，或输入链接、房间码、@标识加入。",
       createRoom: "创建房间",
       createUnlistedRoom: "创建不公开列出房间",
+      createUnlistedRoomHint: "系统将自动分配随机房间码与专属邀请链接。",
       disconnected: "已断开",
       downloadSgf: "下载 SGF",
       editIdentity: "编辑身份",
@@ -531,6 +538,7 @@ const zh = {
       gamesCount: "对局 {count}",
       guestAccount: "游客",
       hostHandle: "房主标识",
+      joinExistingRoom: "加入已有房间",
       joinRoom: "加入房间",
       joinTarget: "房间链接、房间码或 @标识",
       joinTargetPlaceholder: "https://… / ABC123 / @alice",
@@ -574,6 +582,7 @@ const zh = {
       notReady: "未准备",
       onlineUsers: "在线用户",
       opponentTurn: "对手回合",
+      orJoinExisting: "或加入已有房间",
       panelLabel: "好友房",
       playerName: "昵称",
       playerNamePlaceholder: "Player 1234",
@@ -740,9 +749,10 @@ const fr = {
       cancelRematch: "Annuler la revanche",
       copied: "Copié",
       copyInvite: "Copier l'invitation",
-      createOrJoin: "Créez un salon non répertorié ou entrez un lien, un code ou un @identifiant.",
+      createOrJoin: "Créez un salon avec un code aléatoire ou entrez un lien, un code ou un @identifiant.",
       createRoom: "Créer un salon",
       createUnlistedRoom: "Créer un salon non répertorié",
+      createUnlistedRoomHint: "Attribue un code aléatoire et un lien d'invitation privé.",
       disconnected: "Déconnecté",
       downloadSgf: "Télécharger SGF",
       editIdentity: "Modifier l'identité",
@@ -756,6 +766,7 @@ const fr = {
       gamesCount: "Parties {count}",
       guestAccount: "Invité",
       hostHandle: "Identifiant de l'hôte",
+      joinExistingRoom: "Rejoindre un salon existant",
       joinRoom: "Rejoindre",
       joinTarget: "Lien, code ou @identifiant",
       joinTargetPlaceholder: "https://… / ABC123 / @alice",
@@ -799,6 +810,7 @@ const fr = {
       notReady: "Pas prêt",
       onlineUsers: "Utilisateurs en ligne",
       opponentTurn: "À l'adversaire",
+      orJoinExisting: "Ou rejoindre un salon existant",
       panelLabel: "Salon ami",
       playerName: "Nom",
       playerNamePlaceholder: "Player 1234",
@@ -965,9 +977,10 @@ const es = {
       cancelRematch: "Cancelar revancha",
       copied: "Copiado",
       copyInvite: "Copiar invitación",
-      createOrJoin: "Crea una sala no listada o introduce un enlace, código o @identificador.",
+      createOrJoin: "Crea una sala con código aleatorio o introduce un enlace, código o @identificador.",
       createRoom: "Crear sala",
       createUnlistedRoom: "Crear sala no listada",
+      createUnlistedRoomHint: "Asigna un código aleatorio y un enlace de invitación privado.",
       disconnected: "Desconectado",
       downloadSgf: "Descargar SGF",
       editIdentity: "Editar identidad",
@@ -981,6 +994,7 @@ const es = {
       gamesCount: "Partidas {count}",
       guestAccount: "Invitado",
       hostHandle: "Identificador del anfitrión",
+      joinExistingRoom: "Unirse a una sala existente",
       joinRoom: "Unirse",
       joinTarget: "Enlace, código o @identificador",
       joinTargetPlaceholder: "https://… / ABC123 / @alice",
@@ -1024,6 +1038,7 @@ const es = {
       notReady: "No listo",
       onlineUsers: "Usuarios en línea",
       opponentTurn: "Turno del rival",
+      orJoinExisting: "O unirse a una sala existente",
       panelLabel: "Sala de amigos",
       playerName: "Nombre",
       playerNamePlaceholder: "Player 1234",
@@ -1190,9 +1205,10 @@ const ru = {
       cancelRematch: "Отменить реванш",
       copied: "Скопировано",
       copyInvite: "Копировать ссылку",
-      createOrJoin: "Создайте комнату не из списка или введите ссылку, код либо @идентификатор.",
+      createOrJoin: "Создайте комнату со случайным кодом или введите ссылку, код либо @идентификатор.",
       createRoom: "Создать комнату",
       createUnlistedRoom: "Создать комнату не в списке",
+      createUnlistedRoomHint: "Генерирует случайный код и приватную ссылку-приглашение.",
       disconnected: "Отключен",
       downloadSgf: "Скачать SGF",
       editIdentity: "Изменить имя",
@@ -1206,6 +1222,7 @@ const ru = {
       gamesCount: "Партии {count}",
       guestAccount: "Гость",
       hostHandle: "Идентификатор хозяина",
+      joinExistingRoom: "Войти в существующую комнату",
       joinRoom: "Войти",
       joinTarget: "Ссылка, код или @идентификатор",
       joinTargetPlaceholder: "https://… / ABC123 / @alice",
@@ -1249,6 +1266,7 @@ const ru = {
       notReady: "Не готов",
       onlineUsers: "Пользователи онлайн",
       opponentTurn: "Ход соперника",
+      orJoinExisting: "Или войти в существующую комнату",
       panelLabel: "Комната друга",
       playerName: "Имя",
       playerNamePlaceholder: "Player 1234",
@@ -1415,9 +1433,10 @@ const ar = {
       cancelRematch: "إلغاء إعادة اللعب",
       copied: "تم النسخ",
       copyInvite: "نسخ الدعوة",
-      createOrJoin: "أنشئ غرفة غير مدرجة أو أدخل رابطا أو رمزا أو @معرّفا.",
+      createOrJoin: "أنشئ غرفة برمز عشوائي، أو أدخل رابطًا أو رمزًا أو @معرّفًا للانضمام.",
       createRoom: "إنشاء غرفة",
       createUnlistedRoom: "إنشاء غرفة غير مدرجة",
+      createUnlistedRoomHint: "يخصص رمز غرفة عشوائيًا ورابط دعوة خاصًا.",
       disconnected: "غير متصل",
       downloadSgf: "تنزيل SGF",
       editIdentity: "تعديل الهوية",
@@ -1431,6 +1450,7 @@ const ar = {
       gamesCount: "الألعاب {count}",
       guestAccount: "ضيف",
       hostHandle: "معرّف المضيف",
+      joinExistingRoom: "الانضمام إلى غرفة موجودة",
       joinRoom: "انضمام",
       joinTarget: "رابط أو رمز أو @معرّف",
       joinTargetPlaceholder: "https://… / ABC123 / @alice",
@@ -1474,6 +1494,7 @@ const ar = {
       notReady: "غير جاهز",
       onlineUsers: "المستخدمون المتصلون",
       opponentTurn: "دور الخصم",
+      orJoinExisting: "أو الانضمام إلى غرفة موجودة",
       panelLabel: "غرفة صديق",
       playerName: "الاسم",
       playerNamePlaceholder: "Player 1234",

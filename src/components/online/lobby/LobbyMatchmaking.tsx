@@ -55,40 +55,52 @@ export function LobbyMatchmaking({
         <section className="lobby-disclosure-panel" data-lobby-section="friends">
           <p className="room-message">{labels.unlistedRoomNotice}</p>
           <div className="lobby-friend-actions">
-            <button
-              className="mode-pill"
-              data-lobby-action="create-unlisted"
-              disabled={!room.canCreateRoom}
-              onClick={() => room.createRoom("unlisted")}
-              type="button"
-            >
-              <Wifi aria-hidden="true" focusable={false} />
-              {labels.createUnlistedRoom}
-            </button>
-            <form
-              className="lobby-join-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                room.joinRoom();
-              }}
-            >
-              <label className="room-field">
-                <span>{labels.joinTarget}</span>
-                <input
-                  autoCapitalize="none"
-                  maxLength={256}
-                  onChange={(event) => room.setJoinTarget(event.target.value)}
-                  placeholder={labels.joinTargetPlaceholder}
-                  spellCheck={false}
-                  type="text"
-                  value={room.joinTarget}
-                />
-              </label>
-              <button className="mode-pill" disabled={!room.canJoinRoom} type="submit">
-                <LogIn aria-hidden="true" focusable={false} />
-                {labels.joinRoom}
-              </button>
-            </form>
+            <div className="lobby-friend-create-card">
+              <div className="lobby-friend-card-content">
+                <button
+                  className="mode-pill"
+                  data-lobby-action="create-unlisted"
+                  disabled={!room.canCreateRoom}
+                  onClick={() => room.createRoom("unlisted")}
+                  type="button"
+                >
+                  <Wifi aria-hidden="true" focusable={false} />
+                  {labels.createUnlistedRoom}
+                </button>
+                <p className="lobby-friend-hint">{labels.createUnlistedRoomHint}</p>
+              </div>
+            </div>
+
+            <div className="lobby-friend-divider" aria-hidden="true">
+              <span>{labels.orJoinExisting}</span>
+            </div>
+
+            <div className="lobby-friend-join-card">
+              <form
+                className="lobby-join-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  room.joinRoom();
+                }}
+              >
+                <label className="room-field">
+                  <span>{labels.joinTarget}</span>
+                  <input
+                    autoCapitalize="none"
+                    maxLength={256}
+                    onChange={(event) => room.setJoinTarget(event.target.value)}
+                    placeholder={labels.joinTargetPlaceholder}
+                    spellCheck={false}
+                    type="text"
+                    value={room.joinTarget}
+                  />
+                </label>
+                <button className="mode-pill" disabled={!room.canJoinRoom} type="submit">
+                  <LogIn aria-hidden="true" focusable={false} />
+                  {labels.joinRoom}
+                </button>
+              </form>
+            </div>
           </div>
         </section>
       ) : null}

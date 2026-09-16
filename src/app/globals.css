@@ -482,9 +482,54 @@ h1 {
 }
 
 .lobby-friend-actions {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lobby-friend-create-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lobby-friend-card-content {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lobby-friend-hint {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.lobby-friend-divider {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  gap: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lobby-friend-divider::before,
+.lobby-friend-divider::after {
+  background: var(--line);
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+
+.lobby-friend-join-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .lobby-join-form {
@@ -2229,7 +2274,6 @@ h1 {
 
   .room-fields,
   .room-account,
-  .lobby-friend-actions,
   .lobby-join-form,
   .profile-page-summary,
   .profile-record-card,
