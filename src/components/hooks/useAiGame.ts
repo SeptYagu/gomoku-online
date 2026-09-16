@@ -69,7 +69,7 @@ export function useAiGame({
   const aiWorkersRef = useRef<Worker[]>([]);
   const aiWorkerPoolRef = useRef<AiWorkerPool | null>(null);
   const aiWorkerTimeoutRef = useRef<number | null>(null);
-  const aiCountdownIntervalRef = useRef<number | null>(null);
+  const aiCountdownSchedulerRef = useRef<AiCountdownScheduler | null>(null);
   const aiRequestIdRef = useRef(0);
   const openingSeedRef = useRef(createOpeningSeed());
 
@@ -92,18 +92,18 @@ export function useAiGame({
     return aiWorkerPoolRef.current;
   }
 
+  function getAiCountdownScheduler(): AiCountdownScheduler {
+    if (!aiCountdownSchedulerRef.current) {
+      aiCountdownSchedulerRef.current = createAiCountdownScheduler();
+    }
+    return aiCountdownSchedulerRef.current;
+  }
+
   function terminateAiWorkers() {
     if (aiWorkerPoolRef.current && aiWorkersRef.current.length > 0) {
       aiWorkerPoolRef.current.terminateBusy(aiWorkersRef.current);
     }
     aiWorkersRef.current = [];
-  }
-
-  function clearAiCountdownInterval() {
-    if (aiCountdownIntervalRef.current !== null) {
-      window.clearInterval(aiCountdownIntervalRef.current);
-      aiCountdownIntervalRef.current = null;
-    }
   }
 
   function clearAiWorkerTimeout() {
@@ -119,14 +119,14 @@ export function useAiGame({
     aiRequestIdRef.current += 1;
     setIsAiThinking(false);
     setAiThinkingCountdown(null);
-    clearAiCountdownInterval();
+    getAiCountdownScheduler().stop();
     terminateAiWorkers();
     clearAiWorkerTimeout();
   }, []);
 
   useEffect(() => {
     return () => {
-      clearAiCountdownInterval();
+      aiCountdownSchedulerRef.current?.stop();
       terminateAiWorkers();
       aiWorkerPoolRef.current?.terminateAll();
       clearAiWorkerTimeout();
@@ -258,16 +258,11 @@ export function useAiGame({
     aiRequestIdRef.current = requestId;
     setIsAiThinking(true);
 
+    const scheduler = getAiCountdownScheduler();
     const timeLimitMs = getAiTimeLimitMs(targetDifficulty);
-    const initialSeconds = computeAiThinkingSeconds(timeLimitMs, 0);
-    setAiThinkingCountdown(initialSeconds);
-    clearAiCountdownInterval();
-
-    const startTime = Date.now();
-    aiCountdownIntervalRef.current = window.setInterval(() => {
-      const remainingSec = computeAiThinkingSeconds(timeLimitMs, Date.now() - startTime);
-      setAiThinkingCountdown((prev) => (prev !== remainingSec ? remainingSec : prev));
-    }, 250);
+    const countdownId = scheduler.start(timeLimitMs, (seconds) => {
+      setAiThinkingCountdown(seconds);
+    });
 
     try {
       const targetAiStone = getAiStone(targetFirstPlayer);
@@ -302,8 +297,8 @@ export function useAiGame({
 
       onCommitGameStateRef.current(nextAiBoard, nextAiMoves, aiResult);
     } finally {
-      clearAiCountdownInterval();
       if (aiRequestIdRef.current === requestId) {
+        scheduler.stop(countdownId);
         setAiThinkingCountdown(null);
       }
     }
@@ -403,8 +398,95 @@ export function useAiGame({
 }
 
 export function computeAiThinkingSeconds(timeLimitMs: number, elapsedMs: number): number {
-  const remainingMs = Math.max(0, timeLimitMs - elapsedMs);
-  return Math.max(1, Math.ceil(remainingMs / 1000));
+  const safeLimit = Number.isFinite(timeLimitMs) ? Math.max(0, timeLimitMs) : 0;
+  const maxSeconds = Math.max(1, Math.ceil(safeLimit / 1000));
+  let safeElapsed: number;
+  if (!Number.isFinite(elapsedMs)) {
+    safeElapsed = elapsedMs > 0 ? safeLimit : 0;
+  } else {
+    safeElapsed = Math.min(Math.max(0, elapsedMs), safeLimit);
+  }
+  const remainingMs = Math.max(0, safeLimit - safeElapsed);
+  return Math.min(maxSeconds, Math.max(1, Math.ceil(remainingMs / 1000)));
+}
+
+export type TimerFn = (callback: () => void, ms: number) => number;
+export type ClearTimerFn = (handle: number) => void;
+export type NowFn = () => number;
+
+export type AiCountdownSchedulerOptions = {
+  setInterval?: TimerFn;
+  clearInterval?: ClearTimerFn;
+  now?: NowFn;
+  samplingIntervalMs?: number;
+};
+
+export type AiCountdownScheduler = {
+  start: (timeLimitMs: number, onTick: (seconds: number) => void) => number;
+  stop: (requestId?: number) => void;
+  getActiveRequestId: () => number | null;
+  isRunning: () => boolean;
+};
+
+export function createAiCountdownScheduler(
+  options: AiCountdownSchedulerOptions = {}
+): AiCountdownScheduler {
+  const customSetInterval =
+    options.setInterval ??
+    ((callback: () => void, ms: number) => window.setInterval(callback, ms));
+  const customClearInterval =
+    options.clearInterval ?? ((handle: number) => window.clearInterval(handle));
+  const customNow =
+    options.now ??
+    (() => (typeof performance !== "undefined" ? performance.now() : Date.now()));
+  const samplingIntervalMs = options.samplingIntervalMs ?? 250;
+
+  let currentTimerHandle: number | null = null;
+  let activeRequestId: number | null = null;
+
+  function stop(requestId?: number) {
+    if (requestId !== undefined && activeRequestId !== requestId) {
+      return;
+    }
+    if (currentTimerHandle !== null) {
+      customClearInterval(currentTimerHandle);
+      currentTimerHandle = null;
+    }
+    activeRequestId = null;
+  }
+
+  function start(timeLimitMs: number, onTick: (seconds: number) => void): number {
+    stop();
+    const requestId = Math.floor(Math.random() * 0x7fff_ffff) + 1;
+    activeRequestId = requestId;
+
+    const initialSec = computeAiThinkingSeconds(timeLimitMs, 0);
+    onTick(initialSec);
+
+    let lastSec = initialSec;
+    const startTime = customNow();
+
+    currentTimerHandle = customSetInterval(() => {
+      if (activeRequestId !== requestId) {
+        return;
+      }
+      const elapsedMs = customNow() - startTime;
+      const nextSec = computeAiThinkingSeconds(timeLimitMs, elapsedMs);
+      if (nextSec !== lastSec) {
+        lastSec = nextSec;
+        onTick(nextSec);
+      }
+    }, samplingIntervalMs);
+
+    return requestId;
+  }
+
+  return {
+    start,
+    stop,
+    getActiveRequestId: () => activeRequestId,
+    isRunning: () => currentTimerHandle !== null
+  };
 }
 
 export function normalizeAiWorkerResult(response: AiWorkerResponse): AiWorkerDoneResult {
