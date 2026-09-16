@@ -13,7 +13,9 @@
 ### 【核心原则：流程强绑定与消除歧义】
 1. **Push for Review，非终态**：`git push` 仅代表代码完成本地阶段开发与自测、正式提交送审（Push for Review），**绝非任务交付终态**。
 2. **审查闭环为交付必经阶段**：任何代码推送到远端后，主控智能体必须**立即、无缝触发 WorkBuddy 独立审查**并挂起等待判定，严禁在未收到审查通过判定前向用户宣称任务完成或终止执行流程。
-3. **免人工干预自愈闭环**：若审查指出任何缺陷（P0~P3），自动进入修复与复审自愈循环，直至 100% 零缺陷闭环。
+3. **免人工干预自愈闭环与分级治理**：若审查指出任何缺陷（P0~P3），自动进入修复与复审自愈循环：
+   - **纯技术方案/文档审查**（改动仅涉及 docs/markdown）：严格限制最多 3 轮（`Round <= 3`），达到第 3 轮强制收敛定稿，直接推进至源码实现与测试；
+   - **真实代码实现审查**：维持最高 10 轮高强度对抗自愈循环，直至 100% 零缺陷闭环。
 
 ---
 
@@ -44,10 +46,11 @@ flowchart TD
     Orchestrator -->|"1. 派发阶段任务"| PhaseAgent
     PhaseAgent -->|"2. 本地门禁全绿 + Push for Review"| Orchestrator
     Orchestrator -->|"3. 立即触发独立审查"| Auditor
-    Auditor -->|"4.A 存在任何缺陷 (P0~P3)"| FixAgent
-    FixAgent -->|"4.B 修复门禁全绿 + Push for Review"| Orchestrator
-    Orchestrator -->|"4.C 派发复审"| Auditor
-    Auditor -->|"5. 零缺陷通过判定"| Orchestrator
+    Auditor -->|"4.A 存在任何缺陷 (分支 B)"| FixAgent
+    Auditor -->|"4.B 方案达3轮/微小瑕疵 (分支 C: 收敛推进)"| Orchestrator
+    FixAgent -->|"4.C 修复门禁全绿 + Push for Review"| Orchestrator
+    Orchestrator -->|"4.D 派发复审"| Auditor
+    Auditor -->|"5. 审查通过判定 (分支 A)"| Orchestrator
     Orchestrator -->|"6. 交付用户 / 推进下一阶段"| PhaseAgent
 ```
 
@@ -132,3 +135,18 @@ flowchart TD
 1. **工作树干净检查**：`git status -sb` 必须确认无未暂存或未跟踪文件；
 2. **提交与推送核验**：检查当前 HEAD SHA 是否领先远端；若开发或审查实体由于异常中断未能执行推送，主控必须立即自动补齐 `git push origin {BRANCH}`；
 3. **基准与待审对齐**：记录精确的 `BASE_SHA` 与 `HEAD_SHA`，供下一审查环节严格比对；跨阶段推进前先执行 `git pull --ff-only` 保证本地工作区与远端无缝同步。
+
+---
+
+## 7. 反馈决策与分级自愈循环规范 (Resolution Loop & Safety Fuse)
+
+主控智能体根据审查员的审计反馈执行决策状态机：
+
+1. **分支决策机制**：
+   - **分支 A（审查通过）**：WorkBuddy 确认通过且无新增缺陷 handoff ➔ 审查闭环完成，向用户汇报最终成果或进入下一里程碑，流程结束。
+   - **分支 B（发现缺陷）**：WorkBuddy 发现问题并推送了新 handoff ➔ 主智能体执行 `git pull --ff-only` 同步交接文档 ➔ 派发修复实体针对 handoff 修复代码并补充测试 ➔ 本地门禁全绿 ➔ `git commit` & `git push` ➔ 再次派发 WorkBuddy 复审（轮次计数 `N = N + 1`）。
+   - **分支 C（方案收敛与推进代码，最多 3 轮上限）**：若当前属于纯技术方案/文档阶段审查（git diff 均为 `.md` / `docs/`），且复审已达到 3 轮上限，或审查报告中仅残留非代码级建议、伪代码变量绑定、纯文档/文书/笔误类轻微瑕疵，主控智能体必须果断判定方案收敛定稿，坚决终止文档复审循环，直接推进至源码实现与自动化测试落地阶段。
+2. **安全熔断与分级轮次上限（Safeguard & Classified Round Limits）**：
+   - **纯技术方案 / 架构调研 / 文档审查**：严格限制最多 3 轮（`Round <= 3`）。到第 3 轮强制收敛定稿并推进至开发阶段，严禁对非阻塞建议或措辞反复纠缠。
+   - **真实代码实现审查**：最多允许 10 轮高强度对抗性自愈循环。达到 10 轮仍未通过再由人工介入裁决。
+
