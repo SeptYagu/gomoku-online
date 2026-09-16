@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createBoard } from "@/game/board";
 import type { Move } from "@/game/types";
 import {
+  computeAiThinkingSeconds,
   createInitialGameState,
   createOpeningSeed,
   getAiStone,
@@ -172,5 +173,29 @@ describe("useAiGame helpers", () => {
     expect(aiFirst.moves[0].stone).toBe("black");
     expect(aiFirst.nextPlayer).toBe("white");
     expect(aiFirst.status.state).toBe("playing");
+  });
+
+  it("computes countdown seconds accurately and clamps to at least 1s", () => {
+    // 5000ms total limit
+    expect(computeAiThinkingSeconds(5000, 0)).toBe(5);
+    expect(computeAiThinkingSeconds(5000, 500)).toBe(5);
+    expect(computeAiThinkingSeconds(5000, 1000)).toBe(4);
+    expect(computeAiThinkingSeconds(5000, 1001)).toBe(4);
+    expect(computeAiThinkingSeconds(5000, 2500)).toBe(3);
+    expect(computeAiThinkingSeconds(5000, 3999)).toBe(2);
+    expect(computeAiThinkingSeconds(5000, 4000)).toBe(1);
+    expect(computeAiThinkingSeconds(5000, 4800)).toBe(1);
+
+    // Over-time or elapsed beyond limit clamps to 1 until turn ends
+    expect(computeAiThinkingSeconds(5000, 5000)).toBe(1);
+    expect(computeAiThinkingSeconds(5000, 6000)).toBe(1);
+
+    // 1000ms normal limit
+    expect(computeAiThinkingSeconds(1000, 0)).toBe(1);
+    expect(computeAiThinkingSeconds(1000, 500)).toBe(1);
+
+    // 30000ms insane limit
+    expect(computeAiThinkingSeconds(30000, 0)).toBe(30);
+    expect(computeAiThinkingSeconds(30000, 1000)).toBe(29);
   });
 });

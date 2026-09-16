@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则）
-- **单元测试** (`npm test`)：28 个测试套件 / 243 项用例 100% 通过（新增 1 项悔棋超时边界与步进时钟原子性测试）
+- **单元测试** (`npm test`)：28 个测试套件 / 244 项用例 100% 通过（新增 1 项 AI 思考倒计时计算与边界截断测试）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：全绿通过
 
@@ -31,6 +31,7 @@
 
 ## 3. 近期已交付里程碑
 
+- ⏱️ **人机对战 AI 思考倒计时提示（2026-09-16）**：为 PvE AI 思考状态建立毫秒级周期采样与防抖机制，新增 `computeAiThinkingSeconds` 纯函数计算与 `aiThinkingCountdown` 秒级倒计时状态；在 6 语种字典同步补齐 `thinkingCountdown`（`{seconds}`）；侧边栏状态卡片与棋盘上方 action-bar 双通道展示带有脉冲微动画与 A11y 属性的倒计时指示器；四道门禁全绿（28 套 / 244 项单测 100% 通过，生产构建全通）。详见 [`docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md`](docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md)。
 - 📋 **Feedback 与日志采集计划审查（2026-09-15，需求文档审查，源码零改动）**：审查 `docs/FEEDBACK_AND_LOG_COLLECTION_PLAN.md`（251 行，自述「需求计划，尚未实施」）。结论：该计划承担 build plan 阶段 4 的 Contact 合规页职责，对匿名公开站点并非过度设计，但存在 **2×P0**（`.gitignore` 未覆盖 `data/feedback/`+`data/runtime-logs/` 且 `.jsonl` 绕过 `*.log` 规则 → 用户邮箱/日志进版库风险；线上为纯 HTTP 而计划以 HTTPS 为前提却未列为前置条件）、**6×P1**（同步工具目标/算法/验收三者互斥、保留期无承接者、验收不含隐私政策与 consent、图像处理与 multipart 解析零选型、未剥离 EXIF/GPS、Origin 基准未定义）、**13×P2** 与 **6×P3**。按用户决策记录「首版取消图片上传支持」并分离该决策消解/未消解的缺陷。全部技术断言附 `文件:行号` 实测证据。详见 [`docs/handoff/2026-09-15-feedback-plan-review-handoff.md`](docs/handoff/2026-09-15-feedback-plan-review-handoff.md)。
 - ✅ **P1-P4 基线消除与规范统一**：消除 TS 逆变与 `visibility` 缺失错误、SGF 统一转义规范、弹窗 A11y 键盘焦点优化。
 - ✅ **AI Worker 线程复用池** (`src/game/ai-worker-pool.ts`)：构建 idle/busy 双队列复用机制，彻底解决频繁创建销毁 Worker 引起的 GC 抖动。
@@ -70,7 +71,8 @@
 
 - 详细交接单索引请查阅：[`docs/handoff/INDEX.md`](docs/handoff/INDEX.md)
 - **全局分阶段重构总纲**：[`docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
-- **最新单阶段交付单**：[`docs/handoff/2026-09-13-phase5-ai-engine-decomp-handoff.md`](docs/handoff/2026-09-13-phase5-ai-engine-decomp-handoff.md)
+- **最新单阶段交付单**：[`docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md`](docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md)
+- 前序阶段交付单：[`docs/handoff/2026-09-13-phase5-ai-engine-decomp-handoff.md`](docs/handoff/2026-09-13-phase5-ai-engine-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md`](docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md`](docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md`](docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md)

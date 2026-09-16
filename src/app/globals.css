@@ -306,6 +306,29 @@ h1 {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+.ai-thinking-pill {
+  cursor: default;
+  font-weight: 600;
+  user-select: none;
+}
+
+.ai-thinking-icon {
+  animation: ai-pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ai-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
 .interaction-confirmation {
   align-items: center;
   background: color-mix(in srgb, var(--panel) 94%, #b42318 6%);

@@ -403,6 +403,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         {workspace === "ai" ? (
           <AiGameView
             aiDifficulty={aiGame.aiDifficulty}
+            aiThinkingCountdown={aiGame.aiThinkingCountdown}
             board={board}
             canPlay={canPlayPoint}
             canUndo={canUndo}
@@ -474,7 +475,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             {mode === "room"
               ? getRoomStatusText(friendRoom, dictionary)
               : aiGame.isAiThinking
-                ? dictionary.ai.thinking
+                ? aiGame.aiThinkingCountdown !== null
+                  ? dictionary.ai.thinkingCountdown.replace("{seconds}", String(aiGame.aiThinkingCountdown))
+                  : dictionary.ai.thinking
                 : getStatusText(activeStatus, dictionary)}
           </p>
           <p className="status-note">

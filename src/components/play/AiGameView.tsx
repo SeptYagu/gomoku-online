@@ -12,6 +12,7 @@ const AI_DIFFICULTIES: AiDifficulty[] = ["normal", "hard", "expert", "insane"];
 
 type AiGameViewProps = {
   aiDifficulty: AiDifficulty;
+  aiThinkingCountdown: number | null;
   board: Board;
   canPlay: boolean;
   canUndo: boolean;
@@ -33,6 +34,7 @@ type AiGameViewProps = {
 
 export function AiGameView({
   aiDifficulty,
+  aiThinkingCountdown,
   board,
   canPlay,
   canUndo,
@@ -118,6 +120,19 @@ export function AiGameView({
           <RotateCcw aria-hidden="true" focusable={false} />
           {dictionary.controls.reset}
         </button>
+        {isAiThinking ? (
+          <span
+            aria-live="polite"
+            className="mode-pill ai-thinking-pill active"
+            data-ai-thinking-indicator
+            role="status"
+          >
+            <Bot aria-hidden="true" className="ai-thinking-icon" focusable={false} />
+            {aiThinkingCountdown !== null
+              ? dictionary.ai.thinkingCountdown.replace("{seconds}", String(aiThinkingCountdown))
+              : dictionary.ai.thinking}
+          </span>
+        ) : null}
       </div>
 
       <div className="play-area">

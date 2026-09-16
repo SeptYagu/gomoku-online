@@ -64,10 +64,12 @@ export function useAiGame({
   const [pendingDifficulty, setPendingDifficulty] = useState<AiDifficulty | null>(null);
   const [pendingFirstPlayer, setPendingFirstPlayer] = useState<FirstPlayer | null>(null);
   const [isAiThinking, setIsAiThinking] = useState(false);
+  const [aiThinkingCountdown, setAiThinkingCountdown] = useState<number | null>(null);
 
   const aiWorkersRef = useRef<Worker[]>([]);
   const aiWorkerPoolRef = useRef<AiWorkerPool | null>(null);
   const aiWorkerTimeoutRef = useRef<number | null>(null);
+  const aiCountdownIntervalRef = useRef<number | null>(null);
   const aiRequestIdRef = useRef(0);
   const openingSeedRef = useRef(createOpeningSeed());
 
@@ -97,6 +99,13 @@ export function useAiGame({
     aiWorkersRef.current = [];
   }
 
+  function clearAiCountdownInterval() {
+    if (aiCountdownIntervalRef.current !== null) {
+      window.clearInterval(aiCountdownIntervalRef.current);
+      aiCountdownIntervalRef.current = null;
+    }
+  }
+
   function clearAiWorkerTimeout() {
     if (aiWorkerTimeoutRef.current === null) {
       return;
@@ -109,12 +118,15 @@ export function useAiGame({
   const cancelAiTurn = useCallback(() => {
     aiRequestIdRef.current += 1;
     setIsAiThinking(false);
+    setAiThinkingCountdown(null);
+    clearAiCountdownInterval();
     terminateAiWorkers();
     clearAiWorkerTimeout();
   }, []);
 
   useEffect(() => {
     return () => {
+      clearAiCountdownInterval();
       terminateAiWorkers();
       aiWorkerPoolRef.current?.terminateAll();
       clearAiWorkerTimeout();
@@ -246,36 +258,55 @@ export function useAiGame({
     aiRequestIdRef.current = requestId;
     setIsAiThinking(true);
 
-    const targetAiStone = getAiStone(targetFirstPlayer);
-    const aiPoint = await requestAiMove(
-      currentBoard,
-      currentMoves,
-      targetAiStone,
-      targetDifficulty,
-      openingSeedRef.current
-    );
+    const timeLimitMs = getAiTimeLimitMs(targetDifficulty);
+    const initialSeconds = computeAiThinkingSeconds(timeLimitMs, 0);
+    setAiThinkingCountdown(initialSeconds);
+    clearAiCountdownInterval();
 
-    if (aiRequestIdRef.current !== requestId) {
-      return;
+    const startTime = Date.now();
+    aiCountdownIntervalRef.current = window.setInterval(() => {
+      const remainingSec = computeAiThinkingSeconds(timeLimitMs, Date.now() - startTime);
+      setAiThinkingCountdown((prev) => (prev !== remainingSec ? remainingSec : prev));
+    }, 250);
+
+    try {
+      const targetAiStone = getAiStone(targetFirstPlayer);
+      const aiPoint = await requestAiMove(
+        currentBoard,
+        currentMoves,
+        targetAiStone,
+        targetDifficulty,
+        openingSeedRef.current
+      );
+
+      if (aiRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setIsAiThinking(false);
+      setAiThinkingCountdown(null);
+
+      if (!aiPoint) {
+        onCommitGameStateRef.current(currentBoard, currentMoves, { state: "draw" });
+        return;
+      }
+
+      const nextAiBoard = placeStone(currentBoard, aiPoint, targetAiStone);
+      const aiMove: Move = {
+        ...aiPoint,
+        stone: targetAiStone,
+        moveNumber: currentMoves.length + 1
+      };
+      const nextAiMoves = [...currentMoves, aiMove];
+      const aiResult = getGameResult(nextAiBoard, aiPoint, targetAiStone);
+
+      onCommitGameStateRef.current(nextAiBoard, nextAiMoves, aiResult);
+    } finally {
+      clearAiCountdownInterval();
+      if (aiRequestIdRef.current === requestId) {
+        setAiThinkingCountdown(null);
+      }
     }
-
-    setIsAiThinking(false);
-
-    if (!aiPoint) {
-      onCommitGameStateRef.current(currentBoard, currentMoves, { state: "draw" });
-      return;
-    }
-
-    const nextAiBoard = placeStone(currentBoard, aiPoint, targetAiStone);
-    const aiMove: Move = {
-      ...aiPoint,
-      stone: targetAiStone,
-      moveNumber: currentMoves.length + 1
-    };
-    const nextAiMoves = [...currentMoves, aiMove];
-    const aiResult = getGameResult(nextAiBoard, aiPoint, targetAiStone);
-
-    onCommitGameStateRef.current(nextAiBoard, nextAiMoves, aiResult);
   }, [aiDifficulty, firstPlayer, requestAiMove]);
 
   const handleDifficultyChange = useCallback((difficulty: AiDifficulty) => {
@@ -357,6 +388,7 @@ export function useAiGame({
     pendingDifficulty,
     pendingFirstPlayer,
     isAiThinking,
+    aiThinkingCountdown,
     aiStone,
     humanStone,
     handleDifficultyChange,
@@ -368,6 +400,11 @@ export function useAiGame({
     applyPendingSettingsOnModeEnter,
     createInitialSnapshot
   };
+}
+
+export function computeAiThinkingSeconds(timeLimitMs: number, elapsedMs: number): number {
+  const remainingMs = Math.max(0, timeLimitMs - elapsedMs);
+  return Math.max(1, Math.ceil(remainingMs / 1000));
 }
 
 export function normalizeAiWorkerResult(response: AiWorkerResponse): AiWorkerDoneResult {

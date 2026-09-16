@@ -36,6 +36,7 @@ export type GameDictionary = {
     playerBlackAiWhite: string;
     playerWhiteAiBlack: string;
     thinking: string;
+    thinkingCountdown: string;
     settingsNextGame: string;
   };
   room: {
@@ -265,6 +266,7 @@ const en = {
       playerBlackAiWhite: "You play black. AI plays white.",
       playerWhiteAiBlack: "You play white. AI plays black.",
       thinking: "AI thinking",
+      thinkingCountdown: "AI thinking ({seconds}s)",
       settingsNextGame: "Next game: {settings}"
     },
     room: {
@@ -489,6 +491,7 @@ const zh = {
       playerBlackAiWhite: "你执黑，AI 执白。",
       playerWhiteAiBlack: "你执白，AI 执黑。",
       thinking: "AI 思考中",
+      thinkingCountdown: "AI 思考中（{seconds}秒）",
       settingsNextGame: "下一局：{settings}"
     },
     room: {
@@ -713,6 +716,7 @@ const fr = {
       playerBlackAiWhite: "Vous jouez les noirs. L'IA joue les blancs.",
       playerWhiteAiBlack: "Vous jouez les blancs. L'IA joue les noirs.",
       thinking: "L'IA réfléchit",
+      thinkingCountdown: "L'IA réfléchit ({seconds}s)",
       settingsNextGame: "Prochaine partie : {settings}"
     },
     room: {
@@ -937,6 +941,7 @@ const es = {
       playerBlackAiWhite: "Juegas con negras. La IA juega con blancas.",
       playerWhiteAiBlack: "Juegas con blancas. La IA juega con negras.",
       thinking: "La IA piensa",
+      thinkingCountdown: "La IA piensa ({seconds}s)",
       settingsNextGame: "Próxima partida: {settings}"
     },
     room: {
@@ -1161,6 +1166,7 @@ const ru = {
       playerBlackAiWhite: "Вы играете черными. ИИ играет белыми.",
       playerWhiteAiBlack: "Вы играете белыми. ИИ играет черными.",
       thinking: "ИИ думает",
+      thinkingCountdown: "ИИ думает ({seconds} с)",
       settingsNextGame: "Следующая игра: {settings}"
     },
     room: {
@@ -1385,6 +1391,7 @@ const ar = {
       playerBlackAiWhite: "أنت تلعب بالأسود. الذكاء الاصطناعي يلعب بالأبيض.",
       playerWhiteAiBlack: "أنت تلعب بالأبيض. الذكاء الاصطناعي يلعب بالأسود.",
       thinking: "الذكاء الاصطناعي يفكر",
+      thinkingCountdown: "الذكاء الاصطناعي يفكر ({seconds} ث)",
       settingsNextGame: "المباراة التالية: {settings}"
     },
     room: {
