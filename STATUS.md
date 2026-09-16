@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`655c667 fix(review): resolve round 7 review findings (P3-1 through P3-4)`（本字段记录本字段所在提交的直接前驱阶段交付；本提交为 Feedback 计划审查交接单，其 SHA 由下一次交付回填）
+- **最新阶段交付提交**：`3a226f1 feat(ai): add countdown timer prompt during AI thinking in PvE mode`（本字段记录本字段所在提交的直接前驱阶段交付；本提交为 Round 1 独立审查交接单，其 SHA 由下一次交付回填）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,7 @@
 
 ## 3. 近期已交付里程碑
 
+- ⚠️ **AI 思考倒计时提示功能独立审查（Round 1，被审 `3a226f1`）**：**审查未通过**。0×P0/P1/P2；**5×P3**（P3-1 `STATUS.md:11` 双字段规则未回填、括注残留上一交付说明；P3-2 `AiGameView.tsx:125/128` 每秒跳动的数值被置于 `role="status"`+`aria-live="polite"` 活区，读屏逐秒播报且与本仓 `TableTaskBar.tsx:75` 既有惯例相悖；P3-3 `useAiGame.ts:304-309` `finally` 清理未按 `requestId` 守卫，被取代请求会误杀新请求的倒计时定时器（当前被 UI 守卫遮蔽）；P3-4 验收标准 2「无定时器泄漏」零测试守门，删除 `setInterval`/任一 `clearInterval` 后 244 项测试仍全绿；P3-5 `computeAiThinkingSeconds` 无上界约束，负 elapsed 实测返回 6/8/65 秒、`NaN` 入参返回 `NaN`）。独立复跑 `tsc`/`lint`/`build` 全绿，`vitest` 243/244（唯一失败为 `game-records.test.ts` Windows EPERM 环境 flake，单跑 10/10 通过），并以真实模块执行 15 组边界探针完成证伪。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-round1-handoff.md)。
 - ⏱️ **人机对战 AI 思考倒计时提示（2026-09-16）**：为 PvE AI 思考状态建立毫秒级周期采样与防抖机制，新增 `computeAiThinkingSeconds` 纯函数计算与 `aiThinkingCountdown` 秒级倒计时状态；在 6 语种字典同步补齐 `thinkingCountdown`（`{seconds}`）；侧边栏状态卡片与棋盘上方 action-bar 双通道展示带有脉冲微动画与 A11y 属性的倒计时指示器；四道门禁全绿（28 套 / 244 项单测 100% 通过，生产构建全通）。详见 [`docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md`](docs/handoff/2026-09-16-ai-thinking-countdown-handoff.md)。
 - 📋 **Feedback 与日志采集计划审查（2026-09-15，需求文档审查，源码零改动）**：审查 `docs/FEEDBACK_AND_LOG_COLLECTION_PLAN.md`（251 行，自述「需求计划，尚未实施」）。结论：该计划承担 build plan 阶段 4 的 Contact 合规页职责，对匿名公开站点并非过度设计，但存在 **2×P0**（`.gitignore` 未覆盖 `data/feedback/`+`data/runtime-logs/` 且 `.jsonl` 绕过 `*.log` 规则 → 用户邮箱/日志进版库风险；线上为纯 HTTP 而计划以 HTTPS 为前提却未列为前置条件）、**6×P1**（同步工具目标/算法/验收三者互斥、保留期无承接者、验收不含隐私政策与 consent、图像处理与 multipart 解析零选型、未剥离 EXIF/GPS、Origin 基准未定义）、**13×P2** 与 **6×P3**。按用户决策记录「首版取消图片上传支持」并分离该决策消解/未消解的缺陷。全部技术断言附 `文件:行号` 实测证据。详见 [`docs/handoff/2026-09-15-feedback-plan-review-handoff.md`](docs/handoff/2026-09-15-feedback-plan-review-handoff.md)。
 - ✅ **P1-P4 基线消除与规范统一**：消除 TS 逆变与 `visibility` 缺失错误、SGF 统一转义规范、弹窗 A11y 键盘焦点优化。
@@ -76,6 +77,7 @@
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md`](docs/handoff/2026-09-13-phase4-server-rooms-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md`](docs/handoff/2026-09-13-phase3-frontend-ui-decomp-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md`](docs/handoff/2026-09-13-phase2-usefriendroom-decomp-handoff.md)
+- **最新独立复审（Round 1，被审 `3a226f1`，AI 思考倒计时提示）**：[`docs/handoff/2026-09-16-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-round1-handoff.md)（0×P0/P1/2，**5×P3**，**审查未通过**，待修复闭环）
 - **最新独立复审（Round 7，被审 `948d239`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round7-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round7-handoff.md)（0×P0/1/2，**4×P3**，**审查未通过**，待修复闭环）
 - **全量项目独立代码审查报告（被审 `3d4a1a1`）**：[`docs/handoff/2026-09-13-full-codebase-audit-review-handoff.md`](docs/handoff/2026-09-13-full-codebase-audit-review-handoff.md)（0×P0/1/2，**2×P3**，**已全部修复闭环**）
 - **Phase 5 独立复审（Round 6，被审 `ea0c0b9`）**：[`docs/handoff/2026-09-13-workbuddy-code-review-round6-handoff.md`](docs/handoff/2026-09-13-workbuddy-code-review-round6-handoff.md)（0×P0/1/2，**1×P3**，已在 `3d4a1a1` 校准行数指标闭环）
