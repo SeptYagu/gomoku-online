@@ -59,21 +59,20 @@ describe("LobbyMatchmaking", () => {
     expect(html).toContain(`aria-labelledby="${headingId}"`);
 
     // 5. Accessibility: divider is visual separator with aria-hidden="true" and connector text
-    const dividerIndex = html.indexOf('class="lobby-friend-divider"');
-    expect(dividerIndex).toBeGreaterThan(-1);
-    const dividerSubstring = html.slice(dividerIndex, dividerIndex + 150);
-    expect(dividerSubstring).toContain('aria-hidden="true"');
-    expect(dividerSubstring).toContain(dictionary.room.orJoinExisting);
+    const dividerMatch = html.match(/<div class="lobby-friend-divider" aria-hidden="true"><span>([^<]*)<\/span><\/div>/);
+    expect(dividerMatch).toBeTruthy();
+    expect(dividerMatch![1]).toBe(dictionary.room.orJoinExisting);
 
     // 6. DOM Order: create button appears before divider, which appears before join input
     const createBtnIndex = html.indexOf('data-lobby-action="create-unlisted"');
+    const dividerIndex = html.indexOf('class="lobby-friend-divider"');
     const inputIndex = html.indexOf('placeholder="https://… / ABC123 / @alice"');
     expect(createBtnIndex).toBeLessThan(dividerIndex);
     expect(dividerIndex).toBeLessThan(inputIndex);
   });
 
-  it("renders in other locales (zh, ar) without missing keys or structural issues", () => {
-    for (const locale of ["zh", "ar"] as const) {
+  it("renders in other locales without missing keys or structural issues", () => {
+    for (const locale of ["en", "zh", "fr", "es", "ru", "ar"] as const) {
       const dictionary = dictionaries[locale].game;
       const room = createMockRoomController();
       const html = renderToString(
@@ -84,9 +83,17 @@ describe("LobbyMatchmaking", () => {
           room
         })
       );
-      expect(html).toContain(dictionary.room.createUnlistedRoomHint);
-      expect(html).toContain(dictionary.room.joinExistingRoom);
-      expect(html).toContain(dictionary.room.orJoinExisting);
+      const hintMatch = html.match(/<p class="lobby-friend-hint"[^>]*>([^<]*)<\/p>/);
+      expect(hintMatch).toBeTruthy();
+      expect(hintMatch![1].replace(/&#x27;/g, "'")).toBe(dictionary.room.createUnlistedRoomHint);
+
+      const headingMatch = html.match(/<h2 class="lobby-friend-subtitle"[^>]*>([^<]*)<\/h2>/);
+      expect(headingMatch).toBeTruthy();
+      expect(headingMatch![1].replace(/&#x27;/g, "'")).toBe(dictionary.room.joinExistingRoom);
+
+      const dividerMatch = html.match(/<div class="lobby-friend-divider" aria-hidden="true"><span>([^<]*)<\/span><\/div>/);
+      expect(dividerMatch).toBeTruthy();
+      expect(dividerMatch![1].replace(/&#x27;/g, "'")).toBe(dictionary.room.orJoinExisting);
     }
   });
 

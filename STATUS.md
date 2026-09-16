@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`bca7674 fix(lobby): resolve round 2 review findings for unlisted room creation disambiguation`（本字段记录本字段所在提交的直接前驱阶段交付；本提交为不公开房间创建/加入交互解耦 Round 3 复查审查交接单，其 SHA 由下一次交付回填）
+- **最新阶段交付提交**：`bca7674 fix(lobby): resolve round 2 review findings for unlisted room creation disambiguation`（本字段记录本字段所在提交的直接前驱阶段交付；本提交为 Round 3 复查缺陷修复交付，其 SHA 由下一次交付回填）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,7 @@
 
 ## 3. 近期已交付里程碑
 
+- 🔄 **Round 3 审查缺陷修复与分隔带断言精准化（2026-09-16）**：针对 Round 3 复查指出的 1 项 P3 缺陷完成闭环：P3-1 将 `LobbyMatchmaking.test.ts` 中针对分隔带单字连接词 `orJoinExisting` 的宽泛 `toContain` 断言重构为精确的 HTML 正则标签捕获（`/<div class="lobby-friend-divider" aria-hidden="true"><span>([^<]*)<\/span><\/div>/`），精准校验 `dividerMatch[1]` 与当前语言字典的完全一致性，并对 HTML 实体转义进行反转义处理；彻底消除单字连接词在包含该字符的类名或常驻标题中引发的恒真守门失效；变异探针测试确认删除分隔带 `<span>` 会立即引发 2/3 测试失败，守门严格生效；四道门禁全绿（29 套 / 248 项单测 100% 通过，生产构建打包完全成功）。详见 [`docs/handoff/2026-09-16-unlisted-room-round3-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round3-findings-remediation-handoff.md)。
 - ⚠️ **不公开房间创建/加入交互解耦 Round 3 复查（被审 `bca7674`）**：**审查未通过**。0×P0/P1/P2；**1×P3**（P3-1 Round 2 把 `orJoinExisting` 收敛为单字连接词后，`LobbyMatchmaking.test.ts:89` 的整文档 `toContain` 断言在 `:76` 覆盖的 zh「或」/ar「أو」两语种下恒真——两键均为常驻折叠按钮副标题 `createOrJoin` 的子串，删除分隔带 `<span>`（`LobbyMatchmaking.tsx:81`）后断言仍通过；`:64-66` 的 150 字符窗口自 `class="lobby-friend-divider"` 起始，窗口内类名即含 `o`，故 es 亦恒真，属本轮新引入的守门失效）。Round 2 四项 P3 经独立取证确认**全部真实闭环**（`STATUS.md:11` 已按先例记 `800a3cb`；真实浏览器实测全站 heading 序列 `H1→H2` 无跳级；AX 全树中分隔带文本已消失且 `form` 仍具可读名 `Join existing room`；`assertFriendsSectionStructure` 已补 `return null` 未就绪短路）；审查方独立复跑 `tsc`/`lint` 0 问题、`vitest --pool=vmForks` **29 套 / 248 例全绿**、`npm run build` 成功（11 页），并本地实跑 `smoke:lobby-ui` 确认本轮两处新断言先于既有 `assertRoomError` 失败点通过。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-unlisted-room-round3-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-unlisted-room-round3-handoff.md)。
 - 🔄 **Round 2 审查缺陷修复与标题大纲连续化（2026-09-16）**：针对 Round 2 复查指出的 4 项 P3 缺陷完成闭环：P3-1 按规则将 `STATUS.md:11` 回填为被审产品交付 `800a3cb`（跳过紧邻的 review 提交）；P3-2 加入卡片小标题升级为 `<h2 className="lobby-friend-subtitle">`，消除全站 h1→h3 标题层级跳跃，文档大纲规范连续；P3-3 6 语种 `orJoinExisting` 收敛为纯连接词（or/或/ou/o/или/أو），分隔带恢复 `aria-hidden="true"` 纯视觉分隔，彻底消除与加入小标题的语义重叠与重复播报；P3-4 `tools/smoke-lobby-ui.ts` 的 `assertFriendsSectionStructure` 回调增加元素缺失立即 `return null` 分支，恢复 20s 轮询等待契约；四道门禁全绿（29 套 / 248 项单测 100% 通过，生产构建打包完全成功）。详见 [`docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md)。
 - ⚠️ **不公开房间创建/加入交互解耦 Round 2 复查（被审 `800a3cb`）**：**审查未通过**。0×P0/P1/P2；**4×P3**（P3-1 `STATUS.md:11` 记录的是审查提交 `30410c7` 而非被审产品交付 `bb3be08`，与 `165c56d`/`3e201ec`/`87ae2e6`/`655c667` 四项先例及 Round 1 交接单 §4 的明确指令相悖；P3-2 `LobbyMatchmaking.tsx:86` 新增 `<h3>` 造成全站标题层级跳跃 h1→h3（全仓无任何 `<h2>`），axe `heading-order` 判罚，属本轮新引入无障碍回归；P3-3 `.lobby-friend-divider` 文案与新增小标题在 **6/6 语种**下语义完全重复（仅差一个连接词，如 ar `أو الانضمام إلى غرفة موجودة`/`الانضمام إلى غرفة موجودة`），视觉与 AX 树双通道重复播报；P3-4 `tools/smoke-lobby-ui.ts:1210` 误用 `waitForValue`，回调恒返回非 null 致 20s 等待退化为单次求值，慢渲染下会误报失败）。Round 1 四项 P3 的功能修复经独立证伪确认**真实生效**（组件回退到 `165c56d` 后新增单测 2/3 失败；CDP AX 实测创建按钮 `description` = hint 文案、表单 `role=form/name` 正确；6 语种去私有化文案齐备）；审查方独立复跑 `vitest --pool=vmForks` **29 套 / 248 例全绿**、`npm run build` 成功（11 页），并实跑 `smoke:lobby-ui` 于 dev/prod 两模式确认本轮新增断言通过（该套件既有 `assertRoomError` 离线超时断言失败，已以基线 A/B 证伪归因为既有环境问题）。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-unlisted-room-round2-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-unlisted-room-round2-handoff.md)。
@@ -79,7 +80,8 @@
 
 - 详细交接单索引请查阅：[`docs/handoff/INDEX.md`](docs/handoff/INDEX.md)
 - **全局分阶段重构总纲**：[`docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
-- **最新单阶段交付单**：[`docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md)
+- **最新单阶段交付单**：[`docs/handoff/2026-09-16-unlisted-room-round3-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round3-findings-remediation-handoff.md)
+- 前序阶段交付单：[`docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round2-findings-remediation-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-16-unlisted-room-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-round1-findings-remediation-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-16-unlisted-room-creation-disambiguation-handoff.md`](docs/handoff/2026-09-16-unlisted-room-creation-disambiguation-handoff.md)
 - 前序阶段交付单：[`docs/handoff/2026-09-16-round1-findings-remediation-handoff.md`](docs/handoff/2026-09-16-round1-findings-remediation-handoff.md)
