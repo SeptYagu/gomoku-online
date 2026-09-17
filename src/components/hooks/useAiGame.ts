@@ -260,6 +260,10 @@ export function useAiGame({
     targetDifficulty: AiDifficulty = aiDifficulty,
     targetFirstPlayer: FirstPlayer = firstPlayer
   ) => {
+    if (mode !== "ai") {
+      return;
+    }
+
     const requestId = aiRequestIdRef.current + 1;
     aiRequestIdRef.current = requestId;
     setIsAiThinking(true);
@@ -308,7 +312,7 @@ export function useAiGame({
         setAiThinkingCountdown(null);
       }
     }
-  }, [aiDifficulty, firstPlayer, requestAiMove]);
+  }, [aiDifficulty, firstPlayer, mode, requestAiMove]);
 
   const handleDifficultyChange = useCallback((difficulty: AiDifficulty) => {
     if (shouldDeferAiSettingChange(movesCount)) {

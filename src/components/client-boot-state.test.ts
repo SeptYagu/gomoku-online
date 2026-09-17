@@ -27,6 +27,11 @@ describe("resolveBootGameMode - Four-tier priority resolution", () => {
     // Even if active AI game exists and workspace was local, URL ?room= forces room
     expect(resolveBootGameMode("?room=ABC123", activeAiGame, "local")).toBe("room");
     expect(resolveBootGameMode("?other=1&room=XYZ", activeLocalGame, "ai")).toBe("room");
+
+    // Guard against mode mismatch: room bootMode must not match activeAiGame.mode
+    const bootMode = resolveBootGameMode("?room=ABC123", activeAiGame, "local");
+    expect(bootMode).toBe("room");
+    expect(activeAiGame.mode === bootMode).toBe(false);
   });
 
   it("Priority 2: Active game with moves > 0 restores game mode", () => {

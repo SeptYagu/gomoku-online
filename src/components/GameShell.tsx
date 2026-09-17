@@ -129,7 +129,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       return;
     }
 
-    if (bootActiveGame && bootActiveGame.moves.length > 0) {
+    if (bootActiveGame && bootActiveGame.mode === bootMode && bootActiveGame.moves.length > 0) {
       hasRestoredBootRef.current = true;
       bootMovesBaselineRef.current = bootActiveGame.moves.length;
 
@@ -139,7 +139,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       setStatus(restored.status);
       setNextPlayer(restored.nextPlayer);
 
-      if (bootActiveGame.mode === "ai") {
+      if (bootActiveGame.mode === "ai" && mode === "ai") {
         aiGame.restoreSettings(
           bootActiveGame.aiDifficulty,
           bootActiveGame.firstPlayer,
@@ -164,11 +164,13 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       return;
     }
 
-    // 若当前会话在客户端已确定无活跃对局（或无落子），直接置位已自愈，避免后续首手落子误触发
-    if (typeof window !== "undefined" && moves.length === 0) {
+    // 若模式不匹配（如从存量单机/人机对局经 ?room= 链接进入联机房间），或无活跃对局可恢复
+    // 必须在客户端挂载后标记已完成恢复与自愈，杜绝幽灵搜索并保持模式切换按钮解锁
+    if (typeof window !== "undefined") {
+      hasRestoredBootRef.current = true;
       hasHealedRef.current = true;
     }
-  }, [bootActiveGame, aiGame, moves.length]);
+  }, [bootActiveGame, bootMode, mode, aiGame]);
 
   // AI 恢复自愈握手（仅作为兜底；主路径由挂载/水合恢复 layout effect 同步执行）
   useEffect(() => {
