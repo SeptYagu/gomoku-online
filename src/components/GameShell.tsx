@@ -101,6 +101,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     onCommitGameState: (...args) => commitGameStateRef.current?.(...args),
     onResetGame: handleResetFromAi
   });
+  const aiGameRef = useRef(aiGame);
+  useIsomorphicLayoutEffect(() => {
+    aiGameRef.current = aiGame;
+  });
 
   const commitGameState = useCallback((nextBoard: Board, nextMoves: Move[], nextStatus: GameStatus) => {
     setBoard(nextBoard);
@@ -148,8 +152,8 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       setStatus(restored.status);
       setNextPlayer(restored.nextPlayer);
 
-      if (bootActiveGame.mode === "ai" && mode === "ai") {
-        aiGame.restoreSettings(
+      if (bootActiveGame.mode === "ai") {
+        aiGameRef.current.restoreSettings(
           bootActiveGame.aiDifficulty,
           bootActiveGame.firstPlayer,
           bootActiveGame.openingSeed
@@ -158,7 +162,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         const targetAiStone = getAiStone(bootActiveGame.firstPlayer);
         if (restored.status.state === "playing" && restored.nextPlayer === targetAiStone) {
           hasHealedRef.current = true;
-          void aiGame.commitAiTurn(
+          void aiGameRef.current.commitAiTurn(
             restored.board,
             restored.moves,
             bootActiveGame.aiDifficulty,
@@ -170,7 +174,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       } else {
         hasHealedRef.current = true;
       }
-      return;
+
+      return () => {
+        aiGameRef.current.cancelAiTurn();
+        hasRestoredBootRef.current = false;
+        hasHealedRef.current = false;
+      };
     }
 
     // 若模式不匹配（如从存量单机/人机对局经 ?room= 链接进入联机房间），或无活跃对局可恢复
@@ -179,7 +188,13 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
       hasRestoredBootRef.current = true;
       hasHealedRef.current = true;
     }
-  }, [isHydrated, bootActiveGame, bootMode, mode, aiGame]);
+
+    return () => {
+      aiGameRef.current.cancelAiTurn();
+      hasRestoredBootRef.current = false;
+      hasHealedRef.current = false;
+    };
+  }, [isHydrated, bootActiveGame, bootMode]);
 
   // AI 恢复自愈握手（仅作为兜底；主路径由挂载/水合恢复 layout effect 同步执行）
   useEffect(() => {

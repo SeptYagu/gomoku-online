@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`d68a8de fix(game): guard hydration layout restore and add persistence smoke test`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「对局持久化/语言切换/外观保持 Round 4 审查」文档提交，按先例记录直接父提交即被审产品交付 `d68a8de`，下一次交付提交时回填）
+- **最新阶段交付提交**：`e6bdbce docs(review): add workbuddy round4 review for persistence implementation`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「对局持久化/语言切换/外观保持 Round 4 审查缺陷修复」交付提交，按先例记录直接父提交即 WorkBuddy Round 4 审查提交 `e6bdbce`）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -25,12 +25,14 @@
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
 - **单元测试** (`npm test`)：31 个测试套件 / 282 项用例 100% 通过（重构模式守卫测试，增设 canRestoreBootGame 独立变异守门套件）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 保持为 `● (SSG)`）
+- **端到端冒烟测试** (`npm run smoke:persistence`)：S-A、S-E、S-B、S-C、S-F 全场景 5/5 100% 通过（覆盖真实无头 Chrome CDP 下软导航 + StrictMode 恢复与 AI 自动走子）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
 
 ---
 
 ## 3. 近期已交付里程碑
 
+- 🔄 **对局持久化与语言平滑切换 Round 4 审查缺陷闭环（2026-09-16）**：针对 WorkBuddy Round 4 审查报告（提交 `e6bdbce`，报告：`docs/handoff/2026-09-16-workbuddy-code-review-persistence-impl-round4-handoff.md`）指出的 1 项 P3 缺陷实施 100% 闭环收敛：P3-1 在 `useAiGame` 引入 `pendingAiResolveRef`并在取消与卸载时主动决议未决 Promise、彻底复位 `isAiThinking`；`GameShell.tsx` 引入 `aiGameRef` 稳定依赖项，在 layout effect 清理中取消 AI 思考并复位恢复守卫，消除 StrictMode 双调用导致的 AI 回合永久死锁；`tools/smoke-persistence.ts` 补齐 Scenario S-F（切语言软导航 + AI 回合恢复）与自启动服务、可靠进程清理；四道门禁全绿（31 套 / 282 项单测全通，Next.js 生产构建通过，smoke:persistence 5 大场景全绿）。详见 [`docs/handoff/2026-09-16-game-persistence-round4-remediation-handoff.md`](docs/handoff/2026-09-16-game-persistence-round4-remediation-handoff.md)。
 - ⚠️ **对局持久化/语言平滑切换/外观保持 实现交付 Round 4 复查（被审 `d68a8de`）**：**审查未通过**。0×P0/P1/P2；**1×P3**。通过项：Round 3 P1-1（`useIsHydrated` 水合门控令恢复 layout effect 首轮早退、post-hydration 一次性恢复）与 P3-1（同义反复断言替换为 `canRestoreBootGame` 变异守门套件）经代码路径核验闭环；需求 1~5 映射无遗漏、`?room=` 隔离与路由参数保持正常。缺陷 P3-1：dev（StrictMode 默认开启）下切语言软导航重挂载恢复「AI 回合」活跃对局永久死锁——`useAiGame` 卸载清理只 terminate worker/清超时、不 settle 搜索 Promise 亦不复位 `isAiThinking`，第二次 mount 被 `hasRestoredBootRef` 单次守卫早退；真机 dev/生产差分探针实测 dev 12s 棋子恒 1 + 模式/重开/撤销按钮恒锁，生产 1s 内 AI 自动落子正常；`smoke:persistence` 未覆盖「切语言 + AI 回合恢复」组合故未拦截。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-persistence-impl-round4-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-persistence-impl-round4-handoff.md)。
 - 🔄 **对局持久化与语言平滑切换 Round 3 审查缺陷闭环（2026-09-16）**：针对 WorkBuddy Round 3 审查报告（提交 `ff57ac8`，报告：`docs/handoff/2026-09-16-workbuddy-code-review-persistence-impl-round3-handoff.md`）指出的 1 项 P1 与 1 项 P3 缺陷实施 100% 闭环收敛：P1-1 引入 `useIsHydrated` 拦截水合首轮提前消费守卫，并在 `initialSnapshot` 与 layout effect 中统一使用 `canRestoreBootGame` 纯函数，彻底修复 F5 刷新恢复 0 子与思考中刷新自愈失效缺陷；P3-1 移除同义反复单测，增设 `canRestoreBootGame` 独立变异守门套件；新增 `tools/smoke-persistence.ts` 固化浏览器级 CDP 冒烟自动化测试（覆盖 S-A/S-E/S-B/S-C 全场景），并在 `package.json` 中配置 `"smoke:persistence"`；四道门禁全绿（31 套 / 282 项单测 100% 通过，生产构建打包完全成功）。详见 [`docs/handoff/2026-09-16-game-persistence-round3-remediation-handoff.md`](docs/handoff/2026-09-16-game-persistence-round3-remediation-handoff.md)。
 - ⚠️ **对局持久化/语言平滑切换/外观保持 实现交付 Round 3 复查（被审 `0fc7bb6`）**：**审查未通过**。0×P0/P2；**1×P1 + 1×P3**（均为 Round 2 修复增量引入）。通过项：Round 2 P2-1 的目标场景（room URL 隔离）经真机 CDP 复验通过（存量 AI 局 + `?room=` 整页加载 post=0/term=0、模式按钮解锁、存储完好）；`commitAiTurn` 的 `mode !== "ai"` 纵深防御正确。缺陷 P1-1：React 19.2 `useSyncExternalStore` 水合渲染取 `getServerSnapshot()`（`bootActiveGame=null`），client snapshot 差异检测是 Passive effect（晚于全部 layout effects）——`GameShell.tsx:127-173` 恢复 layout effect 水合首轮必然落入本轮新增的失配分支并无条件置位 `hasRestoredBootRef`，重渲染后 effect 被 `:128` 守卫早退，**F5 恢复与思考中刷新自愈全部静默失效**（R1-P1-1 完整回归；实测 local 3 手局刷新 stones=0、ai 局轮到 AI 刷新 post=0，软导航对照组 stones=3 正常恢复，软/硬分裂锁定水合时序根因）；S-C 的"通过"实为一切恢复被跳过的假象。P3-1：`client-boot-state.test.ts:30-33` 新增断言同义反复（重述 fixture 常量，对产品守卫零验证力）。水合集成时序连续第三次无自动化守门（三次缺陷同源），建议升级为本轮修复验收组成。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-persistence-impl-round3-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-persistence-impl-round3-handoff.md)。

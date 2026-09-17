@@ -78,6 +78,7 @@ export function useAiGame({
   const aiCountdownSchedulerRef = useRef<AiCountdownScheduler | null>(null);
   const aiRequestIdRef = useRef(0);
   const openingSeedRef = useRef(initialOpeningSeed ?? createOpeningSeed());
+  const pendingAiResolveRef = useRef<((point: Point | null) => void) | null>(null);
 
   const movesCount = moves.length;
   const onResetGameRef = useRef(onResetGame);
@@ -123,6 +124,10 @@ export function useAiGame({
 
   const cancelAiTurn = useCallback(() => {
     aiRequestIdRef.current += 1;
+    if (pendingAiResolveRef.current) {
+      pendingAiResolveRef.current(null);
+      pendingAiResolveRef.current = null;
+    }
     setIsAiThinking(false);
     setAiThinkingCountdown(null);
     getAiCountdownScheduler().stop();
@@ -132,12 +137,10 @@ export function useAiGame({
 
   useEffect(() => {
     return () => {
-      aiCountdownSchedulerRef.current?.stop();
-      terminateAiWorkers();
+      cancelAiTurn();
       aiWorkerPoolRef.current?.terminateAll();
-      clearAiWorkerTimeout();
     };
-  }, []);
+  }, [cancelAiTurn]);
 
   const requestAiMove = useCallback((
     currentBoard: Board,
@@ -155,6 +158,12 @@ export function useAiGame({
     }
 
     return new Promise((resolve) => {
+      if (pendingAiResolveRef.current) {
+        pendingAiResolveRef.current(null);
+        pendingAiResolveRef.current = null;
+      }
+      pendingAiResolveRef.current = resolve;
+
       terminateAiWorkers();
       clearAiWorkerTimeout();
       let latestBestMove: Point | null = null;
@@ -173,6 +182,9 @@ export function useAiGame({
         }
 
         settled = true;
+        if (pendingAiResolveRef.current === resolve) {
+          pendingAiResolveRef.current = null;
+        }
         pool.releaseAll(workers);
         aiWorkersRef.current = aiWorkersRef.current.filter((activeWorker) => !workers.includes(activeWorker));
 

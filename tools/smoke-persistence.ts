@@ -1,8 +1,11 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+const require = createRequire(import.meta.url);
 
 type BrowserTarget = {
   webSocketDebuggerUrl?: string;
@@ -165,6 +168,49 @@ async function waitForChrome(port: number): Promise<void> {
   }, START_TIMEOUT_MS);
 }
 
+function killProcessTree(pid: number): void {
+  try {
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+    } else {
+      process.kill(pid, "SIGTERM");
+    }
+  } catch {
+    // Ignore error
+  }
+}
+
+async function isServerRunning(baseUrl: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${baseUrl}/en`, { method: "HEAD", signal: AbortSignal.timeout(1000) });
+    return res.status < 500;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureServerRunning(baseUrl: string): Promise<ChildProcess | null> {
+  if (await isServerRunning(baseUrl)) {
+    return null;
+  }
+
+  console.log(`[smoke:persistence] No server running on ${baseUrl}, starting server...`);
+  const port = new URL(baseUrl).port || "3000";
+  const tsxCli = require.resolve("tsx/cli");
+  const server = spawn(process.execPath, [tsxCli, "src/server/online-server.ts"], {
+    cwd: process.cwd(),
+    env: { ...process.env, PORT: port, HOSTNAME: "127.0.0.1" },
+    stdio: "ignore"
+  });
+
+  await waitForValue(async () => {
+    return (await isServerRunning(baseUrl)) ? true : null;
+  }, START_TIMEOUT_MS * 2);
+
+  console.log(`[smoke:persistence] Server started successfully on ${baseUrl}`);
+  return server;
+}
+
 async function openBrowserTarget(port: number, url: string): Promise<string> {
   const endpoint = `http://127.0.0.1:${port}/json/new?${encodeURIComponent(url)}`;
   let response = await fetch(endpoint, { method: "PUT" });
@@ -180,22 +226,25 @@ async function openBrowserTarget(port: number, url: string): Promise<string> {
 
 async function main(): Promise<void> {
   const baseUrl = process.argv[2] ?? DEFAULT_BASE_URL;
-  const baseOrigin = new URL(baseUrl).origin;
-  const chromePath = findChromePath();
-  const port = await getFreePort();
-  const userDataDir = await mkdtemp(path.join(tmpdir(), "gomoku-persistence-smoke-"));
-  const chrome = launchChrome(chromePath, port, userDataDir, baseOrigin);
-
-  console.log(`[smoke:persistence] Chrome launched on debug port ${port}`);
+  const spawnedServer = await ensureServerRunning(baseUrl);
 
   try {
-    await waitForChrome(port);
-    const targetUrl = await openBrowserTarget(port, `${baseUrl}/en`);
-    const cdp = await CdpClient.connect(targetUrl);
+    const baseOrigin = new URL(baseUrl).origin;
+    const chromePath = findChromePath();
+    const port = await getFreePort();
+    const userDataDir = await mkdtemp(path.join(tmpdir(), "gomoku-persistence-smoke-"));
+    const chrome = launchChrome(chromePath, port, userDataDir, baseOrigin);
+
+    console.log(`[smoke:persistence] Chrome launched on debug port ${port}`);
 
     try {
-      await cdp.send("Page.enable");
-      await cdp.send("Runtime.enable");
+      await waitForChrome(port);
+      const targetUrl = await openBrowserTarget(port, `${baseUrl}/en`);
+      const cdp = await CdpClient.connect(targetUrl);
+
+      try {
+        await cdp.send("Page.enable");
+        await cdp.send("Runtime.enable");
 
       // 等待初始页面水合就绪
       await waitForValue(async () => {
@@ -354,13 +403,82 @@ async function main(): Promise<void> {
       }
       console.log("  ✓ S-C passed: ?room= URL cleanly isolated from stored AI game (buttons unlocked, storage intact)");
 
-      console.log("\n[smoke:persistence] ALL 4 SCENARIOS (S-A, S-E, S-B, S-C) PASSED SUCCESSFULLY!");
+      // ─── Scenario S-F: Active AI game with AI to move + soft navigation locale switch ───
+      console.log("[smoke:persistence] Running Scenario S-F (Active AI game with AI to move + locale switch)...");
+      // 先导航离开 S-C 的 room URL，回到纯净 /en
+      await evaluate(cdp, `window.location.href = "/en";`);
+      await waitForValue(async () => {
+        const href = await evaluate<string>(cdp, "window.location.href");
+        return (href.endsWith("/en") || href.endsWith("/en/")) && !href.includes("room=") ? true : null;
+      }, STEP_TIMEOUT_MS);
+
+      // 注入轮到 AI 走的活跃对局（1 颗黑子，human 先手）并点击切到法文 /fr
+      await evaluate(
+        cdp,
+        `(() => {
+          sessionStorage.setItem("gomoku-active-game", JSON.stringify({
+            mode: "ai",
+            moves: [{ row: 7, col: 7, stone: "black", moveNumber: 1 }],
+            aiDifficulty: "normal",
+            firstPlayer: "human",
+            openingSeed: 42,
+            updatedAt: Date.now()
+          }));
+          sessionStorage.setItem("gomoku-selected-workspace", "ai");
+          const frenchLink = Array.from(document.querySelectorAll("a")).find(a => (a.getAttribute("href") || "").includes("/fr"));
+          frenchLink?.click();
+        })()`
+      );
+
+      // 等待软导航完成进入 /fr
+      await waitForValue(async () => {
+        const href = await evaluate<string>(cdp, "window.location.href");
+        return href.includes("/fr") ? true : null;
+      }, STEP_TIMEOUT_MS);
+
+      // 验证软导航恢复后 AI 自动落子（棋子自 1 增至 2）
+      const stonesAfterSf = await waitForValue(async () => {
+        const count = await evaluate<number>(
+          cdp,
+          `document.querySelectorAll(".board-point .stone").length`
+        );
+        return count >= 2 ? count : null;
+      }, STEP_TIMEOUT_MS);
+
+      if (stonesAfterSf < 2) {
+        throw new Error(`Scenario S-F failed: AI did not auto-move after locale switch, stones: ${stonesAfterSf}`);
+      }
+
+      // 验证模式切换按钮已解锁，无死锁锁定
+      const sfButtonsUnlocked = await waitForValue(async () => {
+        const buttons = await evaluate<{ mode: string; disabled: boolean }[]>(
+          cdp,
+          `Array.from(document.querySelectorAll(".mode-pill, [data-game-mode]")).map(b => ({
+            mode: b.getAttribute("data-game-mode") || "",
+            disabled: Boolean(b.disabled) || b.classList.contains("cursor-not-allowed")
+          }))`
+        );
+        const aiButton = buttons.find(b => b.mode === "ai");
+        return aiButton && !aiButton.disabled ? true : null;
+      }, STEP_TIMEOUT_MS);
+
+      if (!sfButtonsUnlocked) {
+        throw new Error("Scenario S-F failed: AI mode button remained locked after locale switch");
+      }
+      console.log(`  ✓ S-F passed: AI auto-moved after locale switch (stones: ${stonesAfterSf}) and buttons unlocked`);
+
+      console.log("\n[smoke:persistence] ALL 5 SCENARIOS (S-A, S-E, S-B, S-C, S-F) PASSED SUCCESSFULLY!");
+      } finally {
+        cdp.close();
+      }
     } finally {
-      cdp.close();
+      chrome.kill();
+      await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
     }
   } finally {
-    chrome.kill();
-    await rm(userDataDir, { recursive: true, force: true }).catch(() => undefined);
+    if (spawnedServer && spawnedServer.pid) {
+      killProcessTree(spawnedServer.pid);
+    }
   }
 }
 
