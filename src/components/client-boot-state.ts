@@ -49,9 +49,40 @@ export function restoreBootActiveGameSnapshot(
   };
 }
 
+/**
+ * 纯函数：判断当前活跃对局快照是否满足恢复至目标启动模式的先决条件：
+ * 1. activeGame 存在且包含落子记录 (moves.length > 0)；
+ * 2. 对局模式与目标启动模式严格匹配 (activeGame.mode === bootMode)，隔离在线与单机/人机生命周期。
+ */
+export function canRestoreBootGame(
+  activeGame: StoredActiveGame | null | undefined,
+  bootMode: GameMode
+): activeGame is StoredActiveGame {
+  return Boolean(
+    activeGame &&
+    activeGame.mode === bootMode &&
+    activeGame.moves.length > 0
+  );
+}
+
 // 启动快照只在页面加载时读一次；之后的变更由 React 状态接管，所以订阅是空实现。
 export function subscribeToBootState(): () => void {
   return () => {};
+}
+
+/**
+ * 判断当前组件是否已离开 SSR / 首轮水合阶段，进入真实客户端生命周期。
+ * 借助 useSyncExternalStore 机制：
+ * - 服务端渲染及客户端首轮水合渲染（Passive Effect 尚未调度前），getServerSnapshot 恒返回 false；
+ * - 客户端挂载后，React 调度 updateStoreInstance 检测到 getSnapshot 返回 true，触发客户端重渲染并稳定返回 true；
+ * - 软导航重挂载直接由客户端调度，恒稳定返回 true。
+ */
+export function useIsHydrated(): boolean {
+  return useSyncExternalStore(
+    subscribeToBootState,
+    () => true,
+    () => false
+  );
 }
 
 /**

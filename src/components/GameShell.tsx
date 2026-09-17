@@ -8,9 +8,11 @@ import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import type { RoomSnapshot } from "@/server/rooms";
 import {
+  canRestoreBootGame,
   restoreBootActiveGameSnapshot,
   useBootActiveGame,
-  useBootGameMode
+  useBootGameMode,
+  useIsHydrated
 } from "./client-boot-state";
 import { useIsomorphicLayoutEffect } from "@/lib/use-isomorphic-layout-effect";
 import { InteractionConfirmation } from "./InteractionConfirmation";
@@ -51,6 +53,8 @@ type PendingTransition = {
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
 
 export function GameShell({ dictionary, locale }: GameShellProps) {
+  // 判断是否已完成客户端水合，避免在首轮 SSR/水合阶段提前执行恢复守卫
+  const isHydrated = useIsHydrated();
   // 模式与活跃对局通过实例级快照在组件挂载时求值，避免 SSR/CSR 水合不一致
   const bootActiveGame = useBootActiveGame();
   const bootMode = useBootGameMode();
@@ -58,7 +62,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const mode = modeOverride ?? bootMode;
 
   const initialSnapshot = useMemo(() => {
-    if (bootActiveGame && bootActiveGame.mode === bootMode && bootActiveGame.moves.length > 0) {
+    if (canRestoreBootGame(bootActiveGame, bootMode)) {
       return restoreBootActiveGameSnapshot(bootActiveGame);
     }
     return {
@@ -125,11 +129,16 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
   // 水合完成/软导航挂载后一次性采纳 bootActiveGame 恢复快照并同步状态（修复 P1-1 与 P2-1）
   useIsomorphicLayoutEffect(() => {
+    // 必须等待真实客户端生命周期就绪，严禁在首轮 server snapshot 水合阶段提前消费守卫（修复 P1-1）
+    if (!isHydrated) {
+      return;
+    }
+
     if (hasRestoredBootRef.current) {
       return;
     }
 
-    if (bootActiveGame && bootActiveGame.mode === bootMode && bootActiveGame.moves.length > 0) {
+    if (canRestoreBootGame(bootActiveGame, bootMode)) {
       hasRestoredBootRef.current = true;
       bootMovesBaselineRef.current = bootActiveGame.moves.length;
 
@@ -165,12 +174,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     }
 
     // 若模式不匹配（如从存量单机/人机对局经 ?room= 链接进入联机房间），或无活跃对局可恢复
-    // 必须在客户端挂载后标记已完成恢复与自愈，杜绝幽灵搜索并保持模式切换按钮解锁
+    // 必须在真实客户端快照就绪后标记已完成恢复与自愈，杜绝幽灵搜索并保持模式切换按钮解锁
     if (typeof window !== "undefined") {
       hasRestoredBootRef.current = true;
       hasHealedRef.current = true;
     }
-  }, [bootActiveGame, bootMode, mode, aiGame]);
+  }, [isHydrated, bootActiveGame, bootMode, mode, aiGame]);
 
   // AI 恢复自愈握手（仅作为兜底；主路径由挂载/水合恢复 layout effect 同步执行）
   useEffect(() => {

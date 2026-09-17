@@ -18,6 +18,7 @@
     "export:game-records": "tsx tools/export-game-records.ts",
     "opening-book": "tsx tools/generate-opening-book.ts",
     "smoke:share-url": "tsx tools/smoke-share-url.ts",
+    "smoke:persistence": "tsx tools/smoke-persistence.ts",
     "smoke:lobby": "tsx tools/smoke-lobby.ts",
     "smoke:lobby-ui": "tsx tools/smoke-lobby-ui.ts",
     "smoke:online-room": "tsx tools/smoke-online-room.ts",

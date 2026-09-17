@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StoredActiveGame } from "@/lib/game-persistence";
 import {
+  canRestoreBootGame,
   createBootGameModeReader,
   DEFAULT_GAME_MODE,
   resolveBootGameMode,
@@ -27,11 +28,6 @@ describe("resolveBootGameMode - Four-tier priority resolution", () => {
     // Even if active AI game exists and workspace was local, URL ?room= forces room
     expect(resolveBootGameMode("?room=ABC123", activeAiGame, "local")).toBe("room");
     expect(resolveBootGameMode("?other=1&room=XYZ", activeLocalGame, "ai")).toBe("room");
-
-    // Guard against mode mismatch: room bootMode must not match activeAiGame.mode
-    const bootMode = resolveBootGameMode("?room=ABC123", activeAiGame, "local");
-    expect(bootMode).toBe("room");
-    expect(activeAiGame.mode === bootMode).toBe(false);
   });
 
   it("Priority 2: Active game with moves > 0 restores game mode", () => {
@@ -171,5 +167,45 @@ describe("restoreBootActiveGameSnapshot - Full board and status recovery", () =>
       expect(snapshot.status.line).toHaveLength(5);
     }
     expect(snapshot.nextPlayer).toBe("black");
+  });
+});
+
+describe("canRestoreBootGame - Guard against mode mismatch and invalid restores", () => {
+  const activeAiGame: StoredActiveGame = {
+    mode: "ai",
+    moves: [{ row: 7, col: 7, stone: "black", moveNumber: 1 }],
+    aiDifficulty: "hard",
+    firstPlayer: "human",
+    openingSeed: 12345,
+    updatedAt: Date.now()
+  };
+
+  const activeLocalGame: StoredActiveGame = {
+    mode: "local",
+    moves: [{ row: 7, col: 7, stone: "black", moveNumber: 1 }],
+    updatedAt: Date.now()
+  };
+
+  it("permits restore when activeGame mode exactly matches bootMode and moves > 0", () => {
+    expect(canRestoreBootGame(activeAiGame, "ai")).toBe(true);
+    expect(canRestoreBootGame(activeLocalGame, "local")).toBe(true);
+  });
+
+  it("blocks restore when activeGame mode mismatches bootMode (e.g. ?room= link with active AI game)", () => {
+    // Crucial isolation: an active AI game must NEVER restore into 'room' or 'local' mode
+    expect(canRestoreBootGame(activeAiGame, "room")).toBe(false);
+    expect(canRestoreBootGame(activeAiGame, "local")).toBe(false);
+    expect(canRestoreBootGame(activeLocalGame, "room")).toBe(false);
+    expect(canRestoreBootGame(activeLocalGame, "ai")).toBe(false);
+  });
+
+  it("blocks restore when moves array is empty", () => {
+    const emptyGame: StoredActiveGame = { ...activeAiGame, moves: [] };
+    expect(canRestoreBootGame(emptyGame, "ai")).toBe(false);
+  });
+
+  it("blocks restore when activeGame is null or undefined", () => {
+    expect(canRestoreBootGame(null, "local")).toBe(false);
+    expect(canRestoreBootGame(undefined, "ai")).toBe(false);
   });
 });
