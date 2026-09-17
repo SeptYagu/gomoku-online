@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useRef, useSyncExternalStore } from "react";
 import type { Stone } from "@/game/types";
 import type {
   LobbyActivitySummary,
@@ -12,7 +11,6 @@ import type {
   RoomSnapshot
 } from "@/server/rooms";
 import { clearRoomUrlFromHref, getRoomUrlFromHref } from "../room-url";
-import { subscribeToBootState } from "../client-boot-state";
 import { DEFAULT_PLAYER_NAME } from "@/lib/constants";
 
 export type RoomSocket = {
@@ -151,26 +149,7 @@ export function sortLobbyRooms(rooms: RoomListItem[]): RoomListItem[] {
   return [...rooms].sort((first, second) => second.updatedAt - first.updatedAt || first.code.localeCompare(second.code));
 }
 
-/**
- * 消除 R6 缺陷的实例级启动快照读取 Hook。
- * 使用 Hook 实例内部的 useRef 存放客户端快照，杜绝模块级变量污染与 HMR 状态残留。
- */
-export function useBootSnapshot<T>(
-  computeClientSnapshot: () => T,
-  serverSnapshot: T
-): T {
-  const cacheRef = useRef<T | null>(null);
-  const getSnapshot = useCallback(() => {
-    if (cacheRef.current === null) {
-      cacheRef.current = computeClientSnapshot();
-    }
-    return cacheRef.current;
-  }, [computeClientSnapshot]);
-
-  const getServerSnapshot = useCallback(() => serverSnapshot, [serverSnapshot]);
-
-  return useSyncExternalStore(subscribeToBootState, getSnapshot, getServerSnapshot);
-}
+export { useBootSnapshot } from "../client-boot-state";
 
 export function getInitialPlayerName(): string {
   if (typeof window === "undefined") {

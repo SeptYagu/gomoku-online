@@ -7,7 +7,7 @@ import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import type { RoomSnapshot } from "@/server/rooms";
-import { useBootGameMode } from "./client-boot-state";
+import { useBootActiveGame, useBootGameMode } from "./client-boot-state";
 import { InteractionConfirmation } from "./InteractionConfirmation";
 import {
   getModeChangeDecision,
@@ -23,9 +23,15 @@ import { createTableReplay, type TableReplayState } from "./online/table-replay"
 import { deriveGameWorkspace, isOnlineWorkspaceEnabled, type GameMode } from "./online/workspace-state";
 import { AiGameView, type FirstPlayer } from "./play/AiGameView";
 import { LocalGameView } from "./play/LocalGameView";
-import { useAiGame, replayMoves } from "./hooks/useAiGame";
+import { getAiStone, replayMoves, useAiGame } from "./hooks/useAiGame";
 import { useFriendRoom, type FriendRoomController } from "./useFriendRoom";
 import type { AiDifficulty } from "@/game/ai";
+import {
+  clearActiveGame,
+  saveActiveAiGame,
+  saveActiveLocalGame,
+  saveSelectedWorkspace
+} from "@/lib/game-persistence";
 
 type GameShellProps = {
   dictionary: GameDictionary;
@@ -40,29 +46,46 @@ type PendingTransition = {
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
 
 export function GameShell({ dictionary, locale }: GameShellProps) {
-  const [board, setBoard] = useState<Board>(() => createBoard());
-  const [nextPlayer, setNextPlayer] = useState<Stone>("black");
-  const [status, setStatus] = useState<GameStatus>({ state: "playing", nextPlayer: "black" });
-  const [moves, setMoves] = useState<Move[]>([]);
-
-  // 模式由 URL 决定（带 ?room= 直接进联机），但 URL 只有浏览器能读：
-  // 未显式切换过模式前先用启动快照，避免 SSR/CSR 首屏不一致。
+  // 模式与活跃对局通过实例级快照在组件挂载时求值，避免 SSR/CSR 水合不一致
+  const bootActiveGame = useBootActiveGame();
   const bootMode = useBootGameMode();
   const [modeOverride, setMode] = useState<GameMode | null>(null);
   const mode = modeOverride ?? bootMode;
+
+  const initialSnapshot = useMemo(() => {
+    if (bootActiveGame && bootActiveGame.mode === bootMode && bootActiveGame.moves.length > 0) {
+      const restoredBoard = replayMoves(bootActiveGame.moves);
+      const lastMove = bootActiveGame.moves.at(-1)!;
+      const restoredResult = getGameResult(restoredBoard, lastMove, lastMove.stone);
+      const nextStone =
+        restoredResult.state === "playing" ? restoredResult.nextPlayer : (lastMove.stone ?? "black");
+      return {
+        board: restoredBoard,
+        moves: bootActiveGame.moves,
+        status: restoredResult,
+        nextPlayer: nextStone
+      };
+    }
+    return {
+      board: createBoard(),
+      moves: [] as Move[],
+      status: { state: "playing" as const, nextPlayer: "black" as const },
+      nextPlayer: "black" as const
+    };
+  }, [bootActiveGame, bootMode]);
+
+  const [board, setBoard] = useState<Board>(() => initialSnapshot.board);
+  const [nextPlayer, setNextPlayer] = useState<Stone>(() => initialSnapshot.nextPlayer);
+  const [status, setStatus] = useState<GameStatus>(() => initialSnapshot.status);
+  const [moves, setMoves] = useState<Move[]>(() => initialSnapshot.moves);
 
   const [pendingTransition, setPendingTransition] = useState<PendingTransition | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [tableReplay, setTableReplay] = useState<TableReplayState | null>(null);
 
   const resetGameRef = useRef<((options?: { nextMode?: GameMode; nextDifficulty?: AiDifficulty; nextFirstPlayer?: FirstPlayer }) => void) | null>(null);
-
-  const commitGameState = useCallback((nextBoard: Board, nextMoves: Move[], nextStatus: GameStatus) => {
-    setBoard(nextBoard);
-    setMoves(nextMoves);
-    setStatus(nextStatus);
-    setNextPlayer(nextStatus.state === "playing" ? nextStatus.nextPlayer : (nextMoves.at(-1)?.stone ?? "black"));
-  }, []);
+  const commitGameStateRef = useRef<((nextBoard: Board, nextMoves: Move[], nextStatus: GameStatus) => void) | null>(null);
+  const hasHealedRef = useRef(false);
 
   const handleResetFromAi = useCallback((options?: { nextDifficulty?: AiDifficulty; nextFirstPlayer?: FirstPlayer }) => {
     resetGameRef.current?.(options);
@@ -71,9 +94,50 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const aiGame = useAiGame({
     mode,
     moves,
-    onCommitGameState: commitGameState,
+    initialAiDifficulty: bootActiveGame?.mode === "ai" ? bootActiveGame.aiDifficulty : undefined,
+    initialFirstPlayer: bootActiveGame?.mode === "ai" ? bootActiveGame.firstPlayer : undefined,
+    initialOpeningSeed: bootActiveGame?.mode === "ai" ? bootActiveGame.openingSeed : undefined,
+    onCommitGameState: (...args) => commitGameStateRef.current?.(...args),
     onResetGame: handleResetFromAi
   });
+
+  const commitGameState = useCallback((nextBoard: Board, nextMoves: Move[], nextStatus: GameStatus) => {
+    setBoard(nextBoard);
+    setMoves(nextMoves);
+    setStatus(nextStatus);
+    setNextPlayer(nextStatus.state === "playing" ? nextStatus.nextPlayer : (nextMoves.at(-1)?.stone ?? "black"));
+
+    if (mode === "local") {
+      saveActiveLocalGame(nextMoves);
+    } else if (mode === "ai") {
+      saveActiveAiGame(nextMoves, aiGame.aiDifficulty, aiGame.firstPlayer, aiGame.getOpeningSeed());
+    }
+  }, [mode, aiGame]);
+
+  useEffect(() => {
+    commitGameStateRef.current = commitGameState;
+  });
+
+  // URL 启动参数命中 ?room= 时同步写入工作区记录
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("room")) {
+      saveSelectedWorkspace("room");
+    }
+  }, []);
+
+  // AI 恢复自愈握手
+  useEffect(() => {
+    if (hasHealedRef.current) {
+      return;
+    }
+    if (mode === "ai" && status.state === "playing" && moves.length > 0) {
+      const targetAiStone = getAiStone(aiGame.firstPlayer);
+      if (nextPlayer === targetAiStone) {
+        hasHealedRef.current = true;
+        void aiGame.commitAiTurn(board, moves, aiGame.aiDifficulty, aiGame.firstPlayer);
+      }
+    }
+  }, [mode, status.state, moves, nextPlayer, aiGame, board]);
 
   const friendRoom = useFriendRoom({
     enabled: isOnlineWorkspaceEnabled(mode),
@@ -97,6 +161,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     nextDifficulty?: AiDifficulty;
     nextFirstPlayer?: FirstPlayer;
   } = {}) => {
+    clearActiveGame();
     aiGame.cancelAiTurn();
     const snapshot = aiGame.createInitialSnapshot(nextMode, nextDifficulty, nextFirstPlayer);
 
@@ -111,6 +176,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   });
 
   function completeModeChange(nextMode: GameMode) {
+    hasHealedRef.current = true;
+    clearActiveGame();
+    saveSelectedWorkspace(nextMode);
+
     if (nextMode === "room") {
       aiGame.cancelAiTurn();
       setMode(nextMode);
@@ -141,6 +210,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         return;
       }
 
+      saveSelectedWorkspace("room");
       setPendingTransition(null);
       setTableReplay(null);
       if (nextMode) {
@@ -190,6 +260,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
     friendRoom.leaveRoom((left) => {
       if (left) {
+        saveSelectedWorkspace("room");
         setTableReplay(null);
       }
     });
@@ -233,6 +304,12 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     setMoves(remainingMoves);
     setNextPlayer(nextStone);
     setStatus({ state: "playing", nextPlayer: nextStone });
+
+    if (mode === "local") {
+      saveActiveLocalGame(remainingMoves);
+    } else if (mode === "ai") {
+      saveActiveAiGame(remainingMoves, aiGame.aiDifficulty, aiGame.firstPlayer, aiGame.getOpeningSeed());
+    }
   }
 
   function handlePointSelect(point: Point) {

@@ -66,6 +66,42 @@
   --panel-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #121417;
+    --bg-radial-a: rgba(31, 138, 112, 0.2);
+    --bg-radial-b: rgba(180, 118, 58, 0.12);
+    --ink: #edf2f7;
+    --muted: #aab5c4;
+    --panel: #1b2027;
+    --panel-soft: rgba(27, 32, 39, 0.88);
+    --line: #303843;
+    --line-strong: rgba(237, 242, 247, 0.18);
+    --accent: #45b39d;
+    --accent-deep: #7dd3c0;
+    --accent-ink: #07120f;
+    --hover: rgba(69, 179, 157, 0.3);
+    --board: #9f6b36;
+    --board-light: #c39155;
+    --board-warm: #70451f;
+    --board-line: rgba(255, 228, 181, 0.5);
+    --board-line-soft: rgba(255, 245, 220, 0.12);
+    --board-border: rgba(247, 222, 179, 0.46);
+    --board-edge: #4a2c17;
+    --board-edge-light: #d0a76c;
+    --board-star: rgba(255, 231, 185, 0.78);
+    --black-stone: #05070a;
+    --white-stone: #f8fafc;
+    --white-stone-line: rgba(255, 255, 255, 0.42);
+    --last-move: #ffd166;
+    --win-line: #6ee7a6;
+    --ad-surface: rgba(27, 32, 39, 0.7);
+    --shadow: 0 24px 74px rgba(0, 0, 0, 0.38);
+    --panel-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  }
+}
+
 * {
   box-sizing: border-box;
 }

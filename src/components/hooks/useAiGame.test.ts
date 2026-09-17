@@ -174,6 +174,10 @@ describe("useAiGame helpers", () => {
     expect(aiFirst.moves[0].stone).toBe("black");
     expect(aiFirst.nextPlayer).toBe("white");
     expect(aiFirst.status.state).toBe("playing");
+
+    // Identical seed yields identical opening move
+    const aiFirstSameSeed = createInitialGameState("ai", "normal", "ai", 42);
+    expect(aiFirstSameSeed.moves[0]).toEqual(aiFirst.moves[0]);
   });
 
   it("computes countdown seconds accurately, bounds upper limits, and handles non-finite inputs", () => {

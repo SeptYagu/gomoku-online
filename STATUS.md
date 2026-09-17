@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`8148e81 docs(plan): resolve round 2 review findings for game persistence plan`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「对局持久化/语言平滑切换方案」Round 3 独立审查提交，被审提交即 `8148e81`，按先例记直接前驱阶段交付 `8148e81`，本次审查交付提交将在下一次提交回填）
+- **最新阶段交付提交**：`9763c09 docs(plan): finalize game persistence design plan upon round 3 convergence`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「对局持久化、语言平滑切换与外观保持」代码交付，按先例记录直接前驱阶段交付 `9763c09`，本次交付提交将在下一次提交回填）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -22,15 +22,16 @@
 ## 2. 门禁基线指标（当前全绿）
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
-- **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则）
-- **单元测试** (`npm test`)：29 个测试套件 / 248 项用例 100% 通过（新增 LobbyMatchmaking 3 项组件结构与 A11y 测试全绿）
-- **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常
-- **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：全绿通过
+- **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
+- **单元测试** (`npm test`)：31 个测试套件 / 274 项用例 100% 通过（新增 locale-navigation 5 项、game-persistence 16 项、client-boot-state 扩充至 8 项全部全绿）
+- **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 保持为 `● (SSG)`）
+- **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
 
 ---
 
 ## 3. 近期已交付里程碑
 
+- 🚀 **对局持久化、语言平滑切换与外观保持功能与代码交付（2026-09-16）**：全面落地纯函数 `computeLocaleSwitchHref` 路由保持与 3 阶段 SSG 安全执行流（规避 CSR Bailout）；权威主题源 `resolveCurrentTheme` 结合 `useIsomorphicLayoutEffect` 预绘制回写与 Scoped CSS 兜底（`globals.css:35-67` 权威 27 项暗色属性对齐），彻底消灭软导航暗色翻白；`sessionStorage` 对局持久化与防御性运行时校验（坐标越界与不重叠拦截、黑先手与颜色交替守卫）；四级启动判定优先级与实例级快照，联机大厅 0 手与人机 0 手切语言或刷新稳健停留在目标工作区，避免跌落 `local`；AI 首帧设置注入与思考自愈握手；四道门禁全绿（31 套 / 274 项单测 100% 通过，生产构建打包完全成功）。详见 [`docs/handoff/2026-09-16-game-persistence-and-locale-switching-delivery-handoff.md`](docs/handoff/2026-09-16-game-persistence-and-locale-switching-delivery-handoff.md) 与 [`docs/GAME_PERSISTENCE_AND_LOCALE_SWITCHING_PLAN.md`](docs/GAME_PERSISTENCE_AND_LOCALE_SWITCHING_PLAN.md)。
 - 🏁 **对局持久化方案 Round 3 审查缺陷收敛与最终定稿（Rule 11 / Branch C，2026-09-16）**：针对 WorkBuddy Round 3 独立审查报告（提交 `df868b9`）指出的 2 项 P3 缺陷完成 100% 闭环收敛：P3-1 将 §4.1 兜底 CSS 声明集 100% 替换为本仓 `globals.css:35-67` 权威暗色声明集（含 `color-scheme: dark`、`--ink: #edf2f7`、`--board: #9f6b36` 等全部 27 项权威声明），彻底消灭 8 个未定义外部变量与暗底深字（1.14:1）对比度缺陷；P3-2 扩充工作区写入点契约至 URL `?room=` 启动解析与退出房间 `leaveRoom` 路径，确保通过分享/邀请链接进房的玩家在退房后刷新或切语言稳健保留在联机大厅工作区，避免跌落 `local` 单机空盘；在 §2.1 阶段 3 明确实时值由 `router.push(liveTargetHref)` 即刻落地；依据 Rule 11 与 `AGENTS.md §4.3 分支 C` 达成 3 轮上限强制收敛定稿，文档审查阶段圆满结束，正式进入代码实现阶段。详见 [`docs/handoff/2026-09-16-game-persistence-plan-final-convergence-handoff.md`](docs/handoff/2026-09-16-game-persistence-plan-final-convergence-handoff.md) 与 [`docs/GAME_PERSISTENCE_AND_LOCALE_SWITCHING_PLAN.md`](docs/GAME_PERSISTENCE_AND_LOCALE_SWITCHING_PLAN.md)。
 - ⚠️ **对局持久化/语言平滑切换/外观保持 技术设计方案 Round 3 独立审查（被审 `8148e81`）**：**审查未通过**。0×P0/P1/P2；**2×P3**。通过项：Round 2 六项缺陷在文本契约层面逐项闭环（P2-1 权威主题解析源、P3-1 兜底选择器作用域、P3-3 三阶段 SSG 安全读取流、P3-4 两条正交清理规则、P3-5 四级启动优先级）。真机 CDP 两项独立验证（生产构建 + `online-server.ts`，探针脚本置于仓库外）：① 注入式 A/B 证伪 §4.1 新增兜底 CSS 块——其 12 个变量中 8 个（`--card/--card-subtle/--border/--border-subtle/--text/--text-subtle/--text-muted/--accent-hover`）在全仓 `src/` 检索命中 0，且漏掉 `globals.css:35-67` 实际声明的 27 项（含 `color-scheme`、`--ink`、`--board*` 等），实测该块只把背景压为 `rgb(18,20,23)`，文字仍为浅色主题 `#18212f`（对比度 ≈1.14:1，不可读）、棋盘仍 `#d9a95f`；替换为权威暗色声明集后逐项正确（`color=rgb(237,242,247)`、`color-scheme=dark`、`--board=#9f6b36`）；② 机制取证证实 Round 2 P3-2 的修复方向成立——`data-theme` 剥离由 React 提交期 mutation 遍历经 `removeAttributeNode` 触发，与页面树替换同一 MutationObserver 批次（同刻 `t=1329.6`），在提交后回写可 100% 存活（180 帧零缺失帧），不回写对照第 1 帧即翻白。缺陷：P3-1 兜底 CSS 声明集非本仓库主题（字面落地即"暗底 + 浅色主题文字"破版，且向 `globals.css` 注入 8 项死声明与外来色板）；P3-2 §3.2 工作区键写入点仅覆盖 `completeModeChange`，覆盖不到经 `?room=` 直接进房的入口，而 §3.4 矩阵已断言 `leaveRoom` 后工作区为 `room`——该路径退房后刷新/切语言跌落 `local`（切语言子路径相对现状构成回归，因实例级重算取消了模块级粘性缓存的兜底）。方案架构层面已收敛，两项 P3 均为实现期可一次性吸收的契约细节。详见 [`docs/handoff/2026-09-16-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-16-workbuddy-code-review-round3-handoff.md)。
 - 🔄 **对局持久化方案 Round 2 审查缺陷闭环与设计最终定稿（2026-09-16）**：针对 WorkBuddy Round 2 审查报告（提交 `bec8acd`）指出的 1 项 P2 与 5 项 P3 缺陷实施 100% 闭环收敛：P2-1 明确权威主题解析源为 `localStorage ?? system dark`（对齐 `ThemeScript.tsx:3` 和 `ThemeToggle.tsx:36-38`），杜绝仅系统暗色无存储用户丢主题；P3-1 限定 CSS 兜底选择器为 `@media (prefers-color-scheme: dark) { :root:not([data-theme]) { ... } }`，杜绝手选浅色用户在软导航间隙被反向劫持为暗色；P3-2 确立预绘制前回写契约，提升至布局阶段（`useLayoutEffect` / `useIsomorphicLayoutEffect`）同步执行，保证 100% 零无属性已绘制帧；P3-3 敲定确定的三阶段路由与查询参数读取流（SSG 纯路径 -> 挂载水合补齐 -> 点击实时兜底），消灭 SSG Bailout 与水合不一致警告，兼顾中键/复制链接完整性；P3-4 正交解耦模式切换（`completeModeChange` 清除非目标模式并初始化新局）与单模式重开（`resetGame`/`handleAiReset` 仅清当前活跃局），消除不可达分支；P3-5 引入工作区持久化键 `gomoku-selected-workspace` 与四级启动优先级，使联机大厅 0 手与人机模式 0 手切语言或刷新后稳定保留在原工作区，`friendRoom.enabled` 保持开启，Socket 订阅不被误拆；四道门禁全绿（29 套 / 248 项单测 100% 通过，生产构建全通）。详见 [`docs/handoff/2026-09-16-game-persistence-plan-round2-remediation-handoff.md`](docs/handoff/2026-09-16-game-persistence-plan-round2-remediation-handoff.md) 与 [`docs/GAME_PERSISTENCE_AND_LOCALE_SWITCHING_PLAN.md`](docs/GAME_PERSISTENCE_AND_LOCALE_SWITCHING_PLAN.md)。

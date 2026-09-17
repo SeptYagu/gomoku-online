@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
-import { themeStorageKey, type ThemeMode } from "@/lib/theme";
+import { resolveCurrentTheme, themeStorageKey, type ThemeMode } from "@/lib/theme";
 
 type ThemeToggleProps = {
   labels: {
@@ -12,29 +12,12 @@ type ThemeToggleProps = {
   };
 };
 
-function getStoredTheme(): ThemeMode | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const storedTheme = window.localStorage.getItem(themeStorageKey);
-  return storedTheme === "light" || storedTheme === "dark" ? storedTheme : null;
-}
-
-function getSystemTheme(): ThemeMode {
-  if (typeof window === "undefined") {
-    return "light";
-  }
-
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 function applyTheme(theme: ThemeMode) {
   document.documentElement.dataset.theme = theme;
 }
 
 function getThemeSnapshot(): ThemeMode {
-  return getStoredTheme() ?? getSystemTheme();
+  return resolveCurrentTheme();
 }
 
 function getServerThemeSnapshot(): ThemeMode {

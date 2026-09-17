@@ -49,6 +49,9 @@ export const AI_EMERGENCY_TIME_LIMIT_MS = 50;
 export type UseAiGameOptions = {
   mode: GameMode;
   moves: Move[];
+  initialAiDifficulty?: AiDifficulty;
+  initialFirstPlayer?: FirstPlayer;
+  initialOpeningSeed?: number;
   onCommitGameState: (board: Board, moves: Move[], status: GameStatus) => void;
   onResetGame: (options?: { nextDifficulty?: AiDifficulty; nextFirstPlayer?: FirstPlayer }) => void;
 };
@@ -56,11 +59,14 @@ export type UseAiGameOptions = {
 export function useAiGame({
   mode,
   moves,
+  initialAiDifficulty,
+  initialFirstPlayer,
+  initialOpeningSeed,
   onCommitGameState,
   onResetGame
 }: UseAiGameOptions) {
-  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>("normal");
-  const [firstPlayer, setFirstPlayer] = useState<FirstPlayer>("human");
+  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>(() => initialAiDifficulty ?? "normal");
+  const [firstPlayer, setFirstPlayer] = useState<FirstPlayer>(() => initialFirstPlayer ?? "human");
   const [pendingDifficulty, setPendingDifficulty] = useState<AiDifficulty | null>(null);
   const [pendingFirstPlayer, setPendingFirstPlayer] = useState<FirstPlayer | null>(null);
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -71,7 +77,7 @@ export function useAiGame({
   const aiWorkerTimeoutRef = useRef<number | null>(null);
   const aiCountdownSchedulerRef = useRef<AiCountdownScheduler | null>(null);
   const aiRequestIdRef = useRef(0);
-  const openingSeedRef = useRef(createOpeningSeed());
+  const openingSeedRef = useRef(initialOpeningSeed ?? createOpeningSeed());
 
   const movesCount = moves.length;
   const onResetGameRef = useRef(onResetGame);
@@ -386,6 +392,7 @@ export function useAiGame({
     aiThinkingCountdown,
     aiStone,
     humanStone,
+    getOpeningSeed: () => openingSeedRef.current,
     handleDifficultyChange,
     handleFirstPlayerChange,
     handleAiReset,
