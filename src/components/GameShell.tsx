@@ -7,7 +7,12 @@ import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import type { RoomSnapshot } from "@/server/rooms";
-import { useBootActiveGame, useBootGameMode } from "./client-boot-state";
+import {
+  restoreBootActiveGameSnapshot,
+  useBootActiveGame,
+  useBootGameMode
+} from "./client-boot-state";
+import { useIsomorphicLayoutEffect } from "@/lib/use-isomorphic-layout-effect";
 import { InteractionConfirmation } from "./InteractionConfirmation";
 import {
   getModeChangeDecision,
@@ -54,17 +59,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
   const initialSnapshot = useMemo(() => {
     if (bootActiveGame && bootActiveGame.mode === bootMode && bootActiveGame.moves.length > 0) {
-      const restoredBoard = replayMoves(bootActiveGame.moves);
-      const lastMove = bootActiveGame.moves.at(-1)!;
-      const restoredResult = getGameResult(restoredBoard, lastMove, lastMove.stone);
-      const nextStone =
-        restoredResult.state === "playing" ? restoredResult.nextPlayer : (lastMove.stone ?? "black");
-      return {
-        board: restoredBoard,
-        moves: bootActiveGame.moves,
-        status: restoredResult,
-        nextPlayer: nextStone
-      };
+      return restoreBootActiveGameSnapshot(bootActiveGame);
     }
     return {
       board: createBoard(),
@@ -86,6 +81,8 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
   const resetGameRef = useRef<((options?: { nextMode?: GameMode; nextDifficulty?: AiDifficulty; nextFirstPlayer?: FirstPlayer }) => void) | null>(null);
   const commitGameStateRef = useRef<((nextBoard: Board, nextMoves: Move[], nextStatus: GameStatus) => void) | null>(null);
   const hasHealedRef = useRef(false);
+  const hasRestoredBootRef = useRef(false);
+  const bootMovesBaselineRef = useRef<number | null>(null);
 
   const handleResetFromAi = useCallback((options?: { nextDifficulty?: AiDifficulty; nextFirstPlayer?: FirstPlayer }) => {
     resetGameRef.current?.(options);
@@ -106,6 +103,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     setMoves(nextMoves);
     setStatus(nextStatus);
     setNextPlayer(nextStatus.state === "playing" ? nextStatus.nextPlayer : (nextMoves.at(-1)?.stone ?? "black"));
+    hasRestoredBootRef.current = true;
 
     if (mode === "local") {
       saveActiveLocalGame(nextMoves);
@@ -125,12 +123,65 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     }
   }, []);
 
-  // AI 恢复自愈握手
+  // 水合完成/软导航挂载后一次性采纳 bootActiveGame 恢复快照并同步状态（修复 P1-1 与 P2-1）
+  useIsomorphicLayoutEffect(() => {
+    if (hasRestoredBootRef.current) {
+      return;
+    }
+
+    if (bootActiveGame && bootActiveGame.moves.length > 0) {
+      hasRestoredBootRef.current = true;
+      bootMovesBaselineRef.current = bootActiveGame.moves.length;
+
+      const restored = restoreBootActiveGameSnapshot(bootActiveGame);
+      setBoard(restored.board);
+      setMoves(restored.moves);
+      setStatus(restored.status);
+      setNextPlayer(restored.nextPlayer);
+
+      if (bootActiveGame.mode === "ai") {
+        aiGame.restoreSettings(
+          bootActiveGame.aiDifficulty,
+          bootActiveGame.firstPlayer,
+          bootActiveGame.openingSeed
+        );
+
+        const targetAiStone = getAiStone(bootActiveGame.firstPlayer);
+        if (restored.status.state === "playing" && restored.nextPlayer === targetAiStone) {
+          hasHealedRef.current = true;
+          void aiGame.commitAiTurn(
+            restored.board,
+            restored.moves,
+            bootActiveGame.aiDifficulty,
+            bootActiveGame.firstPlayer
+          );
+        } else {
+          hasHealedRef.current = true;
+        }
+      } else {
+        hasHealedRef.current = true;
+      }
+      return;
+    }
+
+    // 若当前会话在客户端已确定无活跃对局（或无落子），直接置位已自愈，避免后续首手落子误触发
+    if (typeof window !== "undefined" && moves.length === 0) {
+      hasHealedRef.current = true;
+    }
+  }, [bootActiveGame, aiGame, moves.length]);
+
+  // AI 恢复自愈握手（仅作为兜底；主路径由挂载/水合恢复 layout effect 同步执行）
   useEffect(() => {
     if (hasHealedRef.current) {
       return;
     }
-    if (mode === "ai" && status.state === "playing" && moves.length > 0) {
+    if (
+      mode === "ai" &&
+      status.state === "playing" &&
+      moves.length > 0 &&
+      bootMovesBaselineRef.current !== null &&
+      moves.length === bootMovesBaselineRef.current
+    ) {
       const targetAiStone = getAiStone(aiGame.firstPlayer);
       if (nextPlayer === targetAiStone) {
         hasHealedRef.current = true;
@@ -161,6 +212,8 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     nextDifficulty?: AiDifficulty;
     nextFirstPlayer?: FirstPlayer;
   } = {}) => {
+    hasHealedRef.current = true;
+    hasRestoredBootRef.current = true;
     clearActiveGame();
     aiGame.cancelAiTurn();
     const snapshot = aiGame.createInitialSnapshot(nextMode, nextDifficulty, nextFirstPlayer);
@@ -169,6 +222,10 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     setNextPlayer(snapshot.nextPlayer);
     setStatus(snapshot.status);
     setMoves(snapshot.moves);
+
+    if (nextMode === "ai" && snapshot.moves.length > 0) {
+      saveActiveAiGame(snapshot.moves, nextDifficulty, nextFirstPlayer, aiGame.getOpeningSeed());
+    }
   }, [aiGame, mode]);
 
   useEffect(() => {
@@ -177,6 +234,7 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
 
   function completeModeChange(nextMode: GameMode) {
     hasHealedRef.current = true;
+    hasRestoredBootRef.current = true;
     clearActiveGame();
     saveSelectedWorkspace(nextMode);
 
@@ -294,6 +352,9 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
     if (moves.length === 0 || (mode === "ai" && aiGame.firstPlayer === "ai" && moves.length <= 1)) {
       return;
     }
+
+    hasHealedRef.current = true;
+    hasRestoredBootRef.current = true;
 
     const removeCount = mode === "ai" && moves.length >= 2 && moves.at(-1)?.stone === aiStone ? 2 : 1;
     const remainingMoves = moves.slice(0, Math.max(0, moves.length - removeCount));

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useSyncExternalStore } from "react";
+import { createBoard, getGameResult, placeStone } from "@/game/board";
+import type { Board, GameStatus, Move, Stone } from "@/game/types";
 import type { GameMode } from "./online/workspace-state";
 import {
   readActiveGame,
@@ -9,6 +11,43 @@ import {
 } from "@/lib/game-persistence";
 
 export const DEFAULT_GAME_MODE: GameMode = "local";
+
+export type RestoredGameSnapshot = {
+  board: Board;
+  moves: Move[];
+  status: GameStatus;
+  nextPlayer: Stone;
+};
+
+/**
+ * 纯函数：根据持久化的活跃对局快照完整回放棋面、推导终局判定与下一手颜色
+ */
+export function restoreBootActiveGameSnapshot(
+  activeGame: StoredActiveGame
+): RestoredGameSnapshot {
+  const restoredBoard = activeGame.moves.reduce(
+    (currentBoard, move) => placeStone(currentBoard, move, move.stone),
+    createBoard()
+  );
+  const lastMove = activeGame.moves.at(-1);
+  if (!lastMove) {
+    return {
+      board: restoredBoard,
+      moves: [],
+      status: { state: "playing", nextPlayer: "black" },
+      nextPlayer: "black"
+    };
+  }
+  const restoredResult = getGameResult(restoredBoard, lastMove, lastMove.stone);
+  const nextStone =
+    restoredResult.state === "playing" ? restoredResult.nextPlayer : (lastMove.stone ?? "black");
+  return {
+    board: restoredBoard,
+    moves: activeGame.moves,
+    status: restoredResult,
+    nextPlayer: nextStone
+  };
+}
 
 // 启动快照只在页面加载时读一次；之后的变更由 React 状态接管，所以订阅是空实现。
 export function subscribeToBootState(): () => void {

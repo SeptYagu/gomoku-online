@@ -381,6 +381,18 @@ export function useAiGame({
     return createInitialGameState(targetMode, targetDifficulty, targetFirstPlayer, newSeed);
   }, [aiDifficulty, firstPlayer, mode]);
 
+  const restoreSettings = useCallback((
+    difficulty: AiDifficulty,
+    player: FirstPlayer,
+    seed: number
+  ) => {
+    setAiDifficulty(difficulty);
+    setFirstPlayer(player);
+    openingSeedRef.current = seed;
+    setPendingDifficulty(null);
+    setPendingFirstPlayer(null);
+  }, []);
+
   return {
     aiDifficulty,
     setAiDifficulty,
@@ -400,7 +412,8 @@ export function useAiGame({
     commitAiTurn,
     cancelAiTurn,
     applyPendingSettingsOnModeEnter,
-    createInitialSnapshot
+    createInitialSnapshot,
+    restoreSettings
   };
 }
 
