@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`8657f29 feat(feedback): implement flat storage feedback system with 6-locale i18n`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`5a55ac64 fix(feedback): resolve Round 1 review defects P1-1, P2-1, P3-3, P3-4, P3-5`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔍 **用户反馈系统 (Feedback) Round 1 缺陷闭环 · 独立审查 Round 2 复查（被审 `5a55ac64`）**：**审查未通过**。0×P0/P1；**2×P2、1×P3**。Round 1 五项中 **P1-1/P3-3/P3-4/P3-5 经独立探针证实已真正闭环**（真实生产服务端同 IP 前 5 次 `201`、第 6 次 `429` + `retry-after=600`、`data/feedback` 仅新增 5 文件；64 KiB 严格字节语义 65536→400 / 65537→413；伪造 `locale` 与 `zh-CN` 归一化为 `"unknown"`、`ar` 原样保留；`smoke:feedback` 两次连跑全绿），但 **P2-1 仅部分闭环**。**P2-1**：`src/server/feedback-api.ts:131-139` 在响应 `finish` 时 `request.destroy()` 掐断仍在上行的 socket，实测体长 128 KiB~10 MiB 在标准 Node HTTP 服务端上 **3/3 轮 `ECONNRESET`（零字节响应）**，真实 `net` socket 持续上行 5 MiB 时 **5/5 收到 0 字节**，Round 1 §四 明文要求的「65537 与 10 MiB 均返回 413（而非连接重置）」未达成（根因需以 lingering close / 读至 `end` 再回写替代立即 destroy）。**P2-2（本轮新引入回归）**：`feedback-api.ts:43-57` 丢掉 Round 1 原有的 `request.setEncoding("utf8")`，改逐 chunk `Buffer.toString()`，**多字节 UTF-8 字符跨 chunk 被解码为 `U+FFFD`**——真实服务端实测 CJK 正文切裂写入后落盘长度 102（发送 100）、3 个替换字符、与源串不一致，且 HTTP 仍 `201`（静默数据损坏）。**P3-1**：413 守门用例仅覆盖 `MAX+100`（70 KiB），MiB 级与「持续上行」竞态零覆盖，是 P2-1 逃逸门禁的直接原因。四道门禁独立复跑全绿（tsc 0 / lint 0 错误 0 警告 / vitest 35 套 324 例 / build 18/18）。详见 [`docs/handoff/2026-09-18-feedback-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-workbuddy-code-review-round2-handoff.md)。
 
 - 🔄 **用户反馈系统 (Feedback) Round 1 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 1 源码审查报告（提交 `42daaed`，报告：[`docs/handoff/2026-09-18-feedback-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-18-feedback-workbuddy-code-review-round1-handoff.md)）指出的 5 项缺陷实施 100% 闭环修复：①P1-1 修复限流守门 `feedbackLimiter.consume(clientKey)` 对象真值判断，改为判定 `.allowed` 并携带 `retry-after` 响应头阻断后续落盘；②P2-1 修复大报文 `request.destroy()` 掐断 socket 缺陷，升级为抛出 `PayloadTooLargeError` 并返回规范 HTTP 413 (`Payload too large`) + `Connection: close`，流排空后释放连接彻底消除连接重置；③P3-3 修复 UTF-16 字符计数漏洞，按 UTF-8 真实字节数累加，严格截断超过 64 KiB 的 CJK/Emoji 报文；④P3-4 接入 `isLocale()` 白名单校验，将非法、超长伪造值归一化为 `"unknown"`，合法语种保持原样；⑤P3-5 新增 `src/server/feedback-api.test.ts` 真实 HTTP 路由测试（10 项测试全绿）并在 `tools/smoke-feedback.ts` 补齐 413 与 429 断言；四道门禁全绿（35 套 / 324 项单测全绿，Next.js 生产构建 18/18 页面通过），准备派发 WorkBuddy 独立代码审查 Round 2。详见 [`docs/handoff/2026-09-18-feedback-round1-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-round1-remediation-handoff.md)。
 
