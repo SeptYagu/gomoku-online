@@ -48,7 +48,7 @@
 
 ### P3-1 重试路径真实同步停顿 ~30ms，与代码注释及三处交付文档声明的「≤15ms／远低于 20ms 门限」不符，未达 Round 1 自设的 <20ms 修复验收线
 
-- **文件与行号**：`src/server/jsonl-file.ts:63-65`（`sleepSync`）、`:96-98`（`sleep(5 * attempt)`）、`:73-80`（docstring「`blocking the event loop for more than ~15ms total`」）；声明出处：`docs/handoff/2026-09-18-feedback-button-label-round1-remediation-handoff.md:17`、`STATUS.md:35`、`docs/handoff/INDEX.md` 本轮新增行。
+- **文件与行号**：`src/server/jsonl-file.ts:63-65`（`sleepSync`）、`:96-98`（`sleep(5 * attempt)`）、`:73-80`（docstring「`blocking the event loop for more than ~15ms total`」）；声明出处：`docs/handoff/2026-09-18-feedback-button-label-round1-remediation-handoff.md:15`、`STATUS.md:37`、`docs/handoff/INDEX.md:19`。
 - **触发条件**：Windows 下目标文件被占用返回 `EPERM`/`EBUSY` 且锁在重试窗口内未释放 —— 本机用 `openSync(dest, "r")` 即可确定性制造（只读句柄亦 EPERM）；数据目录位于 OneDrive 同步目录，正是该逻辑声明要覆盖的场景。
 - **实际行为**：单次 `rewriteJsonlFile` 在持续 `EPERM` 下**同步占用 34.86ms**，期间 10ms 采样器零次获得执行、30ms 短定时器一次未触发：
 
@@ -102,5 +102,5 @@
 
 ### 附：非缺陷建议（不计入分级）
 
-- `docs/handoff/2026-09-18-feedback-button-label-round1-remediation-handoff.md:52` 的「待审提交 (HEAD_SHA)」仍为占位文字「本轮修复提交」，未回填 `57a73f1`（与 Round 1 对 feature handoff 的同类建议一致，纯文书细节）。
+- `docs/handoff/2026-09-18-feedback-button-label-round1-remediation-handoff.md:53` 的「待审提交 (HEAD_SHA)」仍为占位文字「本轮修复提交」，未回填 `57a73f1`（与 Round 1 对 feature handoff 的同类建议一致，纯文书细节）。
 - `src/server/jsonl-file.ts:90` 的循环在 `maxAttempts <= 0` 时会直接落空返回（既未 rename 也不抛错，调用方会误判成功且残留 `.compact.tmp`）。该缺口自 Round 1 引入且本轮未触碰、仓库内无任何调用方传入该值，故按防漂移规则**不计入分级**；若顺手修复，一行 `Math.max(1, ...)` 即可。
