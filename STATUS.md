@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`5a55ac6 fix(feedback): resolve Round 1 review defects P1-1, P2-1, P3-3, P3-4, P3-5`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`d85a255 fix(feedback): resolve Round 2 review defects P2-1, P2-2, P3-1`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 329 项用例 100% 通过（新增 `src/server/feedback-api.test.ts` 15 项测试，覆盖 201/400/405/413/429/locale 归一化、64 KiB 边界、1 MiB、10 MiB、分片 streaming 상行及多字节跨 chunk 重组）
+- **单元测试** (`npm test`)：35 个测试套件 / 329 项用例 100% 通过（新增 `src/server/feedback-api.test.ts` 15 项测试，覆盖 201/400/405/413/429/locale 归一化、64 KiB 边界、1 MiB、10 MiB、分片 streaming 上行及多字节跨 chunk 重组）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🏁 **用户反馈系统 (Feedback) 源码实现与全链路防护 · 独立审查 Round 3 复查（被审 `d85a255`）**：**审查通过（PASS）**。0×P0 / 0×P1 / 0×P2 / 0×P3，无实质性待确认风险。通过项：①Round 2 三项缺陷（P2-1 大报文 TCP RST、P2-2 UTF-8 跨 chunk 切裂 U+FFFD 损坏、P3-1 守门用例区间扩充）经 6 组独立探针（约 90 次请求，涵盖真实生产服务与 raw socket 持续分片上行 1 MiB/10 MiB、Chunked 编码、CJK/Emoji 字符切裂）全部严格闭环验证；②四道门禁独立复跑全绿（tsc 0 错误 / lint 0 错误 0 警告 / vitest 35 套 329 例全绿 / build 18/18 页面预渲染通过）；③`/api/account/register` 零回归；④目录存储合规（单一 `data/feedback/` 扁平零子目录，原子落盘且仅落盘 201 合法请求）。用户反馈系统全量代码审查闭环圆满达成！
 
 - 🔄 **用户反馈系统 (Feedback) Round 2 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 2 源码审查报告（提交 `8b3e165`，报告：[`docs/handoff/2026-09-18-feedback-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-workbuddy-code-review-round2-handoff.md)）指出的 3 项缺陷（2×P2, 1×P3）实施 100% 闭环修复：①P2-1 修复 ≥128 KiB 及 10 MiB 超限报文 TCP RST 导致 413 不可观测缺陷，重构 `readFeedbackJsonBody` 在 `bytesRead > maxBytes` (64 KiB) 时停止累加但自然排空至 `end`（设 15 MiB 硬上限保护），在 `end` 事件中 reject 并返回规范 HTTP 413，移除抢跑 destroy，彻底消除 ECONNRESET；②P2-2 修复 chunk 边界切裂多字节 UTF-8 字符（CJK 3 字节、Emoji 4 字节）导致 `\uFFFD` 损坏落盘缺陷，恢复调用 `request.setEncoding("utf8")` 由 Node 内部 `StringDecoder` 跨 chunk 重组多字节字符，落盘正文 100% 逐字符一致；③P3-1 扩充 413 守门用例至 1 MiB、10 MiB、raw net socket 持续流式传输以及 64 KiB 精确边界校验（单测扩充至 15 项），`smoke:feedback` 超限档位提升至 1 MiB；四道门禁全绿（35 套 / 329 项单测全绿，Next.js 生产构建 18/18 页面通过），准备派发 WorkBuddy 独立代码审查 Round 3。详见 [`docs/handoff/2026-09-18-feedback-round2-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-round2-remediation-handoff.md)。
 
