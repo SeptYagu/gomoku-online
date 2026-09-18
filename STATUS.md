@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`d317764 feat(ui): add text label to feedback button in navigation`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`57a73f1 fix(feedback): resolve Round 1 review findings P2-1, P3-1, P3-2`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 334 项用例 100% 通过（新增 `src/server/jsonl-file.test.ts` 5 项测试，覆盖原子重命名重试容错、EACCES 快速失败、睡眠预算上限受控与失败临时文件安全清理）
+- **单元测试** (`npm test`)：35 个测试套件 / 334 项用例；⚠️ **不稳定**（2026-09-18 Round 2 复查实测：连续 10 次全量运行 **2 次红 / 8 次绿**，均红在 `src/server/jsonl-file.test.ts:187` 的墙钟断言 `elapsed < 40`，实测值 54ms / 143ms）—— 详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md) 的 P2-1
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- ⚠️ **反馈入口按钮文字标签 + Windows 文件重写锁容错 · 独立审查 Round 2 复查（被审 `57a73f1`）**：**审查未通过**。0×P0 / 0×P1 / **1×P2 / 1×P3**。①**P2-1**：`src/server/jsonl-file.test.ts:187` 的墙钟断言 `expect(elapsed).toBeLessThan(40)` 在**全量** `npm test`（35 套并行 worker 池）下不稳定变红 —— 本机连续 10 次实测 **2 红 / 8 绿**（红值 54ms、143ms；单跑该文件恒绿）。根因：该重试路径真实代价 `p50=30.5ms`，与 40ms 上界余量不足 10ms（Windows 默认定时器粒度 15.625ms 使 `Atomics.wait(5)` 实睡 15.26ms、`Atomics.wait(10)` 实睡 15.20ms，请求 5+10=15ms 实付 30.67ms），且 6 核 CPU 饱和下该耗时分布达 `p90=48.6 / max=51.3ms`，上界本身即低于高负载分布 → 验收标准 6「四道门禁全绿」不可复现。②**P3-1**：实测持续 EPERM 下单次 `rewriteJsonlFile` **同步占用 34.86ms**（10ms 采样器零执行、30ms 定时器未触发），越过其自设的「< 20ms」修复验收线与文档声明的「≤ 15ms」预算约 2 倍；`online-server.ts` 单进程托管 Next.js + Socket.IO 且 `persist()→compactFile()` 同步执行 ⇒ 一次持续锁即冻结全服约 30~35ms（相对基线约 5ms 属有界回归）→ Round 1 P2-1 属**部分闭环**（忙等已除、白名单已收敛，但未达 <20ms）。通过项：生产预渲染产物 6 语种 `aria-label === 可见文本`（WCAG 2.5.3 全达标）、`navLabel` 6 语种齐全、零硬编码 left/right、`ar` 为 RTL；Round 1 P3-1/P3-2 经 3 组变异探针 + a11y 逐语种核验确属真闭环；重试语义经独立端到端证实生效（外部进程 20ms 释放锁即成功落盘，持续占用则旧文件不损坏且 temp 已清理）；tsc 0 / lint 0 错误 0 警告 / build 18/18 全绿，`smoke:persistence` 干净端口 5/5 通过。详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md)。
 
 - 🔄 **反馈入口按钮文字标签与文件重写锁容错 Round 1 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 1 源码审查报告（提交 `c83a0ea`，报告：[`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round1-handoff.md)）指出的 3 项缺陷（1×P2, 2×P3）实施 100% 闭环修复：①P2-1 彻底移除 `atomicRenameSync` 的 CPU 忙等循环，改用 Node.js 主线程原生支持的 `Atomics.wait(sleepBuffer, 0, 0, ms)`，重试上限设为 3 次、总睡眠预算严格控制在 ≤ 15ms（远低于 20ms 门限，绝不阻塞 Socket.IO 心跳与 HTTP 响应），错误码白名单严格收敛至 EPERM/EBUSY，并在 `rewriteJsonlFile` 失败时自动安全 unlink 清理 `.compact.tmp`；②P3-1 在 `jsonl-file.test.ts` 补齐 5 项针对性自动化测试（瞬态失败后重试成功、非瞬态 EACCES 快速失败、持续 EPERM 上限受控且延迟极低、失败临时文件清理），且经变异探针实测篡改 `maxAttempts=1` 时立刻变红；③P3-2 将 `GameShell.tsx` 反馈链接的 `aria-label` 改为 `feedbackDictionary.navLabel`，使 6 语种可访问名称完全等于可见文本，100% 满足 WCAG 2.5.3 (Label in Name)；本地四道门禁全绿（35 套 / 334 项单测全绿，Next.js 生产构建 18/18 页面通过）。详见 [`docs/handoff/2026-09-18-feedback-button-label-round1-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round1-remediation-handoff.md)。
 
