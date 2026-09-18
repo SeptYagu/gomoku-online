@@ -6,8 +6,11 @@ import type { PublicChatMessage } from "@/server/rooms";
 import { createChatSendGate, type ChatSendGate } from "../chat-send-gate";
 import {
   clearGuestToken,
+  createAndPersistPlayerId,
   DEFAULT_CHAT_SEND_TIMEOUT_ERROR,
+  isEphemeralSession,
   isPublicChatSnapshot,
+  persistGuestToken,
   persistPlayerName,
   type PlayerAuthPayload,
   type RoomSocket,
@@ -140,19 +143,42 @@ export function useRoomChat({
         setIsSendingPublicChat(false);
 
         if (!response.ok) {
-          if (response.error.code === "guest-session-invalid") {
-            clearGuestToken();
-            const freshPlayer = getActivePlayer();
+          if (!player.accountToken && response.error.code === "guest-session-invalid") {
+            const isEphemeral = isEphemeralSession();
+            clearGuestToken({ ephemeralOnly: isEphemeral });
+            const freshPlayer: PlayerAuthPayload = {
+              playerId: createAndPersistPlayerId({ ephemeralOnly: isEphemeral }),
+              playerName: player.playerName,
+              resetGuestIdentity: true
+            };
+
+            if (
+              !gate.begin(() => {
+                setIsSendingPublicChat(false);
+                setError(messages?.chatSendTimeout ?? DEFAULT_CHAT_SEND_TIMEOUT_ERROR);
+                setPublicChatText((current) => (current ? current : text));
+              })
+            ) {
+              return;
+            }
+
             setIsSendingPublicChat(true);
             ensureSocket().emit(
               "public-chat:send",
               { ...freshPlayer, resetGuestIdentity: true, text },
               (retryResponse: PublicChatAck) => {
+                gate.settle();
                 setIsSendingPublicChat(false);
                 if (!retryResponse.ok) {
                   setError(retryResponse.error.message);
                   setPublicChatText((current) => (current ? current : text));
                   return;
+                }
+
+                if (retryResponse.value.guestToken) {
+                  persistGuestToken(retryResponse.value.guestToken, {
+                    ephemeralOnly: isEphemeral
+                  });
                 }
 
                 setPublicChatMessages(retryResponse.value.messages);
@@ -166,6 +192,12 @@ export function useRoomChat({
           setError(response.error.message);
           setPublicChatText((current) => (current ? current : text));
           return;
+        }
+
+        if (response.value.guestToken) {
+          persistGuestToken(response.value.guestToken, {
+            ephemeralOnly: isEphemeralSession()
+          });
         }
 
         setPublicChatMessages(response.value.messages);

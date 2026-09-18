@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`2c1fba6 fix(accounts): resolve round 1 code review findings for guest identity and compaction`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「访客身份持久化与自愈」Round 2 独立复审交付，按先例记录直接父提交即被审产品交付 `2c1fba6`）
+- **最新阶段交付提交**：`d39a2dd docs(review): add workbuddy round2 review for guest identity round1 remediation`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「访客身份持久化与自愈」Round 2 缺陷闭环交付，按先例记录直接父提交即 WorkBuddy Round 2 复审报告 `d39a2dd`）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：32 个测试套件 / 297 项用例 100% 通过（新增访客持久化、30天滑动过期、节流压缩记账、标签页分身物理隔离守门套件、超阈值文件纯追加防重写守门、公聊抑制与大厅 token 复用套件）
+- **单元测试** (`npm test`)：32 个测试套件 / 302 项用例 100% 通过（新增访客持久化、30天滑动过期、节流压缩记账、标签页分身物理隔离守门套件、超阈值文件纯追加防重写与边界收拢变异守门、公聊抑制/看门狗与大厅/公聊 token 复用套件）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence`)：S-A、S-E、S-B、S-C、S-F 全场景 5/5 100% 通过（覆盖真实无头 Chrome CDP 下软导航 + StrictMode 恢复与 AI 自动走子）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **访客身份持久化与自愈 Round 2 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 2 源码审查报告（提交 `d39a2dd`，报告：[`docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md)）指出的 4 项 P3 缺陷实施 100% 闭环修复：①P3-1 守门单测改用 `rewriteJsonlFile` spy 观测真实重写次数（断言 5 次创建 0 次 rewrite），增补 200 行超阈值边界压缩用例（断言恰 1 次 rewrite 且收拢至 20 行），经变异探针实测两用例均变红；②P3-2 `useRoomChat` 移除 `getActivePlayer()` 读存储回落，显式构造全新 payload，防范分身标签页复活 localStorage 死 token 导致二次失败与红字；③P3-3 公聊自愈重发接入 `ChatSendGate` 看门狗与超时复位，根治未响应 ack 下发送按钮永久锁死；④P3-4 `PublicChatSnapshot` 扩展 `guestToken`，服务端透传至 ACK 且客户端落盘复用，实现身份长效保持与文件行数收敛；四道门禁全绿（32 套 / 302 例单测全绿，Next.js 生产构建通过），准备派发 WorkBuddy 独立代码审查 Round 3。详见 [`docs/handoff/2026-09-18-persistent-guest-identity-round2-remediation-handoff.md`](docs/handoff/2026-09-18-persistent-guest-identity-round2-remediation-handoff.md)。
 
 - 🛑 **访客身份持久化、30天滑动TTL与全链路静默自愈 · 源码实现修复独立审查 Round 2 复查（被审 `2c1fba6`）**：**审查未通过**。0×P0/P1/P2；**4×P3**。通过项：Round 1 五项缺陷的代码层面修复经独立探针**证实有效**——P2-1 压缩语义修复实测"存活 15 行 / 阈值 10 下连续 5 次落盘 = 5 次纯追加、0 次 rewrite"，且死行 185 行超阈值时仍恰 1 次 rewrite（行数 200→20，未把压缩一并关掉）；P3-4 `presence:join` 回传 + 客户端写回实测"3 次模拟匿名页面加载 → `guest-sessions.jsonl` 恒 1 行、token 三次一致"；P3-2 重连改走 `clearClosedRoom`、P3-3 坏行容忍用例重写（真实 token 反向鉴权 + 未知 token 返回 null）经代码路径核验闭环；服务端公聊抑制（`room-socket.ts:1092-1096`）生效。缺陷 P3-1：新增的 P2-1 守门单测（`accounts.test.ts:401-431`）为**恒真断言**——"5 次 `createSession` 后行数 = 初值 + 5"在"每次全量重写"与"纯追加"两实现下**恒成立**（压缩重写的永远是存活集，每次创建恰 +1 行）；变异探针（`reset` 回退为 `appended = liveLines`，语义实测 `[true,true,true]`）下该用例与 `accounts.test.ts` 全量 **16 例均仍绿**，改以 `rewriteJsonlFile` 计数观测则收到 **5 次 rewrite 并变红**——Round 1 §四 明文要求的"变异探针必须变红"未达成，写放大回归零守门。P3-2：`useRoomChat.ts:144-149` 自愈重发以 `getActivePlayer()` 重建 payload，而 ephemeral 标签页下 `clearGuestToken()` 故意跳过 localStorage、`readGuestToken()` 又回落读出同一个失效主 token，重发 payload 必然携带死 token（`room-socket.ts:639-641` 在 `resetGuestIdentity` 时只采信 payload token、不铸新会话）→ **必然二次失败并上屏 `guest-session-invalid` 红字**（两段式实测：无 token+resetGuestIdentity → ok / 带回落 token+resetGuestIdentity → guest-session-invalid），Round 1 P3-1 未真正闭环且该标签页不可自愈。P3-3：重发 emit 绕过 `ChatSendGate`（`:139` 已 settle、重发无 `begin()` 看门狗），ack 被静默丢弃时 `isSendingPublicChat` 永久为 true、公聊发送按钮锁死（违背 `chat-send-gate.ts` 自述的"防永久锁死"不变量）。P3-4：`PublicChatAck`（`room-contract.ts:43-51`）不回传 `guestToken` 且客户端重发成功后不写回，新签发身份只存活于 `socket.data` 缓存，下次页面加载即铸造新会话——身份重置（验收标准 1 断裂）且 `guest-sessions.jsonl` 每轮 +1 行。独立验证：自建 4 项运行时探针（压缩重写计数、Storage 回落复活、Socket 重发 payload、匿名页面加载行数收敛）+ 1 项变异探针 + 1 项压缩边界探针（活/死行超阈值），3 项成功触发反例；`tsc`/`lint` 0 问题、`vitest` 32 套 297 例全绿（`build` 本轮未复跑，已登记为未验证项）。详见 [`docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md)。
 

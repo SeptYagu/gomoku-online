@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AccountStore, GuestSessionStore, resolvePlayerIdentity } from "./accounts";
+import * as jsonlFile from "./jsonl-file";
 
 describe("AccountStore", () => {
   it("creates persistent registered account sessions without storing plaintext tokens", () => {
@@ -414,6 +415,11 @@ describe("AccountStore", () => {
       const initialLines = readRawFile(filePath).trim().split("\n").length;
       expect(initialLines).toBeGreaterThanOrEqual(15);
 
+      const rewriteSpy = vi.spyOn(jsonlFile, "rewriteJsonlFile");
+      const appendSpy = vi.spyOn(jsonlFile, "appendJsonlLine");
+      rewriteSpy.mockClear();
+      appendSpy.mockClear();
+
       // Now load in a fresh store (simulating server restart with file >= threshold)
       const store = new GuestSessionStore({ compactAfterLines, filePath, now: () => now });
 
@@ -422,9 +428,79 @@ describe("AccountStore", () => {
         expectOk(store.createSession({ playerId: `g-new-${i}`, playerName: `New ${i}` }));
       }
 
-      // The 5 creates must be pure appends (initialLines + 5) and NOT trigger 5 full rewrites
+      // The 5 creates must be pure appends (0 rewrites) and NOT trigger full rewrites
+      expect(appendSpy).toHaveBeenCalledTimes(5);
+      expect(rewriteSpy).toHaveBeenCalledTimes(0);
+
       const currentLines = readRawFile(filePath).trim().split("\n").length;
       expect(currentLines).toBe(initialLines + 5);
+
+      rewriteSpy.mockRestore();
+      appendSpy.mockRestore();
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("triggers exactly one compaction when loaded file has dead lines exceeding threshold", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-guest-compaction-boundary-"));
+    const filePath = join(tempDir, "guest-sessions.jsonl");
+
+    try {
+      const now = 1_000;
+      const compactAfterLines = 10;
+      // Seed a file with 15 live entries
+      const initialStore = new GuestSessionStore({ compactAfterLines: 10_000, filePath, now: () => now });
+      for (let i = 0; i < 15; i += 1) {
+        expectOk(initialStore.createSession({ playerId: `g-live-${i}`, playerName: `Live ${i}` }));
+      }
+
+      // Append 185 churn/overwritten lines for one player so file has 200 lines but only 15 live entries
+      for (let i = 0; i < 185; i += 1) {
+        appendFileSync(
+          filePath,
+          JSON.stringify({
+            session: {
+              createdAt: now,
+              lastSeenAt: now,
+              playerId: "g-live-0",
+              playerName: `Overwritten ${i}`,
+              tokenHash: `hash-churn-${i}`
+            },
+            type: "guest-session",
+            writtenAt: now
+          }) + "\n",
+          "utf8"
+        );
+      }
+
+      const totalLines = readRawFile(filePath).trim().split("\n").length;
+      expect(totalLines).toBe(200);
+
+      const rewriteSpy = vi.spyOn(jsonlFile, "rewriteJsonlFile");
+      const appendSpy = vi.spyOn(jsonlFile, "appendJsonlLine");
+      rewriteSpy.mockClear();
+      appendSpy.mockClear();
+
+      // Now load in a fresh store (15 live sessions, 200 total lines, threshold = 10)
+      const store = new GuestSessionStore({ compactAfterLines, filePath, now: () => now });
+
+      // Perform 5 consecutive createSession calls
+      for (let i = 0; i < 5; i += 1) {
+        expectOk(store.createSession({ playerId: `g-boundary-${i}`, playerName: `Boundary ${i}` }));
+      }
+
+      // First createSession must trigger exactly 1 compaction (185 dead lines > 10 threshold).
+      // Remaining 4 creates are pure appends without further rewrites.
+      expect(rewriteSpy).toHaveBeenCalledTimes(1);
+      expect(appendSpy).toHaveBeenCalledTimes(5);
+
+      // Final file lines must be compacted down to exactly 20 (15 live + 5 new)
+      const compactedLines = readRawFile(filePath).trim().split("\n").length;
+      expect(compactedLines).toBe(20);
+
+      rewriteSpy.mockRestore();
+      appendSpy.mockRestore();
     } finally {
       rmSync(tempDir, { force: true, recursive: true });
     }

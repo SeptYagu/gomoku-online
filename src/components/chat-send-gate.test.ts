@@ -70,4 +70,33 @@ describe("chat send gate", () => {
     expect(gate.isInFlight()).toBe(false);
     expect(gate.begin(onTimeout)).toBe(true);
   });
+
+  it("guards self-healing retry so an un-acked retry resets the gate instead of permanently locking", () => {
+    vi.useFakeTimers();
+
+    const gate = createChatSendGate();
+    const onInitialTimeout = vi.fn();
+    const onRetryTimeout = vi.fn();
+
+    // 1. Initial send
+    expect(gate.begin(onInitialTimeout)).toBe(true);
+    expect(gate.isInFlight()).toBe(true);
+
+    // Initial response arrives with error (e.g. guest-session-invalid), gate settled
+    gate.settle();
+    expect(gate.isInFlight()).toBe(false);
+    expect(onInitialTimeout).not.toHaveBeenCalled();
+
+    // 2. Self-healing retry must begin a new watchdog
+    expect(gate.begin(onRetryTimeout)).toBe(true);
+    expect(gate.isInFlight()).toBe(true);
+
+    // 3. Retry ack dropped / never arrives
+    vi.advanceTimersByTime(CHAT_ACK_TIMEOUT_MS);
+    expect(onRetryTimeout).toHaveBeenCalledTimes(1);
+    expect(gate.isInFlight()).toBe(false);
+
+    // Gate is open again for next user attempt
+    expect(gate.begin(vi.fn())).toBe(true);
+  });
 });

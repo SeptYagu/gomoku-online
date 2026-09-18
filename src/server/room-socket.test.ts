@@ -990,6 +990,87 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("returns guestToken in public-chat:send and reuses the session without creating new ones", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const client1 = await harness.connectClient();
+
+      // First public-chat:send without token -> mints a new guest session and returns guestToken in ack
+      const firstSend = await emitAck<PublicChatAck>(
+        client1,
+        "public-chat:send",
+        {
+          playerId: "chat-guest-initial",
+          playerName: "Chatter",
+          text: "hello 1"
+        }
+      );
+
+      expect(firstSend.ok).toBe(true);
+      if (!firstSend.ok) throw new Error("Expected ok");
+      expect(firstSend.value.guestToken).toEqual(expect.any(String));
+      const mintedToken = firstSend.value.guestToken!;
+
+      // Wait for ROOM_CHAT_COOLDOWN_MS (800ms) before sending second message with same player identity
+      await new Promise((resolve) => setTimeout(resolve, 850));
+
+      // A second client connects presenting the returned guestToken
+      const client2 = await harness.connectClient();
+      const secondSend = await emitAck<PublicChatAck>(
+        client2,
+        "public-chat:send",
+        {
+          guestToken: mintedToken,
+          playerId: "chat-guest-initial",
+          playerName: "Chatter",
+          text: "hello 2"
+        }
+      );
+
+      expect(secondSend.ok).toBe(true);
+      if (!secondSend.ok) throw new Error("Expected ok");
+      expect(secondSend.value.guestToken).toBe(mintedToken);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("mints fresh guestToken on public-chat:send self-healing with resetGuestIdentity", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const client = await harness.connectClient();
+
+      // Initial send with dead token fails with guest-session-invalid
+      const failedSend = await emitAck<PublicChatAck>(client, "public-chat:send", {
+        guestToken: "dead-token-12345",
+        playerId: "chat-guest-stale",
+        playerName: "StaleChatter",
+        text: "stale msg"
+      });
+
+      expect(failedSend.ok).toBe(false);
+      if (failedSend.ok) throw new Error("Expected failure");
+      expect(failedSend.error.code).toBe("guest-session-invalid");
+
+      // Self-healing retry: send with resetGuestIdentity: true and fresh playerId without guestToken
+      const retrySend = await emitAck<PublicChatAck>(client, "public-chat:send", {
+        playerId: "chat-guest-fresh",
+        playerName: "StaleChatter",
+        resetGuestIdentity: true,
+        text: "healed msg"
+      });
+
+      expect(retrySend.ok).toBe(true);
+      if (!retrySend.ok) throw new Error("Expected ok");
+      expect(retrySend.value.guestToken).toEqual(expect.any(String));
+      expect(retrySend.value.guestToken).not.toBe("dead-token-12345");
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("keeps a player connected while another authenticated socket remains bound", async () => {
     const harness = await createSocketHarness();
 

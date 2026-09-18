@@ -199,4 +199,42 @@ describe("room-state-utils client storage & ephemeral tab isolation", () => {
     expect(getOrCreatePlayerId()).toBe(primaryPlayerId);
     expect(readPlayerName()).toBe(primaryPlayerName);
   });
+
+  it("protects ephemeral tabs from reviving dead primary localStorage token during chat self-healing", () => {
+    // Primary tab baseline credentials in localStorage
+    const deadPrimaryToken = "dead-primary-token-guid";
+    mockLocalStorage.setItem(GUEST_TOKEN_STORAGE_KEY, deadPrimaryToken);
+    mockLocalStorage.setItem(PLAYER_ID_STORAGE_KEY, "primary-player-id");
+    mockLocalStorage.setItem(PLAYER_NAME_STORAGE_KEY, "Primary Player");
+
+    // Avatar tab marked as ephemeral
+    markEphemeralSession();
+    expect(isEphemeralSession()).toBe(true);
+
+    const staleAvatarToken = "stale-avatar-token";
+    mockSessionStorage.setItem(GUEST_TOKEN_STORAGE_KEY, staleAvatarToken);
+
+    // When guest-session-invalid occurs in chat:
+    // clearGuestToken with ephemeralOnly clears sessionStorage but preserves localStorage
+    clearGuestToken({ ephemeralOnly: isEphemeralSession() });
+    expect(mockSessionStorage.getItem(GUEST_TOKEN_STORAGE_KEY)).toBeNull();
+    // readGuestToken would fall back to deadPrimaryToken if called directly:
+    expect(readGuestToken()).toBe(deadPrimaryToken);
+
+    // The explicit self-healing payload construction does NOT call readGuestToken / getActivePlayer:
+    const freshPlayer = {
+      playerId: createAndPersistPlayerId({ ephemeralOnly: isEphemeralSession() }),
+      playerName: "Primary Player",
+      resetGuestIdentity: true
+    };
+    expect((freshPlayer as { guestToken?: string }).guestToken).toBeUndefined();
+
+    // When server returns fresh guestToken for avatar tab, persistGuestToken only writes to sessionStorage:
+    const healedAvatarToken = "healed-avatar-token-fresh";
+    persistGuestToken(healedAvatarToken, { ephemeralOnly: isEphemeralSession() });
+
+    expect(mockSessionStorage.getItem(GUEST_TOKEN_STORAGE_KEY)).toBe(healedAvatarToken);
+    // localStorage MUST remain untouched and byte-for-byte identical to baseline:
+    expect(mockLocalStorage.getItem(GUEST_TOKEN_STORAGE_KEY)).toBe(deadPrimaryToken);
+  });
 });

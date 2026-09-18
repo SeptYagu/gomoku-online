@@ -417,7 +417,14 @@ export function registerRoomSocketHandlers(
       }
 
       identifySocketPresence(socket, roomStore, player.value);
-      acknowledgeAndBroadcastPublicChat(io, socket, roomStore.sendPublicChat({ ...player.value, text: payload.text }), ack);
+      const guestToken = player.value.identity === "guest" ? player.value.guestToken : undefined;
+      acknowledgeAndBroadcastPublicChat(
+        io,
+        socket,
+        roomStore.sendPublicChat({ ...player.value, text: payload.text }),
+        ack,
+        guestToken
+      );
       broadcastPresence(io, roomStore);
     });
 
@@ -1085,9 +1092,20 @@ function acknowledgeAndBroadcastPublicChat(
   io: RoomSocketServer,
   socket: RoomSocket,
   response: PublicChatAck,
-  ack: (response: PublicChatAck) => void
+  ack: (response: PublicChatAck) => void,
+  guestToken?: string
 ) {
-  ack(response);
+  if (response.ok && guestToken) {
+    ack({
+      ok: true,
+      value: {
+        ...response.value,
+        guestToken
+      }
+    });
+  } else {
+    ack(response);
+  }
 
   if (!response.ok) {
     if (response.error.code !== "guest-session-invalid") {

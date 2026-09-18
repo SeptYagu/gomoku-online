@@ -57,6 +57,7 @@ export type PublicChatMessage = {
 
 export type PublicChatSnapshot = {
   generatedAt: number;
+  guestToken?: string;
   messages: PublicChatMessage[];
 };
 
