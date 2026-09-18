@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 329 项用例 100% 通过（新增 `src/server/feedback-api.test.ts` 15 项测试，覆盖 201/400/405/413/429/locale 归一化、64 KiB 边界、1 MiB、10 MiB、分片 streaming 上行及多字节跨 chunk 重组）
+- **单元测试** (`npm test`)：35 个测试套件 / 334 项用例 100% 通过（新增 `src/server/jsonl-file.test.ts` 5 项测试，覆盖原子重命名重试容错、EACCES 快速失败、睡眠预算上限受控与失败临时文件安全清理）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **反馈入口按钮文字标签与文件重写锁容错 Round 1 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 1 源码审查报告（提交 `c83a0ea`，报告：[`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round1-handoff.md)）指出的 3 项缺陷（1×P2, 2×P3）实施 100% 闭环修复：①P2-1 彻底移除 `atomicRenameSync` 的 CPU 忙等循环，改用 Node.js 主线程原生支持的 `Atomics.wait(sleepBuffer, 0, 0, ms)`，重试上限设为 3 次、总睡眠预算严格控制在 ≤ 15ms（远低于 20ms 门限，绝不阻塞 Socket.IO 心跳与 HTTP 响应），错误码白名单严格收敛至 EPERM/EBUSY，并在 `rewriteJsonlFile` 失败时自动安全 unlink 清理 `.compact.tmp`；②P3-1 在 `jsonl-file.test.ts` 补齐 5 项针对性自动化测试（瞬态失败后重试成功、非瞬态 EACCES 快速失败、持续 EPERM 上限受控且延迟极低、失败临时文件清理），且经变异探针实测篡改 `maxAttempts=1` 时立刻变红；③P3-2 将 `GameShell.tsx` 反馈链接的 `aria-label` 改为 `feedbackDictionary.navLabel`，使 6 语种可访问名称完全等于可见文本，100% 满足 WCAG 2.5.3 (Label in Name)；本地四道门禁全绿（35 套 / 334 项单测全绿，Next.js 生产构建 18/18 页面通过）。详见 [`docs/handoff/2026-09-18-feedback-button-label-round1-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round1-remediation-handoff.md)。
 
 - ⚠️ **反馈入口按钮文字标签 + Windows 文件重写重试 · 独立审查 Round 1（被审 `d317764`）**：**审查未通过**。0×P0 / 0×P1 / **1×P2 / 2×P3**。①**P2-1**：`src/server/jsonl-file.ts:61-76` 新增的 `atomicRenameSync` 以 `while (Date.now() - start < 15 * attempt) {}` 同步忙等实现退避，实测单次 `rewriteJsonlFile` **同步占用 697ms**（30ms 定时器零触发、10ms 采样器零执行，事件循环完全停摆），而全栈服务 `online-server.ts` 单进程托管 Next.js + Socket.IO，`persist()→compactFile()` 又在请求线程同步执行 → 停顿期内全部 HTTP/WS 与房间广播冻结，相对基线（单次 rename 快速失败）属明显延迟回归；须改非阻塞退避（`rewriteJsonlFile` → `async`）或压缩预算并改用 `Atomics.wait`，且重试白名单应收敛为 `EPERM`/`EBUSY`（`EACCES` 非瞬态）。②**P3-1**：本次 diff 未新增任何测试；变异探针把 `maxAttempts` 改为 1（等价删除重试）后 `jsonl-file.test.ts` 仍 5/5 全绿 → 验收标准 ④ 零守门。③**P3-2**：`src/components/GameShell.tsx:493` 的 `aria-label={feedbackDictionary.title}` 与 `:496` 新增可见文本 `navLabel` 不一致，实测 zh（意见反馈/用户反馈与建议）、fr、ru 三语种可访问名称不含可见文本，违反 WCAG 2.5.3 Label in Name（Level A）（en/es/ar 恰为前缀故未暴露）。通过项：6 语种标签真实浏览器渲染且镜像正确、6 语种 × 2 视口 × 2 布局共 24 组零横向溢出、字典三断言有效；四道门禁独立复跑全绿（tsc 0 / lint 0 错误 0 警告 / vitest 35 套 329 例 / build 18/18）。详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round1-handoff.md)。
 

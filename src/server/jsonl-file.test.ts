@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { appendJsonlLine, JsonlCompactionTracker, readJsonlFile, rewriteJsonlFile } from "./jsonl-file";
+import { describe, expect, it, vi } from "vitest";
+import { appendJsonlLine, atomicRenameSync, JsonlCompactionTracker, readJsonlFile, rewriteJsonlFile } from "./jsonl-file";
 
 describe("jsonl-file", () => {
   it("reads valid lines in order and counts corrupt ones instead of throwing", () => {
@@ -87,5 +87,118 @@ describe("jsonl-file", () => {
     for (let i = 0; i < 10; i += 1) {
       expect(tracker.noteAppend()).toBe(false);
     }
+  });
+
+  describe("atomicRenameSync", () => {
+    it("retries on transient EPERM/EBUSY and succeeds when lock clears", () => {
+      let attempts = 0;
+      const sleeps: number[] = [];
+      const renameFn = vi.fn(() => {
+        attempts += 1;
+        if (attempts === 1) {
+          const err = new Error("EPERM: operation not permitted") as NodeJS.ErrnoException;
+          err.code = "EPERM";
+          throw err;
+        }
+      });
+      const sleepFn = vi.fn((ms: number) => {
+        sleeps.push(ms);
+      });
+
+      expect(() =>
+        atomicRenameSync("temp.tmp", "target.jsonl", {
+          renameFn,
+          sleepFn
+        })
+      ).not.toThrow();
+
+      expect(attempts).toBe(2);
+      expect(renameFn).toHaveBeenCalledTimes(2);
+      expect(sleeps).toEqual([5]);
+    });
+
+    it("fails fast on non-transient errors like EACCES without retrying", () => {
+      let attempts = 0;
+      const sleepFn = vi.fn();
+      const renameFn = vi.fn(() => {
+        attempts += 1;
+        const err = new Error("EACCES: permission denied") as NodeJS.ErrnoException;
+        err.code = "EACCES";
+        throw err;
+      });
+
+      expect(() =>
+        atomicRenameSync("temp.tmp", "target.jsonl", {
+          maxAttempts: 3,
+          renameFn,
+          sleepFn
+        })
+      ).toThrow("EACCES");
+
+      expect(attempts).toBe(1);
+      expect(sleepFn).not.toHaveBeenCalled();
+    });
+
+    it("throws after exhausting maxAttempts when EPERM persists and bounds total sleep", () => {
+      let attempts = 0;
+      const sleeps: number[] = [];
+      const renameFn = vi.fn(() => {
+        attempts += 1;
+        const err = new Error("EPERM: operation not permitted") as NodeJS.ErrnoException;
+        err.code = "EPERM";
+        throw err;
+      });
+      const sleepFn = vi.fn((ms: number) => {
+        sleeps.push(ms);
+      });
+
+      expect(() =>
+        atomicRenameSync("temp.tmp", "target.jsonl", {
+          maxAttempts: 3,
+          renameFn,
+          sleepFn
+        })
+      ).toThrow("EPERM");
+
+      expect(attempts).toBe(3);
+      expect(sleeps).toEqual([5, 10]);
+      // Total sleep is bounded to <= 20ms
+      expect(sleeps.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(20);
+    });
+
+    it("bounds total synchronous sleep during retries to well below event loop stall thresholds", () => {
+      const t0 = Date.now();
+      let attempts = 0;
+      const renameFn = vi.fn(() => {
+        attempts += 1;
+        const err = new Error("EBUSY: resource busy") as NodeJS.ErrnoException;
+        err.code = "EBUSY";
+        throw err;
+      });
+
+      expect(() =>
+        atomicRenameSync("temp.tmp", "target.jsonl", {
+          renameFn
+        })
+      ).toThrow("EBUSY");
+
+      const elapsed = Date.now() - t0;
+      expect(attempts).toBe(3);
+      expect(elapsed).toBeLessThan(40);
+    });
+
+    it("cleans up temp file when rewriteJsonlFile fails to rename", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gomoku-jsonl-fail-"));
+
+      try {
+        const targetDir = join(tempDir, "existing-dir");
+        mkdirSync(targetDir);
+
+        expect(() => rewriteJsonlFile(targetDir, [{ id: "fail" }])).toThrow();
+        expect(existsSync(`${targetDir}.compact.tmp`)).toBe(false);
+      } finally {
+        rmSync(tempDir, { force: true, recursive: true });
+      }
+    });
   });
 });

@@ -490,7 +490,7 @@ export function GameShell({ dictionary, feedbackDictionary, locale }: GameShellP
                 href={`/${locale}/feedback`}
                 className="icon-button feedback-nav-link"
                 title={feedbackDictionary.title}
-                aria-label={feedbackDictionary.title}
+                aria-label={feedbackDictionary.navLabel}
               >
                 <MessageSquare aria-hidden="true" size={18} />
                 <span className="feedback-nav-label">{feedbackDictionary.navLabel}</span>

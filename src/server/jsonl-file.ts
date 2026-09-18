@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 export type JsonlReadResult<T> = {
@@ -58,19 +58,43 @@ export function appendJsonlLine(filePath: string, value: unknown): void {
  * The write goes through a sibling temp file + rename so a crash mid-write
  * cannot truncate the log.
  */
-function atomicRenameSync(source: string, destination: string): void {
-  const maxAttempts = 10;
+const sleepBuffer = new Int32Array(new SharedArrayBuffer(4));
+
+function sleepSync(ms: number): void {
+  Atomics.wait(sleepBuffer, 0, 0, ms);
+}
+
+export type AtomicRenameOptions = {
+  maxAttempts?: number;
+  renameFn?: (source: string, destination: string) => void;
+  sleepFn?: (ms: number) => void;
+};
+
+/**
+ * Attempts atomic replacement of destination with source.
+ * On Windows, MoveFileEx may transiently report EPERM/EBUSY if the destination
+ * was recently touched by antivirus or indexers. We retry up to maxAttempts (default 3)
+ * with micro-sleeps (5ms, 10ms) using Atomics.wait to yield without burning CPU or
+ * blocking the event loop for more than ~15ms total.
+ * Non-transient errors (such as EACCES or ENOENT) fail fast immediately.
+ */
+export function atomicRenameSync(
+  source: string,
+  destination: string,
+  options?: AtomicRenameOptions
+): void {
+  const maxAttempts = options?.maxAttempts ?? 3;
+  const rename = options?.renameFn ?? renameSync;
+  const sleep = options?.sleepFn ?? sleepSync;
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      renameSync(source, destination);
+      rename(source, destination);
       return;
     } catch (error: unknown) {
       const code = (error as NodeJS.ErrnoException).code;
-      if ((code === "EPERM" || code === "EBUSY" || code === "EACCES") && attempt < maxAttempts) {
-        const start = Date.now();
-        while (Date.now() - start < 15 * attempt) {
-          // busy-wait for Windows file handle release
-        }
+      if ((code === "EPERM" || code === "EBUSY") && attempt < maxAttempts) {
+        sleep(5 * attempt);
         continue;
       }
       throw error;
@@ -85,7 +109,16 @@ export function rewriteJsonlFile(filePath: string, values: unknown[]): void {
   const tempPath = `${filePath}.compact.tmp`;
 
   writeFileSync(tempPath, body, "utf8");
-  atomicRenameSync(tempPath, filePath);
+  try {
+    atomicRenameSync(tempPath, filePath);
+  } catch (error) {
+    try {
+      unlinkSync(tempPath);
+    } catch {
+      // ignore cleanup error
+    }
+    throw error;
+  }
 }
 
 /**

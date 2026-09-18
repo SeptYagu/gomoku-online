@@ -49,5 +49,5 @@
 ## 3. 双智能体审查指引 (Reviewer Guide)
 
 - **基准提交 (BASE_SHA)**: `f5d33ae` (docs: record feedback system Round 3 review PASS verdict in STATUS.md)
-- **待审提交 (HEAD_SHA)**: 本轮待提交的 commit
+- **待审提交 (HEAD_SHA)**: `d317764` (feat(ui): add text label to feedback button in navigation)
 - **审查目标**: 验证反馈按钮文本在 6 语种下的完整性、布局响应式表现与 RTL 排版，核验 Windows 文件写入重试机制的安全性。
