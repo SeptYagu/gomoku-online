@@ -293,6 +293,137 @@ describe("AccountStore", () => {
     expect(guestSessionStore.authenticate(second.token)).toBeNull();
     expect(guestSessionStore.authenticate(third.token)).toBeNull();
   });
+
+  it("persists guest sessions to JSONL and restores across store instances", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-guest-sessions-"));
+    const filePath = join(tempDir, "guest-sessions.jsonl");
+
+    try {
+      const now = 1_780_000_000_000;
+      const firstStore = new GuestSessionStore({ filePath, now: () => now });
+      const guest = expectOk(firstStore.createSession({ playerId: "guest-persist-1", playerName: "Guest One" }));
+
+      expect(firstStore.authenticate(guest.token)).toMatchObject({
+        identity: "guest",
+        playerId: "guest-persist-1",
+        playerName: "Guest One"
+      });
+
+      // Verify token is hashed, not plaintext
+      expect(readRawFile(filePath)).not.toContain(guest.token);
+
+      // Second store instance loads from file
+      const secondStore = new GuestSessionStore({ filePath, now: () => now });
+      expect(secondStore.authenticate(guest.token)).toMatchObject({
+        identity: "guest",
+        playerId: "guest-persist-1",
+        playerName: "Guest One"
+      });
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("slides 30-day expiration clock upon active visits and expires after 30 days of inactivity", () => {
+    let now = 1_780_000_000_000;
+    const store = new GuestSessionStore({ filePath: false, now: () => now });
+
+    const guest = expectOk(store.createSession({ playerId: "guest-slider", playerName: "Slider" }));
+
+    // 15 days later: active visit
+    now += 15 * 24 * 60 * 60 * 1000;
+    expect(store.authenticate(guest.token)).toMatchObject({ playerId: "guest-slider" });
+
+    // Another 20 days later (35 days from creation, but only 20 days since last visit): still valid!
+    now += 20 * 24 * 60 * 60 * 1000;
+    expect(store.authenticate(guest.token)).toMatchObject({ playerId: "guest-slider" });
+
+    // 31 days of complete inactivity: naturally expires
+    now += 31 * 24 * 60 * 60 * 1000;
+    expect(store.authenticate(guest.token)).toBeNull();
+  });
+
+  it("throttles disk writes on high-frequency authentication and triggers compaction", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-guest-throttle-"));
+    const filePath = join(tempDir, "guest-sessions.jsonl");
+
+    try {
+      let now = 1_780_000_000_000;
+      const store = new GuestSessionStore({
+        compactAfterLines: 2,
+        filePath,
+        lastSeenPersistIntervalMs: 60_000,
+        now: () => now
+      });
+
+      const guest = expectOk(store.createSession({ playerId: "guest-th", playerName: "Throttled" }));
+      const linesAfterCreate = readRawFile(filePath).trim().split("\n").length;
+      expect(linesAfterCreate).toBe(1);
+
+      // Authenticate within 10s: throttled, no new line written
+      now += 10_000;
+      store.authenticate(guest.token);
+      expect(readRawFile(filePath).trim().split("\n").length).toBe(1);
+
+      // Authenticate after 61s: throttle lock expires, writes update line and triggers compaction (compactAfterLines = 2)
+      now += 61_000;
+      store.authenticate(guest.token);
+
+      // After compaction, the file is rewritten cleanly to 1 live entry
+      const linesAfterCompaction = readRawFile(filePath).trim().split("\n").length;
+      expect(linesAfterCompaction).toBe(1);
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("evicts oldest inactive session based on lastSeenAt rather than creation time", () => {
+    let now = 1_000;
+    const store = new GuestSessionStore({ maxEntries: 2, now: () => now });
+
+    const first = expectOk(store.createSession({ playerId: "g-1", playerName: "First" }));
+    now = 2_000;
+    const second = expectOk(store.createSession({ playerId: "g-2", playerName: "Second" }));
+
+    // Visit first at now = 3_000, making second the oldest by lastSeenAt
+    now = 3_000;
+    store.authenticate(first.token);
+
+    // Create third at now = 4_000, triggering eviction of oldest (which is second!)
+    now = 4_000;
+    const third = expectOk(store.createSession({ playerId: "g-3", playerName: "Third" }));
+
+    expect(store.authenticate(second.token)).toBeNull(); // evicted!
+    expect(store.authenticate(first.token)).toMatchObject({ playerId: "g-1" });
+    expect(store.authenticate(third.token)).toMatchObject({ playerId: "g-3" });
+  });
+
+  it("safely ignores corrupt lines in guest sessions JSONL", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-guest-corrupt-"));
+    const filePath = join(tempDir, "guest-sessions.jsonl");
+
+    try {
+      const validEntry = {
+        session: {
+          createdAt: 1_000,
+          lastSeenAt: 1_000,
+          playerId: "guest-valid",
+          playerName: "Valid",
+          tokenHash: "somehash"
+        },
+        type: "guest-session",
+        writtenAt: 1_000
+      };
+
+      writeFileSync(filePath, `corrupt json\n{"type":"guest-session"}\n${JSON.stringify(validEntry)}\n`, "utf8");
+
+      const store = new GuestSessionStore({ filePath, now: () => 1_000 });
+      // Successfully loaded without throwing error
+      expect(store).toBeDefined();
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
 });
 
 function expectOk<T>(result: { ok: true; value: T } | { ok: false; error: { message: string } }): T {

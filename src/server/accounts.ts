@@ -79,8 +79,25 @@ const ACCOUNT_ID_PREFIX = "acct";
 const ACCOUNT_COMPACT_AFTER_LINES = 2_000;
 const ACCOUNT_LAST_SEEN_PERSIST_INTERVAL_MS = 60_000;
 const GUEST_PLAYER_ID_PREFIX = "guest_";
-const GUEST_SESSION_MAX_ENTRIES = 10_000;
-const GUEST_SESSION_TTL_MS = 6 * 60 * 60 * 1000;
+export const GUEST_SESSION_MAX_ENTRIES = 50_000;
+export const GUEST_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const GUEST_SESSION_LAST_SEEN_PERSIST_INTERVAL_MS = 60_000;
+export const GUEST_SESSION_COMPACT_AFTER_LINES = 2_000;
+
+export type GuestSessionStoreOptions = {
+  compactAfterLines?: number;
+  filePath?: false | string;
+  lastSeenPersistIntervalMs?: number;
+  maxEntries?: number;
+  now?: () => number;
+  ttlMs?: number;
+};
+
+type PersistedGuestSessionEntry = {
+  session: StoredGuestSession;
+  type: "guest-session";
+  writtenAt: number;
+};
 const MAX_DISPLAY_NAME_LENGTH = MAX_PLAYER_NAME_LENGTH;
 const MAX_PLAYER_ID_LENGTH = 128;
 const MAX_PUBLIC_HANDLE_LENGTH = 20;
@@ -314,16 +331,30 @@ export class AccountStore {
 }
 
 export class GuestSessionStore {
+  private readonly compaction: JsonlCompactionTracker;
+  private readonly filePath: false | string;
+  private readonly lastPersistedSeenAt = new Map<string, number>();
+  private readonly lastSeenPersistIntervalMs: number;
   private readonly maxEntries: number;
   private readonly now: () => number;
   private readonly sessionsByPlayerId = new Map<string, StoredGuestSession>();
   private readonly ttlMs: number;
   private readonly playerIdByTokenHash = new Map<string, string>();
 
-  constructor(options: { maxEntries?: number; now?: () => number; ttlMs?: number } = {}) {
+  constructor(options: GuestSessionStoreOptions = {}) {
+    this.filePath = options.filePath === undefined ? false : options.filePath === false ? false : resolve(options.filePath);
+    this.lastSeenPersistIntervalMs = Math.max(
+      0,
+      options.lastSeenPersistIntervalMs ?? GUEST_SESSION_LAST_SEEN_PERSIST_INTERVAL_MS
+    );
     this.maxEntries = Math.max(1, Math.floor(options.maxEntries ?? GUEST_SESSION_MAX_ENTRIES));
     this.now = options.now ?? Date.now;
     this.ttlMs = Math.max(1, options.ttlMs ?? GUEST_SESSION_TTL_MS);
+    this.compaction = new JsonlCompactionTracker({
+      threshold: options.compactAfterLines ?? GUEST_SESSION_COMPACT_AFTER_LINES
+    });
+
+    this.loadFromFile();
   }
 
   createSession(input: { playerId: string; playerName: string }): AccountResult<GuestSessionSnapshot> {
@@ -357,6 +388,9 @@ export class GuestSessionStore {
 
     this.sessionsByPlayerId.set(playerId, session);
     this.playerIdByTokenHash.set(session.tokenHash, playerId);
+    this.lastPersistedSeenAt.set(playerId, session.lastSeenAt);
+
+    this.persist(session);
 
     return success(getGuestSessionSnapshot(session, token));
   }
@@ -385,7 +419,79 @@ export class GuestSessionStore {
 
     session.lastSeenAt = this.now();
 
+    const lastPersisted = this.lastPersistedSeenAt.get(session.playerId) ?? 0;
+    if (session.lastSeenAt - lastPersisted >= this.lastSeenPersistIntervalMs) {
+      this.lastPersistedSeenAt.set(session.playerId, session.lastSeenAt);
+      this.persist(session);
+    }
+
     return getGuestSessionSnapshot(session, normalizedToken);
+  }
+
+  private loadFromFile(): void {
+    if (!this.filePath) {
+      return;
+    }
+
+    const { entries, lineCount, skipped } = readJsonlFile(this.filePath, parsePersistedGuestSessionEntry);
+
+    if (skipped > 0) {
+      console.warn(`[guest-sessions] skipped ${skipped} unreadable line(s) while loading ${this.filePath}`);
+    }
+
+    this.compaction.reset(lineCount);
+    const cutoff = this.now() - this.ttlMs;
+
+    for (const entry of entries) {
+      if (entry.session.lastSeenAt < cutoff) {
+        continue;
+      }
+
+      const existingPlayerId = this.playerIdByTokenHash.get(entry.session.tokenHash);
+      if (existingPlayerId && existingPlayerId !== entry.session.playerId) {
+        this.sessionsByPlayerId.delete(existingPlayerId);
+        this.lastPersistedSeenAt.delete(existingPlayerId);
+      }
+
+      this.sessionsByPlayerId.set(entry.session.playerId, entry.session);
+      this.playerIdByTokenHash.set(entry.session.tokenHash, entry.session.playerId);
+      this.lastPersistedSeenAt.set(entry.session.playerId, entry.session.lastSeenAt);
+    }
+
+    this.evictOldestSessions();
+  }
+
+  private persist(session: StoredGuestSession): void {
+    if (!this.filePath) {
+      return;
+    }
+
+    appendJsonlLine(this.filePath, {
+      session,
+      type: "guest-session",
+      writtenAt: this.now()
+    } satisfies PersistedGuestSessionEntry);
+    this.lastPersistedSeenAt.set(session.playerId, session.lastSeenAt);
+
+    if (this.compaction.noteAppend()) {
+      this.compactFile();
+    }
+  }
+
+  private compactFile(): void {
+    if (!this.filePath || this.sessionsByPlayerId.size === 0) {
+      return;
+    }
+
+    const writtenAt = this.now();
+
+    rewriteJsonlFile(
+      this.filePath,
+      [...this.sessionsByPlayerId.values()].map(
+        (session) => ({ session, type: "guest-session", writtenAt }) satisfies PersistedGuestSessionEntry
+      )
+    );
+    this.compaction.reset(this.sessionsByPlayerId.size);
   }
 
   private evictOldestSessions(): void {
@@ -415,6 +521,7 @@ export class GuestSessionStore {
   private deleteSession(session: StoredGuestSession): void {
     this.sessionsByPlayerId.delete(session.playerId);
     this.playerIdByTokenHash.delete(session.tokenHash);
+    this.lastPersistedSeenAt.delete(session.playerId);
   }
 }
 
@@ -512,6 +619,21 @@ function parsePersistedAccountEntry(value: unknown): PersistedAccountEntry | nul
   const entry = value as PersistedAccountEntry;
 
   return entry?.type === "account" && entry.account?.id ? entry : null;
+}
+
+function parsePersistedGuestSessionEntry(value: unknown): PersistedGuestSessionEntry | null {
+  const entry = value as PersistedGuestSessionEntry;
+
+  return entry?.type === "guest-session" &&
+    typeof entry.writtenAt === "number" &&
+    entry.session &&
+    typeof entry.session.playerId === "string" &&
+    typeof entry.session.playerName === "string" &&
+    typeof entry.session.tokenHash === "string" &&
+    typeof entry.session.createdAt === "number" &&
+    typeof entry.session.lastSeenAt === "number"
+    ? entry
+    : null;
 }
 
 function randomTokenPart(byteLength: number): string {

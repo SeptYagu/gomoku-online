@@ -38,6 +38,7 @@ type PlayerAuthPayload = {
   guestToken?: null | string;
   playerId: string;
   playerName: string;
+  resetGuestIdentity?: boolean;
 };
 
 export type ResolvedJoinTarget = {
@@ -366,7 +367,9 @@ export function registerRoomSocketHandlers(
 
       if (!player.ok) {
         acknowledgePresence(player, ack);
-        socket.emit("room:error", player.error);
+        if (player.error.code !== "guest-session-invalid") {
+          socket.emit("room:error", player.error);
+        }
         return;
       }
 
@@ -617,8 +620,14 @@ function resolveSocketPlayer(
   guestSessionStore: GuestSessionStore,
   allowGuestSessionCreation = true
 ) {
+  if (payload.resetGuestIdentity) {
+    socket.data.guestToken = undefined;
+  }
+
   const accountToken = payload.accountToken?.trim();
-  const guestToken = payload.guestToken?.trim() || socket.data.guestToken;
+  const guestToken = payload.resetGuestIdentity
+    ? payload.guestToken?.trim()
+    : payload.guestToken?.trim() || socket.data.guestToken;
 
   if (!accountToken && !guestToken && !allowGuestSessionCreation) {
     return {
@@ -641,6 +650,8 @@ function resolveSocketPlayer(
 
   if (player.ok) {
     socket.data.guestToken = player.value.guestToken;
+  } else if (player.error.code === "guest-session-invalid") {
+    socket.data.guestToken = undefined;
   }
 
   return player;
@@ -994,7 +1005,9 @@ function acknowledgeAndBroadcast(
   ack(response);
 
   if (!response.ok) {
-    socket.emit("room:error", response.error);
+    if (response.error.code !== "guest-session-invalid") {
+      socket.emit("room:error", response.error);
+    }
     return;
   }
 
@@ -1007,7 +1020,9 @@ function acknowledgeAndBroadcastRoomOnly(socket: RoomSocket, response: RoomAck, 
   ack(response);
 
   if (!response.ok) {
-    socket.emit("room:error", response.error);
+    if (response.error.code !== "guest-session-invalid") {
+      socket.emit("room:error", response.error);
+    }
     return;
   }
 

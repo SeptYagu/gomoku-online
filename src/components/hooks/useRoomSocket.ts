@@ -20,9 +20,11 @@ import {
   formatConnectionError,
   getOrCreatePlayerId,
   getRoomCodeFromCurrentUrl,
+  isEphemeralSession,
   isLobbyRoomDeletedEvent,
   isRoomErrorLike,
   isRoomSnapshot,
+  markEphemeralSession,
   normalizePlayerName,
   normalizeRoomCode,
   persistGuestToken,
@@ -31,10 +33,12 @@ import {
   readAccountToken,
   readGuestToken,
   readRoomSession,
+  shouldBeEphemeral,
   syncRoomUrl,
   useBootSnapshot,
   type PlayerAuthPayload,
   type RoomSocket,
+  type StorageOptions,
   type UseFriendRoomOptions
 } from "./room-state-utils";
 
@@ -122,7 +126,7 @@ export function useRoomSocket({
 
     return {
       guestToken: readGuestToken() ?? undefined,
-      playerId: getOrCreatePlayerId(),
+      playerId: getOrCreatePlayerId({ ephemeralOnly: isEphemeralSession() }),
       playerName: normalizePlayerName(playerName)
     };
   }, [account, playerName]);
@@ -217,7 +221,7 @@ export function useRoomSocket({
     return socket;
   }, [clearClosedRoom]);
 
-  const applyRoomAck = useCallback((response: RoomAck) => {
+  const applyRoomAck = useCallback((response: RoomAck, options: StorageOptions = {}) => {
     setIsJoiningRoom(false);
 
     if (!response.ok) {
@@ -226,10 +230,9 @@ export function useRoomSocket({
     }
 
     const acknowledgedPlayerName = response.value.name || DEFAULT_PLAYER_NAME;
-    const existingSession = readRoomSession();
     const acknowledgedGuestToken =
       response.value.identity === "guest"
-        ? response.value.guestToken ?? readGuestToken() ?? existingSession?.guestToken
+        ? response.value.guestToken ?? readGuestToken() ?? undefined
         : undefined;
 
     setError(null);
@@ -244,7 +247,9 @@ export function useRoomSocket({
       roomCode: response.value.snapshot.code
     });
     if (acknowledgedGuestToken) {
-      persistGuestToken(acknowledgedGuestToken);
+      persistGuestToken(acknowledgedGuestToken, {
+        ephemeralOnly: shouldBeEphemeral(options)
+      });
     }
   }, [account, setJoinTargetState]);
 
@@ -265,6 +270,9 @@ export function useRoomSocket({
         if (response.error.code === "guest-session-invalid") {
           clearGuestToken();
           createAndPersistPlayerId();
+          clearRoomSession();
+          setError(null);
+          return;
         } else if (response.error.code === "room-not-found") {
           clearClosedRoom(storedSession.roomCode);
           return;
@@ -292,6 +300,26 @@ export function useRoomSocket({
     setPlayerNameState(player.playerName);
     persistPlayerName(player.playerName);
     socket.emit("room:create", { ...player, visibility }, (response: RoomAck) => {
+      if (
+        !response.ok &&
+        !player.accountToken &&
+        response.error.code === "guest-session-invalid"
+      ) {
+        clearGuestToken();
+        setError(null);
+        const freshPlayer: PlayerAuthPayload = {
+          playerId: createAndPersistPlayerId(),
+          playerName: player.playerName,
+          resetGuestIdentity: true
+        };
+        socket.emit("room:create", { ...freshPlayer, visibility }, (retryResponse: RoomAck) => {
+          createRequestInFlightRef.current = false;
+          setIsCreatingRoom(false);
+          applyRoomAck(retryResponse);
+        });
+        return;
+      }
+
       createRequestInFlightRef.current = false;
       setIsCreatingRoom(false);
       applyRoomAck(response);
@@ -330,17 +358,31 @@ export function useRoomSocket({
             response.error.code === "duplicate-name" ||
             response.error.code === "guest-session-invalid")
         ) {
-          clearGuestToken();
+          const isDuplicate =
+            response.error.code === "duplicate-player" || response.error.code === "duplicate-name";
+          setError(null);
+          if (isDuplicate) {
+            markEphemeralSession();
+          }
+          clearGuestToken({ ephemeralOnly: isDuplicate });
           player = {
-            playerId: createAndPersistPlayerId(),
-            playerName: createGuestPlayerName()
+            playerId: createAndPersistPlayerId({ ephemeralOnly: isDuplicate }),
+            playerName: createGuestPlayerName(),
+            resetGuestIdentity: true
           };
           setPlayerNameState(player.playerName);
-          persistPlayerName(player.playerName);
+          if (!isDuplicate) {
+            persistPlayerName(player.playerName);
+          }
           socket.emit(
             "room:join",
             { ...player, roomCode: nextRoomCode },
-            applyRoomAck
+            (retryAck: RoomAck) => {
+              if (retryAck.ok && isDuplicate && retryAck.value.guestToken) {
+                persistGuestToken(retryAck.value.guestToken, { ephemeralOnly: true });
+              }
+              applyRoomAck(retryAck, { ephemeralOnly: isDuplicate });
+            }
           );
           return;
         }
@@ -379,14 +421,32 @@ export function useRoomSocket({
           response.error.code === "duplicate-name" ||
           response.error.code === "guest-session-invalid")
       ) {
-        clearGuestToken();
+        const isDuplicate =
+          response.error.code === "duplicate-player" || response.error.code === "duplicate-name";
+        setError(null);
+        if (isDuplicate) {
+          markEphemeralSession();
+        }
+        clearGuestToken({ ephemeralOnly: isDuplicate });
         player = {
-          playerId: createAndPersistPlayerId(),
-          playerName: createGuestPlayerName()
+          playerId: createAndPersistPlayerId({ ephemeralOnly: isDuplicate }),
+          playerName: createGuestPlayerName(),
+          resetGuestIdentity: true
         };
         setPlayerNameState(player.playerName);
-        persistPlayerName(player.playerName);
-        socket.emit("room:join-target", { ...player, target: nextTarget }, applyRoomAck);
+        if (!isDuplicate) {
+          persistPlayerName(player.playerName);
+        }
+        socket.emit(
+          "room:join-target",
+          { ...player, target: nextTarget },
+          (retryAck: RoomAck) => {
+            if (retryAck.ok && isDuplicate && retryAck.value.guestToken) {
+              persistGuestToken(retryAck.value.guestToken, { ephemeralOnly: true });
+            }
+            applyRoomAck(retryAck, { ephemeralOnly: isDuplicate });
+          }
+        );
         return;
       }
 

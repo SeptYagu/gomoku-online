@@ -23,8 +23,10 @@ import type {
 } from "@/server/rooms";
 import { PAGINATION } from "@/lib/constants";
 import {
+  clearGuestToken,
   clearRoomSession,
   clearRoomUrl,
+  createAndPersistPlayerId,
   isAbortError,
   isLobbyActivitySummary,
   isLobbyRoomDeletedEvent,
@@ -162,7 +164,7 @@ export function useLobbyPresence({
       return;
     }
 
-    const player = getActivePlayer();
+    let player = getActivePlayer();
 
     setPresenceStatus("loading");
     setPlayerNameState(player.playerName);
@@ -175,6 +177,34 @@ export function useLobbyPresence({
       },
       (response: PresenceAck) => {
         if (!response.ok) {
+          if (!player.accountToken && response.error.code === "guest-session-invalid") {
+            clearGuestToken();
+            setError(null);
+            player = {
+              playerId: createAndPersistPlayerId(),
+              playerName: player.playerName,
+              resetGuestIdentity: true
+            };
+            setPlayerNameState(player.playerName);
+            ensureSocket().emit(
+              "presence:join",
+              {
+                ...player,
+                limit: PAGINATION.PRESENCE_USERS
+              },
+              (retryResponse: PresenceAck) => {
+                if (!retryResponse.ok) {
+                  setPresenceStatus("error");
+                  setError(retryResponse.error.message);
+                  return;
+                }
+                setPresenceUsers(retryResponse.value.users);
+                setPresenceStatus("ready");
+              }
+            );
+            return;
+          }
+
           setPresenceStatus("error");
           setError(response.error.message);
           return;
@@ -330,16 +360,36 @@ export function useLobbyPresence({
     }
 
     const socket = ensureSocket();
-    const player = getActivePlayer();
+    let player = getActivePlayer();
 
     setMatchmakingStatus("searching");
     setPlayerNameState(player.playerName);
     persistPlayerName(player.playerName);
     socket.emit("matchmaking:find", player, (response: RoomAck) => {
+      if (
+        !response.ok &&
+        !player.accountToken &&
+        response.error.code === "guest-session-invalid"
+      ) {
+        clearGuestToken();
+        setError(null);
+        player = {
+          playerId: createAndPersistPlayerId(),
+          playerName: player.playerName,
+          resetGuestIdentity: true
+        };
+        setPlayerNameState(player.playerName);
+        socket.emit("matchmaking:find", player, (retryResponse: RoomAck) => {
+          setMatchmakingStatus("idle");
+          applyRoomAck(retryResponse);
+        });
+        return;
+      }
+
       setMatchmakingStatus("idle");
       applyRoomAck(response);
     });
-  }, [applyRoomAck, canFindMatch, ensureSocket, getActivePlayer, setPlayerNameState]);
+  }, [applyRoomAck, canFindMatch, ensureSocket, getActivePlayer, setError, setPlayerNameState]);
 
   const cancelMatch = useCallback(() => {
     if (!room) {

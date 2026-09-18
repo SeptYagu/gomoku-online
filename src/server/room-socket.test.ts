@@ -861,6 +861,66 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("does not broadcast room:error to socket on guest-session-invalid and allows self-healing with resetGuestIdentity", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const client = await harness.connectClient();
+
+      let roomErrorCount = 0;
+      client.on("room:error", () => {
+        roomErrorCount += 1;
+      });
+
+      // 1. Initial valid room creation
+      const created = await emitAck(client, "room:create", {
+        playerId: "guest-healing-1",
+        playerName: "Healer"
+      });
+      if (!created.ok) throw new Error(created.error.message);
+
+      // 2. Request rejoin with invalid guest token
+      const failedRejoin = await emitAck(client, "room:rejoin", {
+        guestToken: "dead-token-12345678",
+        playerId: "guest-healing-1",
+        playerName: "Healer",
+        roomCode: created.value.snapshot.code
+      });
+
+      expect(failedRejoin).toMatchObject({
+        ok: false,
+        error: { code: "guest-session-invalid" }
+      });
+
+      // Flush event loop
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Assert room:error was suppressed!
+      expect(roomErrorCount).toBe(0);
+
+      // 3. Client self-heals: retries room:create with resetGuestIdentity: true and new playerId
+      const freshCreate = await emitAck(client, "room:create", {
+        playerId: "guest-healing-2",
+        playerName: "Healer Fresh",
+        resetGuestIdentity: true
+      });
+
+      expect(freshCreate).toMatchObject({
+        ok: true,
+        value: {
+          playerId: expect.any(String),
+          guestToken: expect.any(String)
+        }
+      });
+      if (freshCreate.ok) {
+        expect(freshCreate.value.guestToken).not.toBe(created.value.guestToken);
+      }
+      expect(roomErrorCount).toBe(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("keeps a player connected while another authenticated socket remains bound", async () => {
     const harness = await createSocketHarness();
 

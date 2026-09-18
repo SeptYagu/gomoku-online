@@ -32,6 +32,11 @@ export type PlayerAuthPayload = {
   guestToken?: string;
   playerId: string;
   playerName: string;
+  resetGuestIdentity?: boolean;
+};
+
+export type StorageOptions = {
+  ephemeralOnly?: boolean;
 };
 
 export type UseFriendRoomOptions = {
@@ -53,6 +58,32 @@ export const PLAYER_NAME_STORAGE_KEY = "gomoku-room-player-name";
 export const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
 export const ACCOUNT_TOKEN_STORAGE_KEY = "gomoku-account-token";
 export const GUEST_TOKEN_STORAGE_KEY = "gomoku-guest-token";
+export const EPHEMERAL_SESSION_KEY = "gomoku:ephemeral_session";
+
+export function isEphemeralSession(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.sessionStorage.getItem(EPHEMERAL_SESSION_KEY) === "1";
+}
+
+export function markEphemeralSession(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(EPHEMERAL_SESSION_KEY, "1");
+}
+
+export function clearEphemeralSession(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.removeItem(EPHEMERAL_SESSION_KEY);
+}
+
+export function shouldBeEphemeral(options?: StorageOptions): boolean {
+  return Boolean(options?.ephemeralOnly || isEphemeralSession());
+}
 
 export const DEFAULT_CHAT_SEND_TIMEOUT_ERROR = "Message not sent: no response from the server. Please try again.";
 export const DEFAULT_LEAVE_ROOM_TIMEOUT_ERROR = "Leaving the room timed out. Please try again.";
@@ -178,25 +209,40 @@ export function getInitialJoinTarget(): string {
   return normalizeRoomCode(roomFromUrl ?? readRoomSession()?.roomCode ?? "");
 }
 
-// 多标签页访客隔离说明：
-// 访客 playerId 存储于 sessionStorage，确保同一浏览器打开多个标签页时，
-// 各自拥有独立的游客身份与连接会话，避免本地多开测试或单人多开对弈时身份互相覆盖。
-// 若当前标签页拥有活跃房间对局会话（readRoomSession），则优先继承对应房间对局者的 playerId。
-export function getOrCreatePlayerId(): string {
-  const storedPlayerId = window.sessionStorage.getItem(PLAYER_ID_STORAGE_KEY) ?? readRoomSession()?.playerId;
+// 访客设备长效保留与分身隔离说明：
+// 主身份同时落盘 localStorage 与 sessionStorage，只要未清除浏览器数据且未超时即长效保持。
+// 当处于分身模式（options.ephemeralOnly 或 isEphemeralSession）时，
+// 强行短路仅存取 sessionStorage，严禁触碰或覆写 localStorage 中的主访客身份。
+export function getOrCreatePlayerId(options: StorageOptions = {}): string {
+  if (typeof window === "undefined") {
+    return `player-${Date.now()}`;
+  }
+
+  const storedPlayerId =
+    window.sessionStorage.getItem(PLAYER_ID_STORAGE_KEY) ??
+    window.localStorage.getItem(PLAYER_ID_STORAGE_KEY) ??
+    readRoomSession()?.playerId;
 
   if (storedPlayerId) {
+    if (!shouldBeEphemeral(options)) {
+      window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, storedPlayerId);
+    }
     window.sessionStorage.setItem(PLAYER_ID_STORAGE_KEY, storedPlayerId);
     return storedPlayerId;
   }
 
-  return createAndPersistPlayerId();
+  return createAndPersistPlayerId(options);
 }
 
-export function createAndPersistPlayerId(): string {
+export function createAndPersistPlayerId(options: StorageOptions = {}): string {
   const playerId = globalThis.crypto?.randomUUID?.() ?? `player-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-  window.sessionStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
+  if (typeof window !== "undefined") {
+    window.sessionStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
+    if (!shouldBeEphemeral(options)) {
+      window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
+    }
+  }
 
   return playerId;
 }
@@ -276,8 +322,25 @@ export function copyTextWithFallback(text: string): boolean {
   }
 }
 
-export function persistPlayerName(playerName: string) {
-  window.localStorage.setItem(PLAYER_NAME_STORAGE_KEY, playerName);
+export function persistPlayerName(playerName: string, options: StorageOptions = {}): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(PLAYER_NAME_STORAGE_KEY, playerName);
+  if (!shouldBeEphemeral(options)) {
+    window.localStorage.setItem(PLAYER_NAME_STORAGE_KEY, playerName);
+  }
+}
+
+export function readPlayerName(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return (
+    window.sessionStorage.getItem(PLAYER_NAME_STORAGE_KEY) ??
+    window.localStorage.getItem(PLAYER_NAME_STORAGE_KEY) ??
+    null
+  );
 }
 
 export function persistAccountToken(accountToken: string) {
@@ -296,8 +359,14 @@ export function clearAccountToken() {
   window.localStorage.removeItem(ACCOUNT_TOKEN_STORAGE_KEY);
 }
 
-export function persistGuestToken(guestToken: string) {
+export function persistGuestToken(guestToken: string, options: StorageOptions = {}): void {
+  if (typeof window === "undefined") {
+    return;
+  }
   window.sessionStorage.setItem(GUEST_TOKEN_STORAGE_KEY, guestToken);
+  if (!shouldBeEphemeral(options)) {
+    window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, guestToken);
+  }
 }
 
 export function readGuestToken(): string | null {
@@ -305,11 +374,25 @@ export function readGuestToken(): string | null {
     return null;
   }
 
-  return window.sessionStorage.getItem(GUEST_TOKEN_STORAGE_KEY) ?? readRoomSession()?.guestToken ?? null;
+  return (
+    window.sessionStorage.getItem(GUEST_TOKEN_STORAGE_KEY) ??
+    window.localStorage.getItem(GUEST_TOKEN_STORAGE_KEY) ??
+    null
+  );
 }
 
-export function clearGuestToken() {
+export function clearGuestToken(options: StorageOptions = {}): void {
+  if (typeof window === "undefined") {
+    return;
+  }
   window.sessionStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
+  if (!shouldBeEphemeral(options)) {
+    window.localStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
+    const currentSession = readRoomSession();
+    if (currentSession?.guestToken) {
+      persistRoomSession({ ...currentSession, guestToken: undefined });
+    }
+  }
 }
 
 export function persistRoomSession(session: StoredRoomSession) {
