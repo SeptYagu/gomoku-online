@@ -25,12 +25,14 @@
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
 - **单元测试** (`npm test`)：34 个测试套件 / 314 项用例 100% 通过（新增 `src/server/feedback-store.test.ts` 8 项测试）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
-- **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（覆盖无头 Chrome CDP 恢复与反馈 API 201/400/405/429）
+- **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（覆盖无头 Chrome CDP 恢复与反馈 API 201/400/405；**429 与 64 KiB 超限尚无用例覆盖**，见 Feedback Round 1 审查 P3-5）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
 
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔍 **用户反馈系统 (Feedback) 源码实现 · 独立审查 Round 1 复查（被审 `8657f299`）**：**审查未通过**。0×P0；**1×P1、1×P2、3×P3**。P1-1 `src/server/online-server.ts:251` 限流守门 `if (!feedbackLimiter.consume(...))` 恒为 false（`consume` 返回对象非布尔），**429 分支为死代码**，实测同 IP 连续 8 次提交全 `201`、0×429、8 个文件照常落盘，10 分钟 5 次 IP 限流完全失效；P2-1 请求体超 64 KiB 走 `request.destroy()` 摧毁 socket，实测体长 65537 → `UND_ERR_SOCKET`、70 KiB → `UND_ERR_SOCKET`、10 MiB → `ECONNRESET`，规格要求的 `413` 永不返回且 `.catch` 的 500 落点不可达；P3-3 体积守门按 UTF-16 code unit 计数（66014 字节 CJK 载荷通过 64 KiB 检查）；P3-4 `locale` 未按 6 语种白名单校准（3011 字符含 `<script>` 伪造值原样落盘）；P3-5 `/api/feedback` 路由层零测试、`smoke:feedback` 缺 429 与超限断言，是 P1 逃逸四道门禁的直接原因。四道门禁独立复跑全绿（tsc 0 / lint 0 / vitest 34 套 314 例 / build 18/18），存储契约（40 并发 → 40 合规文件、0 `.tmp-` 残留）与 6 语种 SSG + RTL 页面交付经实测有效。详见 [`docs/handoff/2026-09-18-feedback-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-18-feedback-workbuddy-code-review-round1-handoff.md)。
 
 - 🚀 **用户反馈系统 (Feedback) 源码实现与待审交付（2026-09-18，待审交付）**：依据用户最新决策与审查反馈落地极简扁平存储用户反馈系统：①服务端实现 `FeedbackStore` 原子落盘（`.tmp-*` 更名），采用紧凑 UTC 14 位时间戳命名 `${YYYYMMDD-HHmmss}-${feedbackId}.json`，单一 `data/feedback/` 扁平存储零子目录；②首版纯文本 JSON 协议（64 KiB 上限），彻底去除图片原生库依赖与 EXIF/GPS 泄露风险；③免注册直接提交，可选填写邮箱；④支持 6 种官方语言多语言字典、SSG 预渲染、RTL 排版镜像与暗色主题；⑤四道门禁全绿（34 套 / 314 项单测全绿，Next.js 18/18 页面构建通过，smoke:feedback 自动化烟测通过）。详见 [`docs/handoff/2026-09-18-feedback-and-log-collection-impl-handoff.md`](docs/handoff/2026-09-18-feedback-and-log-collection-impl-handoff.md) 与 [`docs/FEEDBACK_AND_LOG_COLLECTION_PLAN.md`](docs/FEEDBACK_AND_LOG_COLLECTION_PLAN.md)。
 - 🏁 **访客身份持久化、30天滑动TTL与全链路静默自愈 · 源码实现独立审查 Round 4 复查（被审 `1ee8ff1`）**：**审查通过（PASS）**。0×P0/P1/P2/P3。通过项：Round 3 唯一残留缺陷 P3-1 经 4 项变异探针（回退 `getActivePlayer()`、删除重发看门狗、删除重发 token 写回、删除首发 token 写回）及 3 项服务端变异探针（撤掉 `room:error` 抑制、撤掉 `public-chat` ack token 回传、撤掉 `presence:join` token 回传）逐一实测变红验证闭环；4 项独立运行时探针（跨重启恢复同一 `playerId`/token、30 天 TTL 毫秒级滑动边界、同一 `playerId` 换发新 token 后旧 token 跨重启被拒、60s 落盘节流、12,000 存活下 4,001 次追加仅 2 次全量 rewrite 彻底杜绝写放大）全部符合预期；本地四道门禁与 Vitest 33 套 306 例单测全绿。访客身份长效持久化、30天滑动有效期与全链路自愈闭环圆满达成！
