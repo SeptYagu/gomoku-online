@@ -71,7 +71,7 @@ describe("chat send gate", () => {
     expect(gate.begin(onTimeout)).toBe(true);
   });
 
-  it("guards self-healing retry so an un-acked retry resets the gate instead of permanently locking", () => {
+  it("supports successive begin-settle-begin cycles and resets watchdog on un-acked second cycle", () => {
     vi.useFakeTimers();
 
     const gate = createChatSendGate();

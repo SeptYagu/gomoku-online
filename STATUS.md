@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`663a001 fix(accounts): resolve round 2 code review findings for public chat and compaction gate`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「访客身份持久化与自愈」Round 3 复查交付，按先例记录直接父提交即被审产品交付 `663a001`）
+- **最新阶段交付提交**：`48b6c1a docs(review): add workbuddy round3 review for guest identity implementation`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「访客身份持久化与自愈」Round 3 缺陷修复交付，按先例记录直接父提交即被审产品交付 `48b6c1a`）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：32 个测试套件 / 302 项用例 100% 通过（新增访客持久化、30天滑动过期、节流压缩记账、标签页分身物理隔离守门套件、超阈值文件纯追加防重写与边界收拢变异守门、公聊抑制/看门狗与大厅/公聊 token 复用套件）
+- **单元测试** (`npm test`)：33 个测试套件 / 306 项用例 100% 通过（新增 useRoomChat 客户端自愈与看门狗集成级守门套件，4 项防分身死 token 复活、超时防锁死、分身/主标签页凭据落盘变异守门均实测变红）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence`)：S-A、S-E、S-B、S-C、S-F 全场景 5/5 100% 通过（覆盖真实无头 Chrome CDP 下软导航 + StrictMode 恢复与 AI 自动走子）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -32,6 +32,7 @@
 
 ## 3. 近期已交付里程碑
 
+- 🔄 **访客身份持久化与自愈 Round 3 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 3 源码复查报告（提交 `48b6c1a`，报告：[`docs/handoff/2026-09-18-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round3-handoff.md)）指出的唯一残留缺陷 P3-1 实施 100% 闭环修复：新建 `src/components/hooks/useRoomChat.test.ts` 全链路驱动测试套件，覆盖四大守门用例（M-2 防分身死 token 复活、M-1 超时看门狗防锁死、P3-4 分身重发写回、P3-4 主页首发写回），经 4 项变异探针逐一实测变红验证（`expected 'dead-primary-token-12345' to be undefined`、`expected true to be false`、`expected null to be 'freshly-minted-avatar-token'`、`expected null to be 'initial-minted-primary-token'`）；降级重命名 `chat-send-gate.test.ts` 歧义名称；四道门禁全绿（33 套 / 306 例单测全绿，Next.js 生产构建通过），准备派发 WorkBuddy 独立代码审查 Round 4。详见 [`docs/handoff/2026-09-18-persistent-guest-identity-round3-remediation-handoff.md`](docs/handoff/2026-09-18-persistent-guest-identity-round3-remediation-handoff.md)。
 - 🛑 **访客身份持久化、30天滑动TTL与全链路静默自愈 · 源码实现修复独立审查 Round 3 复查（被审 `663a001`）**：**审查未通过**。0×P0/P1/P2；**1×P3**。通过项：Round 2 四项 P3 的**代码修复经独立探针证实均真实有效**——P3-1 压缩守门改为观测 `rewriteJsonlFile` 真实调用次数并补死行超阈值边界用例（变异后两用例**均变红**，实收 5 次 rewrite，Round 1 复审验收标准达成）；P3-2 重发 payload 已改为显式构造、不再经 `getActivePlayer()` 复活 localStorage 死 token；P3-3 重发已重新 `gate.begin()` 挂看门狗、ack 到达时 `gate.settle()`；P3-4 `PublicChatAck` 已回传 `guestToken` 且客户端落盘，端到端实测"死 token 失败 ack 不含 token 字段 + `room:error` 抑制计数 0 + 自愈换发新 token 后新连接复用同一 token + `guest-sessions.jsonl` 恒 1 行 + `public-chat:messages` 广播字段白名单 `{generatedAt,messages}` 无泄漏"。缺陷 P3-1：**本轮三项客户端自愈修复（P3-2/P3-3/P3-4）在 `useRoomChat` 全链路零守门**——`src/components/hooks/` 下**不存在 `useRoomChat.test.ts`**（全仓仅 2 处引用该 hook，均为生产代码），新增的 `chat-send-gate.test.ts:74-101` 仅直接 `createChatSendGate()` 重测闸门类（**从未 import 该 hook**，hook 是否调用 `gate.begin()` 结果完全相同），`room-state-utils.test.ts:203-239` 只在用例内部手工重建 payload 后断言本地对象字面量属性为 `undefined`（同义反复）；变异实测：①删除 `useRoomChat.ts:155-163` 重发看门狗 + 删除 `:170`/`:178-182` 重发写回 → **32 套 / 302 例全绿**，②将 `:149-153` 显式 payload 回退为 `getActivePlayer()`（即 Round 2 判定为 P3-2 的缺陷原文）→ **32 套 / 302 例全绿**，Round 2 §四 明文要求的"变异探针（ephemeral 重发 payload、ack 超时复位、公聊 token 写回）必须变红"未达成，三个用户可感缺陷（分身红字、按钮永久锁死、身份漂移 + 文件行数增长）回归守门全部为空。独立验证：1 项端到端运行时探针（真实 Socket.IO + 真实落盘 store）+ 3 项变异探针，2 项变异成功证伪；`tsc` 0 错误、`lint` 0 错误 0 警告、`vitest` **32 套 / 302 例连续 3 次全绿**、`npm run build` 11/11 页面通过。详见 [`docs/handoff/2026-09-18-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round3-handoff.md)。
 - 🔄 **访客身份持久化与自愈 Round 2 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 2 源码审查报告（提交 `d39a2dd`，报告：[`docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md)）指出的 4 项 P3 缺陷实施 100% 闭环修复：①P3-1 守门单测改用 `rewriteJsonlFile` spy 观测真实重写次数（断言 5 次创建 0 次 rewrite），增补 200 行超阈值边界压缩用例（断言恰 1 次 rewrite 且收拢至 20 行），经变异探针实测两用例均变红；②P3-2 `useRoomChat` 移除 `getActivePlayer()` 读存储回落，显式构造全新 payload，防范分身标签页复活 localStorage 死 token 导致二次失败与红字；③P3-3 公聊自愈重发接入 `ChatSendGate` 看门狗与超时复位，根治未响应 ack 下发送按钮永久锁死；④P3-4 `PublicChatSnapshot` 扩展 `guestToken`，服务端透传至 ACK 且客户端落盘复用，实现身份长效保持与文件行数收敛；四道门禁全绿（32 套 / 302 例单测全绿，Next.js 生产构建通过），准备派发 WorkBuddy 独立代码审查 Round 3。详见 [`docs/handoff/2026-09-18-persistent-guest-identity-round2-remediation-handoff.md`](docs/handoff/2026-09-18-persistent-guest-identity-round2-remediation-handoff.md)。
 
