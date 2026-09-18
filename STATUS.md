@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`92b46aa docs(review): add workbuddy round1 review for persistent guest identity implementation`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「访客身份持久化与自愈」Round 1 审查缺陷闭环与复审交付，按先例记录直接父提交即 WorkBuddy Round 1 审查报告提交 `92b46aa`）
+- **最新阶段交付提交**：`2c1fba6 fix(accounts): resolve round 1 code review findings for guest identity and compaction`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「访客身份持久化与自愈」Round 2 独立复审交付，按先例记录直接父提交即被审产品交付 `2c1fba6`）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🛑 **访客身份持久化、30天滑动TTL与全链路静默自愈 · 源码实现修复独立审查 Round 2 复查（被审 `2c1fba6`）**：**审查未通过**。0×P0/P1/P2；**4×P3**。通过项：Round 1 五项缺陷的代码层面修复经独立探针**证实有效**——P2-1 压缩语义修复实测"存活 15 行 / 阈值 10 下连续 5 次落盘 = 5 次纯追加、0 次 rewrite"，且死行 185 行超阈值时仍恰 1 次 rewrite（行数 200→20，未把压缩一并关掉）；P3-4 `presence:join` 回传 + 客户端写回实测"3 次模拟匿名页面加载 → `guest-sessions.jsonl` 恒 1 行、token 三次一致"；P3-2 重连改走 `clearClosedRoom`、P3-3 坏行容忍用例重写（真实 token 反向鉴权 + 未知 token 返回 null）经代码路径核验闭环；服务端公聊抑制（`room-socket.ts:1092-1096`）生效。缺陷 P3-1：新增的 P2-1 守门单测（`accounts.test.ts:401-431`）为**恒真断言**——"5 次 `createSession` 后行数 = 初值 + 5"在"每次全量重写"与"纯追加"两实现下**恒成立**（压缩重写的永远是存活集，每次创建恰 +1 行）；变异探针（`reset` 回退为 `appended = liveLines`，语义实测 `[true,true,true]`）下该用例与 `accounts.test.ts` 全量 **16 例均仍绿**，改以 `rewriteJsonlFile` 计数观测则收到 **5 次 rewrite 并变红**——Round 1 §四 明文要求的"变异探针必须变红"未达成，写放大回归零守门。P3-2：`useRoomChat.ts:144-149` 自愈重发以 `getActivePlayer()` 重建 payload，而 ephemeral 标签页下 `clearGuestToken()` 故意跳过 localStorage、`readGuestToken()` 又回落读出同一个失效主 token，重发 payload 必然携带死 token（`room-socket.ts:639-641` 在 `resetGuestIdentity` 时只采信 payload token、不铸新会话）→ **必然二次失败并上屏 `guest-session-invalid` 红字**（两段式实测：无 token+resetGuestIdentity → ok / 带回落 token+resetGuestIdentity → guest-session-invalid），Round 1 P3-1 未真正闭环且该标签页不可自愈。P3-3：重发 emit 绕过 `ChatSendGate`（`:139` 已 settle、重发无 `begin()` 看门狗），ack 被静默丢弃时 `isSendingPublicChat` 永久为 true、公聊发送按钮锁死（违背 `chat-send-gate.ts` 自述的"防永久锁死"不变量）。P3-4：`PublicChatAck`（`room-contract.ts:43-51`）不回传 `guestToken` 且客户端重发成功后不写回，新签发身份只存活于 `socket.data` 缓存，下次页面加载即铸造新会话——身份重置（验收标准 1 断裂）且 `guest-sessions.jsonl` 每轮 +1 行。独立验证：自建 4 项运行时探针（压缩重写计数、Storage 回落复活、Socket 重发 payload、匿名页面加载行数收敛）+ 1 项变异探针 + 1 项压缩边界探针（活/死行超阈值），3 项成功触发反例；`tsc`/`lint` 0 问题、`vitest` 32 套 297 例全绿（`build` 本轮未复跑，已登记为未验证项）。详见 [`docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md)。
 
 - 🔄 **访客身份持久化与自愈 Round 1 审查缺陷闭环（2026-09-18）**：针对 WorkBuddy Round 1 源码审查报告（提交 `92b46aa`，报告：[`docs/handoff/2026-09-18-workbuddy-code-review-round1-impl-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round1-impl-handoff.md)）指出的 1 项 P2 与 4 项 P3 缺陷实施 100% 闭环修复：①P2-1 升级 `JsonlCompactionTracker.reset(liveLines, totalLines)`，当存活行数达到或超过压缩阈值时，自动切换为增量预算模式（死行与新追加行数），彻底杜绝超阈值文件每次写盘均全量重写的写放大缺陷，新增守门单测断言加载 15 行文件后 5 次创建均为纯追加；②P3-1 在服务端 `acknowledgeAndBroadcastPublicChat` 增加抑制白名单，客户端 `useRoomChat` 捕获 `guest-session-invalid` 自动重签身份并静默重发；③P3-2 重连自愈在 `guest-session-invalid` 时调用 `clearClosedRoom`，彻底清空内存 room 态、URL 参数与回调通知，避免用户滞留幽灵房间；④P3-3 重构坏行容错单测，写入真实哈希合法会话并断言反向解析与鉴权有效，通过变异探针；⑤P3-4 `PresenceSnapshot` 扩展 `guestToken`，`presence:join` 回传并由客户端持久化复用，阻断匿名会话文件行数无限递增；四道门禁全绿（32 套 / 297 项单测全绿，Next.js 生产构建通过），准备派发 WorkBuddy 独立复审（Round 2）。详见 [`docs/handoff/2026-09-18-persistent-guest-identity-round1-remediation-handoff.md`](docs/handoff/2026-09-18-persistent-guest-identity-round1-remediation-handoff.md) 与 [`docs/PERSISTENT_GUEST_IDENTITY_PLAN.md`](docs/PERSISTENT_GUEST_IDENTITY_PLAN.md)。
 
@@ -106,6 +108,8 @@
 
 - 详细交接单索引请查阅：[`docs/handoff/INDEX.md`](docs/handoff/INDEX.md)
 - **全局分阶段重构总纲**：[`docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md`](docs/handoff/2026-09-13-comprehensive-refactoring-master-plan-handoff.md)
+- **最新独立复审（Round 2，被审 `2c1fba6`，访客身份持久化与自愈 源码实现修复）**：[`docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round2-impl-handoff.md)（0×P0/P1/2，**4×P3**，**审查未通过**，待修复闭环）
+- 前序源码实现初审（Round 1，被审 `cbb44e3`）：[`docs/handoff/2026-09-18-workbuddy-code-review-round1-impl-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round1-impl-handoff.md)（0×P0/P1，**1×P2 + 4×P3**，其代码修复已由 `2c1fba6` 落地，本轮复查为其中 4 项新立缺陷）
 - **最新技术方案交付单（Round 3 收敛定稿）**：[`docs/handoff/2026-09-18-persistent-guest-identity-plan-final-convergence-handoff.md`](docs/handoff/2026-09-18-persistent-guest-identity-plan-final-convergence-handoff.md)
 - **最新方案独立复审（Round 2，被审 `a6b7975`）**：[`docs/handoff/2026-09-18-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-workbuddy-code-review-round2-handoff.md)（0×P0/P1，**1×P2 + 1×P3**，已在 Round 3 方案收敛定稿中全部闭环）
 - 前序方案交付单（Round 1 缺陷修复）：[`docs/handoff/2026-09-18-persistent-guest-identity-plan-round1-remediation-handoff.md`](docs/handoff/2026-09-18-persistent-guest-identity-plan-round1-remediation-handoff.md)
