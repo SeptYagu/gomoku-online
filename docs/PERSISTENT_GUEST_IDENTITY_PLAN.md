@@ -1,6 +1,6 @@
-# 访客身份持久化、30天有效期与全链路自愈技术设计方案（第 2 版 · 闭环修订）
+# 访客身份持久化、30天有效期与全链路自愈技术设计方案（第 3 版 · 收敛定稿）
 
-> **状态**：技术设计方案已收敛修订（Technical Design Proposal · Round 2）  
+> **状态**：技术设计方案已收敛定稿（Technical Design Proposal · Final Convergence · Round 3）  
 > **修订日期**：2026-09-18  
 > **涉及范围**：`src/server/accounts.ts`、`src/server/room-store.ts`、`src/server/room-socket.ts`、`src/components/hooks/room-state-utils.ts`、`src/components/hooks/useRoomSocket.ts`、`src/components/hooks/useLobbyPresence.ts`
 
@@ -123,7 +123,7 @@ type PersistedGuestSessionEntry = {
    - 容量超限时按 `lastSeenAt` 排序逐出最久未活跃会话（LRU）。
 4. `authenticate(token, playerName)`：
    - 验证通过后更新内存 `session.lastSeenAt = this.now()`；
-   - **Per-Session 节流落盘**：若 `now - lastPersistedSeenAt.get(id) > 60_000`，追加一条更新日志并刷新落盘时间戳，平抑对局中频繁发包压力。
+   - **Per-Session 节流落盘与压缩计数**：若 `now - lastPersistedSeenAt.get(id) > 60_000`，追加一条更新日志并刷新落盘时间戳，同步调用 `this.compaction.noteAppend()`（平抑发包压力的同时与 `AccountStore` 对齐，确保日志行计数推进与适时压缩）。
 5. `pruneExpiredSessions()`：
    - 惰性清理 `lastSeenAt < now - ttlMs` 的过期会话。
 
@@ -139,16 +139,17 @@ export const guestSessionStore = new GuestSessionStore({
 });
 ```
 
-#### 2. 服务端重置身份协议与缓存剥离 (`src/server/room-socket.ts`)
-为断绝 P2-2（服务端回退 `socket.data.guestToken` 导致自愈二次失败），扩充认证荷载并优化 `resolveSocketPlayer`：
+#### 2. 服务端重置身份协议与缓存剥离 (`src/server/room-socket.ts` & `src/components/hooks/room-state-utils.ts`)
+为断绝 P2-2（服务端回退 `socket.data.guestToken` 导致自愈二次失败）并保持端到端类型契约一致（P3-1 闭环），在服务端与客户端两处同名 `PlayerAuthPayload` 中同步扩充 `resetGuestIdentity?: boolean`：
 
 ```typescript
+// src/server/room-socket.ts 与 src/components/hooks/room-state-utils.ts 同步扩展
 export type PlayerAuthPayload = {
   accountToken?: string;
   guestToken?: string;
   playerId: string;
   playerName: string;
-  resetGuestIdentity?: boolean; // 显式重置标记：清除该连接上缓存的旧 guestToken
+  resetGuestIdentity?: boolean; // 显式重置标记：清除服务端该连接上缓存的旧 guestToken
 };
 
 function resolveSocketPlayer(
@@ -200,20 +201,44 @@ function resolveSocketPlayer(
 
 ---
 
-### 3.3 客户端存储双写与分身隔离 (`src/components/hooks/room-state-utils.ts`)
+### 3.3 客户端存储双写、标签页级分身状态机与绝对隔离 (`src/components/hooks/room-state-utils.ts`)
 
-彻底解决 P2-1 与 P3-3，严格区分主身份与临时分身：
+彻底解决 P2-1（分身隔离被 `applyRoomAck` 与 `getActivePlayer` 的缺省调用泄漏打破）与 P3-3：
+将 ephemeral 提升为**标签页级 Session 显式状态**（存储在当前标签页的 `sessionStorage` 中），结合显式参数与环境状态双重守卫，确保分身标签页下的**任何写路径**（无论是否漏传 options 参数）都绝对无法触碰 `localStorage`！
 
 ```typescript
+export const EPHEMERAL_SESSION_KEY = "gomoku:ephemeral_session";
+
 export type StorageOptions = {
   ephemeralOnly?: boolean;
 };
 
-// 1. 写凭证：ephemeralOnly 仅写当前标签页 sessionStorage，主身份才写 localStorage
+// 标签页级 Ephemeral 状态管理：绑定当前 Tab 生命周期
+export function isEphemeralSession(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.sessionStorage.getItem(EPHEMERAL_SESSION_KEY) === "1";
+}
+
+export function markEphemeralSession(): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(EPHEMERAL_SESSION_KEY, "1");
+}
+
+export function clearEphemeralSession(): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(EPHEMERAL_SESSION_KEY);
+}
+
+// 内部双重守卫：显式入参为 true OR 当前标签页已标记为分身状态
+function shouldBeEphemeral(options?: StorageOptions): boolean {
+  return Boolean(options?.ephemeralOnly || isEphemeralSession());
+}
+
+// 1. 写凭证：若为 ephemeral，强行短路仅写 sessionStorage，绝不写入 localStorage
 export function persistGuestToken(guestToken: string, options: StorageOptions = {}): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(GUEST_TOKEN_STORAGE_KEY, guestToken);
-  if (!options.ephemeralOnly) {
+  if (!shouldBeEphemeral(options)) {
     window.localStorage.setItem(GUEST_TOKEN_STORAGE_KEY, guestToken);
   }
 }
@@ -229,11 +254,11 @@ export function readGuestToken(): string | null {
   );
 }
 
-// 3. 清理凭证：支持纯分身清理或全量注销清理
+// 3. 清理凭证：分身标签页只清理自身 sessionStorage；主身份注销才清理 localStorage
 export function clearGuestToken(options: StorageOptions = {}): void {
   if (typeof window === "undefined") return;
   window.sessionStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
-  if (!options.ephemeralOnly) {
+  if (!shouldBeEphemeral(options)) {
     window.localStorage.removeItem(GUEST_TOKEN_STORAGE_KEY);
     // 同步清空房间会话中的 guestToken，防止残留污染 (P3-3)
     const currentSession = readRoomSession();
@@ -243,7 +268,7 @@ export function clearGuestToken(options: StorageOptions = {}): void {
   }
 }
 
-// 4. Player ID 长效管理与分身支持
+// 4. Player ID 长效管理与分身隔离 (封死泄漏路径 b)
 export function getOrCreatePlayerId(options: StorageOptions = {}): string {
   if (typeof window === "undefined") return createGuestPlayerId();
 
@@ -253,7 +278,8 @@ export function getOrCreatePlayerId(options: StorageOptions = {}): string {
     readRoomSession()?.playerId;
 
   if (storedPlayerId && isValidPlayerId(storedPlayerId)) {
-    if (!options.ephemeralOnly) {
+    // 关键守卫：当前标签页处于 ephemeral 状态时，严禁将 sessionStorage 的分身 ID 回写 localStorage！
+    if (!shouldBeEphemeral(options)) {
       window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, storedPlayerId);
     }
     window.sessionStorage.setItem(PLAYER_ID_STORAGE_KEY, storedPlayerId);
@@ -268,7 +294,7 @@ export function createAndPersistPlayerId(options: StorageOptions = {}): string {
     globalThis.crypto?.randomUUID?.() ?? `player-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   window.sessionStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
-  if (!options.ephemeralOnly) {
+  if (!shouldBeEphemeral(options)) {
     window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
   }
 
@@ -313,7 +339,27 @@ socket.emit("room:create", { ...player, visibility }, (response: RoomAck) => {
 
 #### 2. `joinRoomByCode` / `joinRoomByTarget` 分身与自愈解耦 (`useRoomSocket.ts`)
 ```typescript
-// 区分处理 duplicate-player (走分身) 与 guest-session-invalid (走全量重置)
+// 1. applyRoomAck 扩展 options 支持，并结合 isEphemeralSession() 双重守卫
+function applyRoomAck(response: RoomAck, options: StorageOptions = {}): void {
+  // ... 原有逻辑 ...
+  if (acknowledgedGuestToken) {
+    persistGuestToken(acknowledgedGuestToken, {
+      ephemeralOnly: shouldBeEphemeral(options)
+    });
+  }
+}
+
+// 2. getActivePlayer() 注入 ephemeral 状态，杜绝回写提升
+function getActivePlayer(): PlayerAuthPayload {
+  return {
+    accountToken: readAccountToken() ?? undefined,
+    guestToken: readGuestToken() ?? undefined,
+    playerId: getOrCreatePlayerId({ ephemeralOnly: isEphemeralSession() }),
+    playerName: readPlayerName() ?? createGuestPlayerName()
+  };
+}
+
+// 3. 入房失败回调中区分 duplicate-player (走分身) 与 guest-session-invalid (走全量重置)
 if (!response.ok && !player.accountToken && retryWithFreshIdentity) {
   const isDuplicate =
     response.error.code === "duplicate-player" || response.error.code === "duplicate-name";
@@ -321,8 +367,12 @@ if (!response.ok && !player.accountToken && retryWithFreshIdentity) {
 
   if (isDuplicate || isInvalidSession) {
     setError(null);
-    // duplicate-player 启用 ephemeralOnly 保护主身份！(P2-1 闭环)
     const ephemeralMode = isDuplicate;
+
+    if (ephemeralMode) {
+      // 关键闭环：设置标签页级分身旗标，彻底锁定当前 Tab 写权限，杜绝任何后续操作污染 localStorage
+      markEphemeralSession();
+    }
     clearGuestToken({ ephemeralOnly: ephemeralMode });
 
     player = {
@@ -335,18 +385,35 @@ if (!response.ok && !player.accountToken && retryWithFreshIdentity) {
       persistPlayerName(player.playerName);
     }
 
-    socket.emit(
-      "room:join",
-      { ...player, roomCode: nextRoomCode },
-      (retryAck: RoomAck) => {
-        if (retryAck.ok && ephemeralMode && retryAck.value.guestToken) {
-          // 分身 token 严格只存入 sessionStorage
-          persistGuestToken(retryAck.value.guestToken, { ephemeralOnly: true });
+    // 针对 joinRoomByCode (room:join) 变体：
+    if ("roomCode" in targetArgs) {
+      socket.emit(
+        "room:join",
+        { ...player, roomCode: targetArgs.roomCode },
+        (retryAck: RoomAck) => {
+          if (retryAck.ok && ephemeralMode && retryAck.value.guestToken) {
+            persistGuestToken(retryAck.value.guestToken, { ephemeralOnly: true });
+          }
+          applyRoomAck(retryAck, { ephemeralOnly: ephemeralMode });
         }
-        applyRoomAck(retryAck);
-      }
-    );
-    return;
+      );
+      return;
+    }
+
+    // 针对 joinRoomByTarget (room:join-target) 变体：
+    if ("target" in targetArgs) {
+      socket.emit(
+        "room:join-target",
+        { ...player, target: targetArgs.target },
+        (retryAck: RoomAck) => {
+          if (retryAck.ok && ephemeralMode && retryAck.value.guestToken) {
+            persistGuestToken(retryAck.value.guestToken, { ephemeralOnly: true });
+          }
+          applyRoomAck(retryAck, { ephemeralOnly: ephemeralMode });
+        }
+      );
+      return;
+    }
   }
 }
 ```
@@ -388,9 +455,9 @@ ensureSocket().emit("room:rejoin", storedSession, (response: RoomAck) => {
 | :--- | :--- | :--- |
 | **服务端重启 / 重新部署** | 访客带着旧 Token 建房/加入 | 服务端自 `guest-sessions.jsonl` 恢复会话，验证 100% 成功，玩家无感知 |
 | **超期 30 天未访问** | 用户在第 31 天首次访问 | 服务端返回 `guest-session-invalid` 并剥离 socket 缓存，客户端 `resetGuestIdentity` 自动换发新 Token 重试成功，零红字报错 |
-| **单机多开同房对弈** | Tab 1 建房，Tab 2 输码加入 | Tab 2 检测到 `duplicate-player`，启用 `ephemeralOnly` 仅在 `sessionStorage` 生成独立对战身份入房，**Tab 1 与后续新窗口的 `localStorage` 主身份完好无损** |
+| **单机多开同房对弈** | Tab 1 建房，Tab 2 输码加入 | Tab 2 标记 `isEphemeralSession`，仅在 `sessionStorage` 生成独立对战身份入房，**Tab 1 与后续新窗口的 `localStorage` 主身份完好无损（逐字节不变）** |
 | **同一长连发生 Token 失效** | 长时间开着网页发生 Session 失效 | 客户端重试带 `resetGuestIdentity: true`，服务端强制清空 `socket.data.guestToken`，换发新 ID 成功入房 |
-| **高频走子 / 发包续期** | 玩家频繁走子或切大厅 | 每会话 `lastSeenAt` 落盘引入 60 秒节流锁，避免频繁同步写盘 |
+| **高频走子 / 发包续期** | 玩家频繁走子或切大厅 | 每会话 `lastSeenAt` 落盘引入 60 秒节流锁，同步调用 `noteAppend()` 维护压缩日志行数 |
 | **并发访客超限 (50,000)** | 极高并发涌入新用户 | 按 `lastSeenAt` 逐出最久未活跃会话，容量提升 5 倍，活跃用户永不被误踢 |
 
 ---
@@ -402,7 +469,8 @@ ensureSocket().emit("room:rejoin", storedSession, (response: RoomAck) => {
    - 验证 `GuestSessionStore` 支持 JSONL 持久化写入与跨实例重启恢复；
    - 验证 30 天过期时钟与活跃续期机制；
    - 验证 50,000 容量上限下按 `lastSeenAt` 淘汰最久未活跃会话；
-   - 验证坏行自动跳过与文件自动压缩。
+   - 验证坏行自动跳过与文件自动压缩；
+   - 验证 60 秒节流落盘正确调用 `this.compaction.noteAppend()`。
 2. **Socket 联机测试 (`src/server/room-socket.test.ts`)**：
    - 验证在同一 socket 上认证失效后，重发自愈请求能成功换发新身份并清理 `socket.data.guestToken`；
    - 验证双 socket 携带同一 guestToken 接入后，第二 socket 触发 `duplicate-player` 能够换发独立身份并成功加入房间；
@@ -410,7 +478,13 @@ ensureSocket().emit("room:rejoin", storedSession, (response: RoomAck) => {
 3. **客户端状态单测 (`src/components/hooks/room-state-utils.test.ts`)**：
    - 验证 `persistGuestToken({ ephemeralOnly: true })` 严格只写 `sessionStorage`，断言 `localStorage` 零变更；
    - 验证 `readGuestToken()` 优先读取分身，无分身读取主身份，且移除死会话回退；
-   - 验证全量清理时同步清除 `readRoomSession` 中的凭证。
+   - 验证全量清理时同步清除 `readRoomSession` 中的凭证；
+   - 验证客户端与服务端 `PlayerAuthPayload` 类型定义完全一致（均含 `resetGuestIdentity?: boolean`）。
+4. **集成级分身隔离与主身份保持守门测试 (`src/components/hooks/room-state-utils.test.ts`)**：
+   - **初始基线**：主标签页引导写入主身份（`localStorage` 保存主 `guestToken` 与 `playerId`）；
+   - **分身时序**：分身标签页标记 `markEphemeralSession()`，生成临时分身身份，模拟入房后执行 `applyRoomAck` 与后续多次 `getActivePlayer()`；
+   - **严格断言**：断言 `localStorage` 中的主 `guestToken` 与主 `playerId` 与初始基线**逐字节完全一致**（零变更、零提升）；
+   - **跨标签验证**：模拟第三个新标签页（无 ephemeral 标记），断言读取到的仍是原主身份，证明分身完全收敛在单标签页内。
 
 ### 5.2 门禁基线
 - 四道本地门禁（TypeScript 严格检查、ESLint 全绿、Vitest 全绿、Next.js 生产构建通过）保持 100% 通过。
