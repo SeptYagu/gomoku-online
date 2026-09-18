@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bot, CircleDot, Users, Wifi } from "lucide-react";
+import Link from "next/link";
+import { Bot, CircleDot, MessageSquare, Users, Wifi } from "lucide-react";
 import { createBoard, getGameResult, getOpponent, placeStone } from "@/game/board";
 import type { Board, GameStatus, Move, Point, Stone } from "@/game/types";
 import type { Locale } from "@/i18n/config";
-import type { GameDictionary } from "@/i18n/dictionaries";
+import type { FeedbackDictionary, GameDictionary } from "@/i18n/dictionaries";
 import type { RoomSnapshot } from "@/server/rooms";
 import {
   canRestoreBootGame,
@@ -42,6 +43,7 @@ import {
 
 type GameShellProps = {
   dictionary: GameDictionary;
+  feedbackDictionary?: FeedbackDictionary;
   locale: Locale;
 };
 
@@ -52,7 +54,7 @@ type PendingTransition = {
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
 
-export function GameShell({ dictionary, locale }: GameShellProps) {
+export function GameShell({ dictionary, feedbackDictionary, locale }: GameShellProps) {
   // 判断是否已完成客户端水合，避免在首轮 SSR/水合阶段提前执行恢复守卫
   const isHydrated = useIsHydrated();
   // 模式与活跃对局通过实例级快照在组件挂载时求值，避免 SSR/CSR 水合不一致
@@ -483,6 +485,16 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
             <h1>{dictionary.heroTitle}</h1>
           </div>
           <div className="top-actions">
+            {feedbackDictionary ? (
+              <Link
+                href={`/${locale}/feedback`}
+                className="icon-button feedback-nav-link"
+                title={feedbackDictionary.title}
+                aria-label={feedbackDictionary.title}
+              >
+                <MessageSquare aria-hidden="true" size={18} />
+              </Link>
+            ) : null}
             <LocaleSwitcher currentLocale={locale} label={dictionary.controls.language} />
             <ThemeToggle
               labels={{
@@ -678,7 +690,17 @@ export function GameShell({ dictionary, locale }: GameShellProps) {
         </aside>
       )}
       </main>
-      <footer className="app-version">version: {APP_VERSION}</footer>
+      <footer className="app-version">
+        <span>version: {APP_VERSION}</span>
+        {feedbackDictionary ? (
+          <>
+            {" · "}
+            <Link href={`/${locale}/feedback`} className="feedback-footer-link">
+              {feedbackDictionary.title}
+            </Link>
+          </>
+        ) : null}
+      </footer>
     </>
   );
 }

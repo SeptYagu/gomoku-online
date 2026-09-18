@@ -1,250 +1,204 @@
-# Feedback 页面与日志采集/增量拉取需求计划
+# Feedback 页面与反馈存储需求计划（精简扁平存储版）
 
-更新日期：2026-09-12
-状态：需求计划，尚未实施
+- **更新日期**：2026-09-18
+- **方案状态**：需求与技术设计方案已收敛定稿（按审查结论与用户最新决策精简更新，准备实施）
+- **核心调整**：
+  1. **存储扁平化**：全部反馈报告存放在 `data/feedback/` 单一目录下，单份文件直接以“时间戳 + Feedback ID”命名，彻底取消原多层年月子目录；
+  2. **首版纯文本**：取消图片/截图上传支持，接口从 `multipart/form-data` 切换为标准的 `application/json`（上限 64 KiB），零外部重型依赖；
+  3. **安全与隐私先行**：`.gitignore` 严格忽略 `data/feedback/`，防范用户隐私进入版本库。
 
-## 1. 目标
+---
 
-新增一个面向所有访客的 Feedback 页面，让用户可以提交问题或建议，并在知情、可控的前提下附带当前浏览器会话的诊断日志和一张截图。服务器把每次反馈及其附件写入独立目录；运维人员可通过受保护的 API 和本地同步工具拉取日志与反馈附件，工具只下载本地尚不存在或校验不一致的文件。
+## 1. 目标与用户价值
 
-本需求包含四条完整链路：
+新增一个面向所有访客的 Feedback 页面，让用户可以随时提交问题、体验缺陷或功能建议，并在完全自愿的前提下提供联系邮箱。
 
-1. 浏览器在网站运行期间生成有限、脱敏、可预览的诊断日志。
-2. 用户在 `/{locale}/feedback` 填写反馈，可选联系方式、日志和截图后提交。
-3. 服务器校验并把一次反馈原子地写入专属目录。
-4. 管理员通过鉴权 API 获取 artifact 清单，并用本地命令增量同步未下载文件。
+整个链路保持极简、纯粹与高可靠：
+1. **用户端**：在 `/{locale}/feedback` 直接填写反馈文本（必填），可选填写联系邮箱（选填），点击提交，无需注册登录；
+2. **服务端**：校验合法性与频次后，将每一份反馈报告直接以独立 JSON 文件的形式原子保存到服务器本地单一的 `data/feedback/` 目录下；
+3. **运维端**：维护者登录服务器即可在 `data/feedback/` 目录下通过文件名时间正序直观查阅所有历史反馈。
+
+---
 
 ## 2. 用户故事
 
-- 作为普通用户，我可以填写反馈正文，不注册也能提交。
-- 作为愿意配合排障的用户，我可以在提交前查看将要上传的日志，并自主决定是否附带。
-- 作为用户，我可以选择填写邮箱，也可以完全不提供联系方式。
-- 作为用户，我可以上传一张能够说明问题的截图，并在提交前移除它。
-- 作为维护者，我可以从服务器拉取新反馈、客户端日志和服务端运行日志，不需要重复下载已经完整保存到本地的文件。
-- 作为维护者，我可以验证下载文件未损坏，并在同步中断后安全续跑。
+- 作为普通玩家，我遇到对局卡顿或规则疑惑时，可以随时进入反馈页面填写内容，无需注册即可匿名提交；
+- 作为希望得到答复的玩家，我可以在表单中自愿留下联系邮箱；
+- 作为普通用户，我如果不想留下任何联系方式，可以完全留空，提交不设任何阻碍；
+- 作为维护者，我可以在服务器的 `data/feedback/` 目录下看到所有排好序的反馈文件，文件名即包含提交时间与编号，单文件即完整报告。
 
-## 3. 范围与默认决策
+---
 
-### 3.1 Feedback 页面
+## 3. 详细设计与关键决策
 
-- 新页面路径：`/{locale}/feedback`，根路径 `/feedback` 按现有 locale cookie/default locale 规则重定向。
-- 首页和 Profile 页提供可发现的 Feedback 入口；页面支持 English、中文、Français、Español、Русский、العربية，并继承浅色/黑暗模式和 RTL。
-- 表单字段：
-  - `message`：必填，trim 后 10～5000 个 Unicode 字符。
-  - `email`：可选，最多 254 个字符；仅做基础格式校验，不发送验证邮件。
-  - `includeLogs`：可选且默认不勾选；勾选前必须在旁边明确说明日志内容、大小和隐私边界。
-  - `screenshot`：可选，最多 1 张，只接受 PNG/JPEG/WebP，最大 5 MiB。
-- 页面显示当前应用版本、日志条目数/字节数、日志预览、清空日志和移除截图操作。
-- 提交成功后显示不可猜测的 `feedbackId`，用于后续沟通；失败时保留正文和邮箱，允许重试，不自动重复上传。
+### 3.1 页面与表单交互 (`/{locale}/feedback`)
 
-### 3.2 浏览器诊断日志
+- **路由设计**：
+  - 动态多语言路由：`/{locale}/feedback`；
+  - 根路径重定向：`/feedback` 继承既有的 `gomoku-locale` cookie 或回退默认语言；
+  - 静态预渲染：支持 `generateStaticParams()` 覆盖 `["en", "zh", "fr", "es", "ru", "ar"]` 6 种官方语言，生产构建 SSG 0 Bailout；
+  - 布局与外观：严格继承深浅色主题（27 项 CSS 变量对齐，零翻白闪烁），完整支持阿拉伯语（`ar`）的 RTL 镜像排版。
+- **表单字段与规则**：
+  - `message`（必填）：用户反馈正文，trim 后 1～5,000 个字符，前端提供实时字符计数；
+  - `email`（可选）：联系邮箱，最多 254 字符；若填写则做基础邮箱格式校验（包含 `@`），若不填则存储为 `null`；
+  - **首版无图片上传**：不设截图选择框与图片处理流程，彻底规避原生图像库（sharp/jimp）的重依赖与跨平台安装问题，规避 EXIF/GPS 泄露风险。
+- **提交与回执反馈**：
+  - 提交中展示 Loading 状态并锁定按钮，防止网络抖动导致的连点重复提交；
+  - 提交成功后在当前页面展示感谢卡片，并明确回传生成的 `feedbackId`，同时提供“复制编号”与“返回棋盘主页”动作；
+  - 提交失败时保留用户已输入的文本与邮箱，弹出友好错误提示并允许重试。
+- **全局入口**：
+  - 在棋盘控制栏与桌面/移动端底部导航区提供可见的“Feedback / 反馈”入口链接。
 
-新增统一的 client logger，不直接把任意 `console.log` 全量上传。记录范围限定为：
+### 3.2 服务器本地存储契约 (`data/feedback/`)
 
-- 应用启动、应用版本、locale、主题、当前路由类型。
-- 页面模式切换以及 Socket.IO 连接、断开、重连和协议错误。
-- API 请求失败、未捕获异常和未处理 Promise rejection。
-- 关键操作的结果码与耗时；不记录反馈正文、聊天正文、认证 token、完整邀请链接、邮箱、IP 或截图内容。
-
-日志采用结构化 JSON Lines，建议字段为：
-
-```json
-{"timestamp":"2026-09-12T12:00:00.000Z","level":"error","event":"socket.connect_error","message":"xhr poll error","context":{"appVersion":"abc1234","locale":"zh"}}
-```
-
-约束：
-
-- 浏览器内使用固定容量 ring buffer，默认最多 500 条或 256 KiB，达到任一上限即淘汰最旧记录。
-- 日志只覆盖当前 tab 会话；首版不跨日长期保存在浏览器中。刷新恢复如确有排障价值，可使用 `sessionStorage`，但同样受容量上限约束。
-- 写入前统一执行 key/value 脱敏：屏蔽 `token`、`authorization`、`email`、cookie、URL 查询参数及类似密钥字段。
-- 错误 stack 限长，并移除明显的 token/邮箱模式；所有 context 必须来自白名单字段，不能序列化任意对象。
-- 用户取消“附带日志”时，请求中不发送日志字段；清空后只记录一条新的 `diagnostics.cleared` 状态。
-
-### 3.3 反馈存储
-
-默认根目录为 `data/feedback/submissions`，可用 `GOMOKU_FEEDBACK_DIR` 覆盖。每条反馈使用不可猜测 ID 和独立目录：
+按照用户最新指令，**彻底取消原有的多层年月嵌套子目录**（`submissions/YYYY/MM/<id>/`），所有报告统一扁平存放于一个文件夹内：
 
 ```text
-data/feedback/submissions/
-  2026/
-    09/
-      <feedbackId>/
-        metadata.json
-        client-log.jsonl       # 仅在用户选择附带时存在
-        screenshot.png         # 仅在用户上传时存在；扩展名由校验后的真实类型决定
+data/feedback/
+  ├── 20260918-070500-fb_k9x2m4p1.json
+  ├── 20260918-081230-fb_m3y7p9q2.json
+  └── 20260918-093015-fb_w1x8r5t7.json
 ```
 
-`metadata.json` 至少包含 schemaVersion、feedbackId、receivedAt、message、email（缺省为 null）、appVersion、locale、attachment 清单、每个 artifact 的字节数和 SHA-256。文件名不使用用户输入。
+1. **存储根目录**：
+   - 默认路径：`data/feedback/`；
+   - 环境变量覆盖：支持 `process.env.GOMOKU_FEEDBACK_DIR`，便于测试与定制部署。
+2. **单文件命名规范**：
+   - 格式：`${YYYYMMDD-HHmmss}-${feedbackId}.json`；
+   - 示例：`20260918-070500-fb_k9x2m4p1.json`；
+   - 特性：时间戳采用 UTC 时区 14 位紧凑格式（年月日-时分秒），字母字典序天然严格等价于时间正序，终端 `ls data/feedback` 或按名称排序即可按时间顺序列出。
+3. **单文件结构化内容 (JSON Schema)**：
+   每份文件自包含完整的反馈上下文：
+   ```json
+   {
+     "feedbackId": "fb_k9x2m4p1",
+     "receivedAt": "2026-09-18T07:05:00.000Z",
+     "timestamp": 1726643100000,
+     "message": "在人机 Expert 难度下第 35 手悔棋时出现棋子重绘延迟...",
+     "email": "player@example.com",
+     "locale": "zh",
+     "appVersion": "861ad25",
+     "clientAddress": "127.0.0.1"
+   }
+   ```
+4. **原子写入与并发安全**：
+   - 服务端先将内容写入同目录的临时隐藏文件（如 `.tmp-20260918-070500-fb_k9x2m4p1.json`）；
+   - 数据完全 flush 落盘并通过体积校验后，调用 `fs.renameSync` 原子重命名为目标文件名；
+   - 即使进程在写入瞬间意外中断或重启，也绝不会在生产目录留下半截损坏的 JSON 文件。
+5. **版本控制隔离（安全红线）**：
+   - `.gitignore` 必须显式追加 `data/feedback/`；
+   - 确保任何开发测试或生产运行产生的真实用户反馈报告绝不进入 Git 提交。
 
-写入流程先落到同一文件系统下的 `<feedbackId>.tmp` 目录，所有文件写入并校验成功后再原子 rename 为最终目录。失败时不得留下可被清单 API 视为完整提交的数据。反馈目录、运行日志和同步状态必须加入 `.gitignore`，不得进入 Git。
+---
 
-### 3.4 服务端运行日志
+## 4. HTTP API 契约
 
-除用户主动附带的客户端日志外，自定义 Node server 增加结构化运行日志，默认目录为 `data/runtime-logs`，可用 `GOMOKU_RUNTIME_LOG_DIR` 覆盖。
+### `POST /api/feedback`
 
-- 记录服务启动/停止、请求错误、反馈接收结果、Socket.IO 服务级错误和未捕获异常；不写 token、反馈正文、邮箱、聊天正文或截图内容。
-- 按 UTC 日期和大小轮转，例如 `2026-09-12/server-<instanceId>-0001.jsonl`；单文件建议上限 10 MiB。
-- 轮转后的文件视为 immutable artifact；正在写入的 `.active` 文件不出现在导出清单中，轮转完成后原子改名为 `.jsonl`。
-- stdout/stderr 继续保留供 systemd/journald 使用，文件日志只保存排障所需的结构化事件。
-
-## 4. HTTP/API 契约
-
-### 4.1 提交反馈
-
-`POST /api/feedback`
-
-- Content-Type：`multipart/form-data`。
-- Part：`message`、可选 `email`、可选 `clientLog`、可选 `screenshot`、`appVersion`、`locale`。
-- 服务端不能信任浏览器声明的 MIME、扩展名、大小或 appVersion；截图须检查 magic bytes、限制解码后的像素尺寸，并解码后重新编码为安全图片和安全文件名，防止伪装格式、polyglot 与解压炸弹。
-- 整个请求最大 6 MiB；message、email、clientLog 和 screenshot 另设独立限制。使用流式 multipart parser，超限立即停止读取并清理临时目录，不把附件整体读入内存。
-- 成功：`201 { "feedbackId": "...", "receivedAt": "..." }`。
-- 校验失败：`400/413/415` 和稳定错误码；限流：`429` 与 `Retry-After`；内部错误：`500`，不得暴露磁盘路径或 stack。
-- 按可信 client address 限流，建议每 IP 每 10 分钟 5 次、每天 20 次；沿用 `GOMOKU_TRUST_PROXY` 的地址解析规则。
-- 只接受同源浏览器请求（校验 `Origin`/`Sec-Fetch-Site`），不设置宽松 CORS；脚本化 smoke 可在测试环境使用明确允许的 origin。
-
-### 4.2 Artifact 清单
-
-`GET /api/admin/log-artifacts?cursor=<opaque>&limit=100&kind=all`
-
-- `kind` 支持 `feedback`、`client-log`、`runtime-log`、`screenshot`、`all`。
-- 响应只列已完整落盘且不可变的 artifact：
-
-```json
-{
-  "items": [
+- **请求头**：`Content-Type: application/json`
+- **请求体（JSON）**：
+  ```json
+  {
+    "message": "反馈正文...",
+    "email": "optional@example.com",
+    "locale": "zh"
+  }
+  ```
+- **请求体安全上限**：64 KiB（严格防范超大 JSON 报文攻击，超限立即返回 `413 Payload Too Large` 并断开连接）。
+- **服务端处理时序**：
+  1. 客户端地址与频率校验：通过现有的 `resolveClientAddress` 提取客户端真实 IP，经由 `FixedWindowRateLimiter` 检查（限制例如每 10 分钟最多 5 次提交），超限返回 `429 Too Many Requests`；
+  2. 字段校验：
+     - `message` 必填，trim 后长度须在 `1 <= length <= 5000` 范围内，否则返回 `400`；
+     - `email` 选填，若存在则校验格式与 `length <= 254`，否则返回 `400`；
+     - `locale` 选填，自动校准为已知 6 语种之一；
+  3. 元数据组装：生成随机唯一 `feedbackId`（如 `fb_${randomBytes(6).toString("base64url")}`），注入当前服务器权威时间与 `appVersion`；
+  4. 存储落地：调用 `FeedbackStore.saveFeedback()` 执行原子落盘；
+  5. 响应客户端：返回 HTTP 201。
+- **响应体**：
+  - 成功：
+    ```json
     {
-      "artifactId": "opaque-id",
-      "kind": "client-log",
-      "feedbackId": "optional-id",
-      "createdAt": "2026-09-12T12:00:00.000Z",
-      "relativePath": "feedback/2026/09/<feedbackId>/client-log.jsonl",
-      "size": 12345,
-      "sha256": "..."
+      "ok": true,
+      "feedbackId": "fb_k9x2m4p1",
+      "receivedAt": "2026-09-18T07:05:00.000Z"
     }
-  ],
-  "nextCursor": "opaque-or-null",
-  "hasMore": false
-}
+    ```
+  - 校验失败：`400 { "error": "Feedback message cannot be empty." }`
+  - 频次超限：`429 { "error": "Too many feedback submissions. Please try again later." }`
+  - 内部异常：`500 { "error": "Failed to save feedback." }`（不泄露内部磁盘路径或代码堆栈）
+
+---
+
+## 5. 国际化多语言与无障碍 (i18n & A11y)
+
+在 `src/i18n/dictionaries.ts` 中新增独立的 `feedback` 字典空间，并在 `en`、`zh`、`fr`、`es`、`ru`、`ar` 6 种官方语言中 100% 补齐：
+
+```typescript
+export type FeedbackDictionary = {
+  title: string;              // "用户反馈与建议" / "User Feedback" / ...
+  subtitle: string;           // "告诉我们您遇到的问题或改进建议，无需注册即可提交"
+  messageLabel: string;       // "问题描述或建议（必填）"
+  messagePlaceholder: string; // "请详细描述您遇到的问题或建议..."
+  emailLabel: string;         // "联系邮箱（可选）"
+  emailPlaceholder: string;   // "选填，方便我们与您进一步沟通"
+  charCount: string;          // "{current} / {max}"
+  submitAction: string;       // "提交反馈"
+  submitting: string;         // "正在提交..."
+  successTitle: string;       // "反馈已送达"
+  successDesc: string;        // "非常感谢您的反馈与支持！您的反馈编号为：{feedbackId}"
+  copyFeedbackId: string;     // "复制编号"
+  copiedFeedbackId: string;   // "已复制"
+  backToGame: string;         // "返回对局"
+  errorEmpty: string;         // "请输入反馈内容"
+  errorTooLong: string;       // "反馈内容过长"
+  errorGeneric: string;       // "提交失败，请稍后重试"
+  rateLimited: string;        // "提交过于频繁，请稍后再试"
+};
 ```
 
-- 排序键固定为 `(createdAt, artifactId)`，cursor 为服务端生成的不透明值；不得只用时间戳，否则同毫秒 artifact 会漏项。
-- 清单不返回反馈正文、邮箱或真实服务器绝对路径。
+- **A11y 无障碍保障**：
+  - 错误与成功消息挂载 `aria-live="polite"`，便于读屏软件即时提示；
+  - 输入框与文本域严格绑定 `aria-describedby` 与 `aria-label`；
+  - 提交状态下设置 `aria-busy="true"` 并锁定按钮焦点。
 
-### 4.3 下载单个 Artifact
+---
 
-`GET /api/admin/log-artifacts/:artifactId`
+## 6. 实施步骤
 
-- 通过服务端索引解析 artifact，禁止把 URL 参数拼接为文件路径，防止目录穿越。
-- 返回 `Content-Length`、`ETag: "sha256:<digest>"`、`Digest`/自定义 SHA-256 响应头和 `Content-Disposition: attachment`。
-- 支持流式下载；首版可不支持 Range，但必须能被本地工具幂等重试。
+1. **第 1 步：基础设施与安全隔离 (F0)**
+   - 在 `.gitignore` 中追加 `data/feedback/`；
+   - 新建 `src/server/feedback-store.ts`，实现扁平化落盘逻辑、时间戳与 ID 命名算法、临时文件原子更名与目录自动创建；
+   - 新建 `src/server/feedback-store.test.ts`，针对命名规则、原子落盘、超长与空值异常进行完整单测覆盖。
+2. **第 2 步：服务端 API 与限流 (F1)**
+   - 在 `src/server/online-server.ts` 中注册 `POST /api/feedback`；
+   - 接入 64 KiB 流式请求体上限与 JSON 解析；
+   - 挂载 `feedbackRateLimiter` 实施 IP 防刷；
+   - 编写 API 集成测试，验证 201 成功返回、400 边界拦截与 429 限流保护。
+3. **第 3 步：多语言字典与前端页面 (F2)**
+   - 在 `src/i18n/dictionaries.ts` 补齐 6 语种 `feedback` 字典包，通过 `dictionaries.test.ts` 结构一致性校验；
+   - 新建 `src/app/[locale]/feedback/page.tsx` 与 `src/components/feedback/FeedbackPage.tsx`；
+   - 在 `src/app/globals.css` 补充响应式与 RTL 兼容样式；
+   - 在控制栏与桌面/移动端底栏挂载进入反馈页面的导航入口。
+4. **第 4 步：工程门禁与端到端验证 (F3)**
+   - 运行四道本地门禁（TS 类型检查、ESLint 全绿、Vitest 单元测试全绿、Next.js 生产构建 17 页面全通过）；
+   - 在本地启动服务提交真实反馈，验证 `data/feedback/` 生成符合预期的扁平 JSON 文件。
 
-### 4.4 管理接口鉴权
+---
 
-- 两个 `/api/admin/log-artifacts*` 接口必须要求 `Authorization: Bearer <GOMOKU_LOG_EXPORT_TOKEN>`。
-- 环境变量未配置时，管理接口默认不可用并返回 `503`，不能降级为匿名访问。
-- token 使用 timing-safe comparison；日志中不能输出 token。生产环境只允许 HTTPS，并在 OpenResty 层追加请求速率限制。
-- Feedback 提交接口保持匿名；管理接口与注册账号 token 是不同的权限域。
+## 7. 验收标准
 
-## 5. 本地增量同步工具
-
-新增命令：
-
-```bash
-npm run sync:feedback -- --base-url https://example.com --output <local-directory>
-```
-
-token 只从 `GOMOKU_LOG_EXPORT_TOKEN` 环境变量读取，不接受命令行明文参数，以免进入 shell history 和进程列表。
-
-同步算法：
-
-1. 读取输出目录内的 `.gomoku-log-sync.json`；该文件只是加速索引，不是唯一真相。
-2. 分页请求 artifact 清单。对每项规范化 `relativePath`，确认最终路径仍位于指定输出目录内。
-3. 若本地目标存在、size 相同且本地状态记录的 SHA-256 相同，则跳过。
-4. 若状态缺失或不一致，计算本地文件 SHA-256；匹配则补写状态并跳过，不匹配则重新下载。
-5. 下载到同目录 `<filename>.part`，完成后校验 size 与 SHA-256；校验通过才原子 rename。校验失败删除 `.part` 并报告错误，不覆盖已有文件。
-6. 每个 artifact 成功后原子更新状态文件，记录 artifactId、relativePath、size、sha256、downloadedAt；中途退出后下次可继续。
-7. 完成后输出 scanned/downloaded/skipped/repaired/failed 计数；任一下载或校验失败时进程返回非零退出码。
-
-“只抓本地没下载过”的判定因此为：本地文件实际存在且内容 hash 与服务器清单一致才算已下载。仅凭 cursor、时间戳或状态文件记录不足以跳过。
-
-## 6. 安全、隐私与滥用防护
-
-- 页面必须明确说明日志和截图会被发送给维护者；日志可预览、可清空、可不附带。
-- 邮箱仅用于反馈联系，不公开、不写入普通运行日志、不出现在 artifact 清单；后续隐私政策需说明用途与保留期限。
-- 文本按纯文本保存和展示；未来若做后台查看页，必须转义输出，不能渲染用户 HTML。
-- 服务器校验文件签名和大小；拒绝 SVG、HTML、压缩包及可执行内容。下载响应使用 `X-Content-Type-Options: nosniff`。
-- feedbackId、artifactId 均使用加密安全随机值；外部响应不暴露目录结构、IP、内部错误或连续数据库 ID。
-- 提交限流、请求超时、并发上限和最小磁盘剩余量保护必须在落盘前执行；磁盘空间不足时安全失败并产生脱敏告警。
-- 不提供匿名“列出全部反馈/日志”的 API；所有管理读取路径都必须鉴权并写审计事件。
-- 建议默认保留：服务端运行日志 30 天、反馈及附件 180 天。具体清理策略通过环境配置，清理任务只删除已完成目录并记录数量，不跟随符号链接。
-
-## 7. 实施阶段
-
-### F0：契约和存储基础
-
-- 新增 feedback/log artifact 类型、校验器、路径规范化和 SHA-256 工具。
-- 新增临时目录原子提交、artifact 索引/扫描与损坏目录隔离逻辑。
-- 配置数据目录、上传限制、导出 token 和保留期限；同步 `.gitignore` 与部署示例。
-- 先写存储、路径穿越、损坏文件和边界值单元测试。
-
-### F1：客户端诊断日志
-
-- 实现 ring buffer、白名单 context、脱敏、容量淘汰和 JSONL 导出。
-- 接入 app boot、路由/模式、API、Socket.IO、`window.error` 和 `unhandledrejection`。
-- 为脱敏、容量、异常序列化和 session 恢复增加测试。
-
-### F2：Feedback API 与页面
-
-- 在 custom online server 中接入流式 multipart 解析、提交限流和 FeedbackStore。
-- 实现六语页面、入口、表单状态、日志预览、截图预览、上传进度/防重复提交和成功回执。
-- 补齐 API 集成测试、字典一致性测试、键盘/读屏、移动端和 RTL 验证。
-
-### F3：运行日志与受保护导出
-
-- 实现服务端 JSONL logger、轮转和 active/immutable 边界。
-- 实现 artifact 清单分页、鉴权、下载流、hash/size header 和审计事件。
-- 覆盖未配置 token、错误 token、分页同时间戳、目录穿越、active 文件隐藏和大文件流式下载测试。
-
-### F4：增量同步工具与端到端验收
-
-- 新增 `tools/sync-feedback-artifacts.ts` 和 `npm run sync:feedback`。
-- 测试首次全量下载、二次零下载、本地文件缺失、hash 损坏、`.part` 中断、分页续跑和非法 relativePath。
-- 在临时生产构建上完成匿名提交 → 专属目录落盘 → 管理清单 → 首次同步 → 二次零下载的闭环 smoke。
-
-### F5：部署与运维收口
-
-- 更新 systemd/OpenResty 示例、环境变量说明、备份/权限/容量监控和保留策略。
-- 生产目录建议权限为仅服务用户可写、仅服务用户和指定运维用户可读。
-- 部署后验证 HTTPS、管理接口匿名拒绝、反馈限流、磁盘告警和真实增量同步。
-
-## 8. 验收标准
-
-功能验收：
-
-- 六种语言都能打开 Feedback 页面，正文为唯一必填项。
-- 不填邮箱、不附日志、不附截图可以成功提交。
-- 选择日志后可以预览且上传内容与预览一致；取消后服务器目录中没有 client log。
-- 合法截图成功保存；伪造 MIME、超限文件和不支持格式被拒绝且无残留临时目录。
-- 每次成功提交只生成一个独立、完整目录，metadata 中附件 size/hash 与实际文件一致。
-- 管理 API 无 token/错误 token 均不能列出或下载任何 artifact。
-- 首次同步下载全部匹配项；立即二次同步 `downloaded=0`；删除一个本地文件后只补下载该文件；篡改一个文件后只修复该文件。
-- 正在写入的运行日志和未完成反馈不会进入清单。
-
-质量门禁：
-
-- 新增单元/集成测试与 smoke 全部通过。
-- `npm test`、`npm run lint`、`npx tsc --noEmit`、`npm run build`、`git diff --check` 通过。
-- 对 Feedback 页面做桌面、390×844 移动端和阿拉伯语 RTL 人工视觉检查。
-- 安全测试覆盖上传炸弹的大小门限、文件签名伪造、目录穿越、token 缺失/错误、限流和日志脱敏。
-
-## 9. 非目标与后续项
-
-首版不包含：
-
-- 面向公众的反馈列表、状态查询或截图访问。
-- 邮件自动回复、工单系统、后台管理 UI、评论往返或反馈状态流转。
-- 视频/任意文件上传、自动截屏、后台持续上传日志或跨设备日志合并。
-- 把聊天正文、完整对局棋谱、认证信息或用户输入无差别写入诊断日志。
-- 多实例共享 artifact 索引。部署多实例前需把文件存储迁移到对象存储/数据库，或保证单写实例与共享一致性。
-
-后续若需要后台工单流，可在不改变已发布反馈提交契约的前提下，为 metadata 增加独立状态投影；不要原地改写用户原始提交和附件。
+1. **存储与命名**：
+   - 提交反馈后，`data/feedback/` 目录下新增文件严格符合 `${YYYYMMDD-HHmmss}-${feedbackId}.json`；
+   - 绝不生成任何二级或子文件夹；
+   - 文件内容为合法 JSON，包含必填的 `feedbackId`、`receivedAt`、`message` 以及正确的 `email`（有则记录，无则为 null）；
+   - `git status` 确认 `data/feedback/` 零未跟踪改动（受 `.gitignore` 保护）。
+2. **接口健壮性**：
+   - 超过 64 KiB 的非法大报文被拒绝；
+   - 空文本或纯空格返回 400；
+   - 短时间内连点触发 429 频次限制。
+3. **页面与无障碍**：
+   - 6 种官方语言均能正常打开 `/{locale}/feedback`，页面无布局错乱，阿拉伯语 RTL 排版镜像正常；
+   - 提交成功后展示包含 `feedbackId` 的感谢卡片，支持返回首页；
+   - 生产构建 `npm run build` 预渲染通过，不出现 SSG Bailout。
+4. **工程门禁**：
+   - 四道硬性门禁（`tsc`、`lint`、`test`、`build`）全部 100% 通过。

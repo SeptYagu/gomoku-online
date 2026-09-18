@@ -26,7 +26,11 @@ export default async function LocalePage({ params }: LocalePageProps) {
   return (
     <div className="locale-page" dir={getDirection(localeParam)} lang={localeParam}>
       <DocumentLocaleSync locale={localeParam} />
-      <GameShell dictionary={dictionary.game} locale={localeParam} />
+      <GameShell
+        dictionary={dictionary.game}
+        feedbackDictionary={dictionary.feedback}
+        locale={localeParam}
+      />
     </div>
   );
 }

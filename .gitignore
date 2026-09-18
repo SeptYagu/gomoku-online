@@ -15,6 +15,7 @@ coverage/
 .codex-logs/
 data/game-records/
 data/accounts/
+data/feedback/
 # 本地工具产物：agent 工作目录、远程附件缓存、TS 增量编译信息，都不进版本库
 .codex/
 .codex-remote-attachments/

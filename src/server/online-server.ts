@@ -5,7 +5,7 @@ import type { AccountSession } from "./accounts";
 import { resolveClientAddress, shouldTrustProxy } from "./client-address";
 import type { LeaderboardQuery } from "./game-records";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
-import { accountStore, guestSessionStore, roomStore } from "./room-store";
+import { accountStore, feedbackStore, guestSessionStore, roomStore } from "./room-store";
 import type { PresenceListQuery, RoomListQuery } from "./rooms";
 import { FixedWindowRateLimiter } from "./rate-limit";
 
@@ -16,6 +16,10 @@ const trustProxy = shouldTrustProxy();
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
 const accountRegistrationLimiter = new FixedWindowRateLimiter({
+  limit: 5,
+  windowMs: 10 * 60 * 1000
+});
+const feedbackLimiter = new FixedWindowRateLimiter({
   limit: 5,
   windowMs: 10 * 60 * 1000
 });
@@ -40,6 +44,10 @@ const httpServer = createServer((request, response) => {
   }
 
   if (handleLeaderboardApi(request, response)) {
+    return;
+  }
+
+  if (handleFeedbackApi(request, response)) {
     return;
   }
 
@@ -212,6 +220,98 @@ function handleProfileApi(request: IncomingMessage, response: ServerResponse): b
   return true;
 }
 
+function handleFeedbackApi(request: IncomingMessage, response: ServerResponse): boolean {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+  if (url.pathname !== "/api/feedback") {
+    return false;
+  }
+
+  void processFeedbackApiRequest(request, response).catch(() => {
+    writeJson(response, 500, { error: "Failed to process feedback" });
+  });
+
+  return true;
+}
+
+type FeedbackRequestBody = {
+  email?: null | string;
+  locale?: string;
+  message?: string;
+};
+
+async function processFeedbackApiRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  if (request.method !== "POST") {
+    writeJson(response, 405, { error: "Method not allowed" }, { allow: "POST" });
+    return;
+  }
+
+  const clientKey = getRequestClientKey(request);
+
+  if (!feedbackLimiter.consume(clientKey)) {
+    writeJson(response, 429, { error: "Too many feedback submissions. Please try again later." });
+    return;
+  }
+
+  const body = await readJsonBody<FeedbackRequestBody>(request, 64 * 1024);
+
+  if (!body || typeof body !== "object") {
+    writeJson(response, 400, { error: "Invalid JSON request body" });
+    return;
+  }
+
+  const rawMessage = typeof body.message === "string" ? body.message.trim() : "";
+
+  if (!rawMessage) {
+    writeJson(response, 400, { error: "Feedback message cannot be empty." });
+    return;
+  }
+
+  if (rawMessage.length > 5000) {
+    writeJson(response, 400, { error: "Feedback message cannot exceed 5000 characters." });
+    return;
+  }
+
+  let email: null | string = null;
+
+  if (body.email && typeof body.email === "string") {
+    const trimmedEmail = body.email.trim();
+
+    if (trimmedEmail) {
+      if (trimmedEmail.length > 254 || !trimmedEmail.includes("@")) {
+        writeJson(response, 400, { error: "Invalid email format." });
+        return;
+      }
+
+      email = trimmedEmail;
+    }
+  }
+
+  try {
+    const appVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? process.env.APP_VERSION ?? "unknown";
+    const userAgent = typeof request.headers["user-agent"] === "string" ? request.headers["user-agent"] : undefined;
+    const locale = typeof body.locale === "string" ? body.locale.trim() : undefined;
+
+    const saved = feedbackStore.saveFeedback({
+      appVersion,
+      clientAddress: clientKey,
+      email,
+      locale,
+      message: rawMessage,
+      userAgent
+    });
+
+    writeJson(response, 201, {
+      feedbackId: saved.feedbackId,
+      ok: true,
+      receivedAt: saved.receivedAt
+    });
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Failed to save feedback";
+    writeJson(response, 400, { error: errorMessage });
+  }
+}
+
 function getBearerToken(request: IncomingMessage): string {
   const authorization = request.headers.authorization ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(Array.isArray(authorization) ? authorization[0] : authorization);
@@ -227,7 +327,7 @@ function getRequestClientKey(request: IncomingMessage): string {
   });
 }
 
-function readJsonBody<T>(request: IncomingMessage): Promise<T | null> {
+function readJsonBody<T>(request: IncomingMessage, maxBytes = 4096): Promise<T | null> {
   return new Promise((resolve, reject) => {
     let body = "";
 
@@ -235,7 +335,7 @@ function readJsonBody<T>(request: IncomingMessage): Promise<T | null> {
     request.on("data", (chunk: string) => {
       body += chunk;
 
-      if (body.length > 4096) {
+      if (body.length > maxBytes) {
         request.destroy(new Error("Request body too large"));
       }
     });

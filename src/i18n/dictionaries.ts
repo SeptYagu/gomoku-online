@@ -226,9 +226,31 @@ export type GameDictionary = {
   };
 };
 
+export type FeedbackDictionary = {
+  backToGame: string;
+  charCount: string;
+  copiedFeedbackId: string;
+  copyFeedbackId: string;
+  emailLabel: string;
+  emailPlaceholder: string;
+  errorEmpty: string;
+  errorGeneric: string;
+  errorTooLong: string;
+  messageLabel: string;
+  messagePlaceholder: string;
+  rateLimited: string;
+  submitAction: string;
+  submitting: string;
+  subtitle: string;
+  successDesc: string;
+  successTitle: string;
+  title: string;
+};
+
 export type Dictionary = {
-  localeName: string;
+  feedback: FeedbackDictionary;
   game: GameDictionary;
+  localeName: string;
 };
 
 const en = {
@@ -456,6 +478,26 @@ const en = {
       placeholder: "Ad placement",
       label: "Future ad placement"
     }
+  },
+  feedback: {
+    backToGame: "Back to Game",
+    charCount: "{current} / {max}",
+    copiedFeedbackId: "Copied",
+    copyFeedbackId: "Copy ID",
+    emailLabel: "Contact Email (Optional)",
+    emailPlaceholder: "Optional, in case you want us to follow up",
+    errorEmpty: "Feedback message cannot be empty.",
+    errorGeneric: "Failed to submit feedback. Please try again later.",
+    errorTooLong: "Feedback message is too long.",
+    messageLabel: "Your Feedback or Suggestion (Required)",
+    messagePlaceholder: "Please describe any bugs, questions, or ideas...",
+    rateLimited: "Too many feedback submissions. Please try again later.",
+    submitAction: "Submit Feedback",
+    submitting: "Submitting...",
+    subtitle: "Tell us about any bugs or suggestions. No account required.",
+    successDesc: "Thank you for your feedback! Reference ID: {feedbackId}",
+    successTitle: "Feedback Received",
+    title: "Feedback & Suggestions"
   }
 } satisfies Dictionary;
 
@@ -684,6 +726,26 @@ const zh = {
       placeholder: "广告预留位",
       label: "未来广告位"
     }
+  },
+  feedback: {
+    backToGame: "返回对局",
+    charCount: "{current} / {max}",
+    copiedFeedbackId: "已复制",
+    copyFeedbackId: "复制编号",
+    emailLabel: "联系邮箱（选填）",
+    emailPlaceholder: "选填，方便我们与您跟进",
+    errorEmpty: "反馈内容不能为空。",
+    errorGeneric: "提交失败，请稍后重试。",
+    errorTooLong: "反馈内容超出长度限制。",
+    messageLabel: "问题描述或建议（必填）",
+    messagePlaceholder: "请详细描述您遇到的问题、疑问或改进建议...",
+    rateLimited: "提交过于频繁，请稍后再试。",
+    submitAction: "提交反馈",
+    submitting: "正在提交...",
+    subtitle: "告诉我们您遇到的问题或改进建议，无需注册即可提交。",
+    successDesc: "非常感谢您的反馈！反馈编号：{feedbackId}",
+    successTitle: "反馈已送达",
+    title: "用户反馈与建议"
   }
 } satisfies Dictionary;
 
@@ -912,6 +974,26 @@ const fr = {
       placeholder: "Emplacement publicitaire",
       label: "Futur emplacement publicitaire"
     }
+  },
+  feedback: {
+    backToGame: "Retour au jeu",
+    charCount: "{current} / {max}",
+    copiedFeedbackId: "Copié",
+    copyFeedbackId: "Copier l'ID",
+    emailLabel: "E-mail de contact (Optionnel)",
+    emailPlaceholder: "Optionnel, pour vous recontacter si nécessaire",
+    errorEmpty: "Le message de retour ne peut pas être vide.",
+    errorGeneric: "Échec de l'envoi. Veuillez réessayer plus tard.",
+    errorTooLong: "Le message est trop long.",
+    messageLabel: "Votre retour ou suggestion (Requis)",
+    messagePlaceholder: "Décrivez les problèmes rencontrés ou vos suggestions...",
+    rateLimited: "Trop de retours envoyés. Veuillez réessayer plus tard.",
+    submitAction: "Envoyer le retour",
+    submitting: "Envoi en cours...",
+    subtitle: "Faites-nous part de vos remarques ou suggestions. Aucun compte requis.",
+    successDesc: "Merci pour votre retour ! Identifiant : {feedbackId}",
+    successTitle: "Retour bien reçu",
+    title: "Retours et suggestions"
   }
 } satisfies Dictionary;
 
@@ -1140,6 +1222,26 @@ const es = {
       placeholder: "Espacio para anuncio",
       label: "Futuro espacio publicitario"
     }
+  },
+  feedback: {
+    backToGame: "Volver al juego",
+    charCount: "{current} / {max}",
+    copiedFeedbackId: "Copiado",
+    copyFeedbackId: "Copiar ID",
+    emailLabel: "Correo de contacto (Opcional)",
+    emailPlaceholder: "Opcional, por si deseas que te contactemos",
+    errorEmpty: "El mensaje de comentarios no puede estar vacío.",
+    errorGeneric: "No se pudo enviar el comentario. Inténtalo de nuevo más tarde.",
+    errorTooLong: "El mensaje de comentarios es demasiado largo.",
+    messageLabel: "Tus comentarios o sugerencias (Obligatorio)",
+    messagePlaceholder: "Describe cualquier error, duda o idea...",
+    rateLimited: "Demasiados envíos de comentarios. Inténtalo de nuevo más tarde.",
+    submitAction: "Enviar comentarios",
+    submitting: "Enviando...",
+    subtitle: "Cuéntanos sobre cualquier error o sugerencia. No se requiere cuenta.",
+    successDesc: "¡Gracias por tus comentarios! ID de referencia: {feedbackId}",
+    successTitle: "Comentarios recibidos",
+    title: "Comentarios y sugerencias"
   }
 } satisfies Dictionary;
 
@@ -1368,6 +1470,26 @@ const ru = {
       placeholder: "Место для рекламы",
       label: "Будущее место для рекламы"
     }
+  },
+  feedback: {
+    backToGame: "Вернуться в игру",
+    charCount: "{current} / {max}",
+    copiedFeedbackId: "Скопировано",
+    copyFeedbackId: "Копировать ID",
+    emailLabel: "Контактный email (необязательно)",
+    emailPlaceholder: "Необязательно, если вы хотите получить ответ",
+    errorEmpty: "Текст отзыва не может быть пустым.",
+    errorGeneric: "Не удалось отправить отзыв. Повторите попытку позже.",
+    errorTooLong: "Текст отзыва слишком длинный.",
+    messageLabel: "Ваш отзыв или предложение (обязательно)",
+    messagePlaceholder: "Опишите найденные ошибки, вопросы или идеи...",
+    rateLimited: "Слишком много запросов. Повторите попытку позже.",
+    submitAction: "Отправить отзыв",
+    submitting: "Отправка...",
+    subtitle: "Сообщите нам об ошибках или предложениях. Регистрация не требуется.",
+    successDesc: "Спасибо за ваш отзыв! Номер обращения: {feedbackId}",
+    successTitle: "Отзыв отправлен",
+    title: "Отзывы и предложения"
   }
 } satisfies Dictionary;
 
@@ -1596,6 +1718,26 @@ const ar = {
       placeholder: "مساحة إعلانية",
       label: "مساحة إعلان مستقبلية"
     }
+  },
+  feedback: {
+    backToGame: "العودة إلى اللعبة",
+    charCount: "{current} / {max}",
+    copiedFeedbackId: "تم النسخ",
+    copyFeedbackId: "نسخ المعرّف",
+    emailLabel: "البريد الإلكتروني للتواصل (اختياري)",
+    emailPlaceholder: "اختياري، في حال رغبت في متابعتنا معك",
+    errorEmpty: "لا يمكن أن تكون رسالة الملاحظات فارغة.",
+    errorGeneric: "فشل إرسال الملاحظات. يُرجى المحاولة مرة أخرى لاحقًا.",
+    errorTooLong: "رسالة الملاحظات طويلة جدًا.",
+    messageLabel: "ملاحظاتك أو اقتراحاتك (مطلوب)",
+    messagePlaceholder: "يُرجى وصف أي أخطاء أو أسئلة أو أفكار لديك...",
+    rateLimited: "تم إرسال عدد كبير من الملاحظات. يُرجى المحاولة مرة أخرى لاحقًا.",
+    submitAction: "إرسال الملاحظات",
+    submitting: "جارٍ الإرسال...",
+    subtitle: "أخبرنا عن أي مشاكل أو اقتراحات، بدون الحاجة إلى حساب.",
+    successDesc: "شكرًا لك على ملاحظاتك! الرقم المرجعي: {feedbackId}",
+    successTitle: "تم استلام الملاحظات",
+    title: "الملاحظات والاقتراحات"
   }
 } satisfies Dictionary;
 
