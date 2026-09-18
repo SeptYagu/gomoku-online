@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`d85a255 fix(feedback): resolve Round 2 review defects P2-1, P2-2, P3-1`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`d317764 feat(ui): add text label to feedback button in navigation`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- ⚠️ **反馈入口按钮文字标签 + Windows 文件重写重试 · 独立审查 Round 1（被审 `d317764`）**：**审查未通过**。0×P0 / 0×P1 / **1×P2 / 2×P3**。①**P2-1**：`src/server/jsonl-file.ts:61-76` 新增的 `atomicRenameSync` 以 `while (Date.now() - start < 15 * attempt) {}` 同步忙等实现退避，实测单次 `rewriteJsonlFile` **同步占用 697ms**（30ms 定时器零触发、10ms 采样器零执行，事件循环完全停摆），而全栈服务 `online-server.ts` 单进程托管 Next.js + Socket.IO，`persist()→compactFile()` 又在请求线程同步执行 → 停顿期内全部 HTTP/WS 与房间广播冻结，相对基线（单次 rename 快速失败）属明显延迟回归；须改非阻塞退避（`rewriteJsonlFile` → `async`）或压缩预算并改用 `Atomics.wait`，且重试白名单应收敛为 `EPERM`/`EBUSY`（`EACCES` 非瞬态）。②**P3-1**：本次 diff 未新增任何测试；变异探针把 `maxAttempts` 改为 1（等价删除重试）后 `jsonl-file.test.ts` 仍 5/5 全绿 → 验收标准 ④ 零守门。③**P3-2**：`src/components/GameShell.tsx:493` 的 `aria-label={feedbackDictionary.title}` 与 `:496` 新增可见文本 `navLabel` 不一致，实测 zh（意见反馈/用户反馈与建议）、fr、ru 三语种可访问名称不含可见文本，违反 WCAG 2.5.3 Label in Name（Level A）（en/es/ar 恰为前缀故未暴露）。通过项：6 语种标签真实浏览器渲染且镜像正确、6 语种 × 2 视口 × 2 布局共 24 组零横向溢出、字典三断言有效；四道门禁独立复跑全绿（tsc 0 / lint 0 错误 0 警告 / vitest 35 套 329 例 / build 18/18）。详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round1-handoff.md)。
 
 - 🚀 **用户反馈入口按钮增加文字标签与 Windows 文件重写防锁强化（2026-09-18，待审交付）**：依据用户反馈针对顶部导航栏反馈入口仅有图标的问题进行增强：①在 `FeedbackDictionary` 中新增 `navLabel: string;` 字段，并在 6 语种中补齐规范文案（en: "Feedback", zh: "意见反馈", fr: "Commentaires", es: "Comentarios", ru: "Обратная связь", ar: "الملاحظات"）；②`GameShell.tsx` 顶部操作栏反馈入口同时渲染图标与文本标签，保持 A11y 兼容；③`globals.css` 完善 `.feedback-nav-link`（gap 6px、padding 0 12px、nowrap、18px 图标对齐），完全兼容 RTL 镜像；④`src/server/jsonl-file.ts` 引入 `atomicRenameSync` 退避重试彻底避免 Windows 文件锁偶发异常；四道门禁全绿（35 套 / 329 项单测全绿，Next.js 生产构建 18/18 页面通过）。详见 [`docs/handoff/2026-09-18-feedback-button-label-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-handoff.md)。
 
