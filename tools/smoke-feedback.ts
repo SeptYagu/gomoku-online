@@ -75,9 +75,9 @@ async function main(): Promise<void> {
   assert.equal(getRes.status, 405, `Expected 405 Method Not Allowed, got ${getRes.status}`);
   console.log("PASS reject GET method (405)");
 
-  // Test 5: Reject payload > 64 KiB with 413 Payload Too Large
+  // Test 5: Reject payload >= 1 MiB with 413 Payload Too Large
   const oversizedPayload = JSON.stringify({
-    message: "x".repeat(66 * 1024),
+    message: "x".repeat(1024 * 1024 + 100),
     email: "smoke-tester@example.com"
   });
   const largeRes = await fetch(`${baseUrl}/api/feedback`, {
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   assert.equal(largeRes.status, 413, `Expected 413 Payload Too Large, got ${largeRes.status}`);
   const largeData = await largeRes.json();
   assert.match(largeData.error, /payload too large/i);
-  console.log("PASS reject oversized payload > 64 KiB with 413 Payload Too Large");
+  console.log("PASS reject oversized payload >= 1 MiB with 413 Payload Too Large");
 
   // Test 6: Exhaust remaining token (5th request) and verify 429 on 6th request
   const fifthRes = await fetch(`${baseUrl}/api/feedback`, {

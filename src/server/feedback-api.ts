@@ -30,34 +30,42 @@ export const defaultFeedbackLimiter = new FixedWindowRateLimiter({
 });
 
 export const MAX_FEEDBACK_BODY_BYTES = 64 * 1024;
+export const MAX_FEEDBACK_DRAIN_BYTES = 15 * 1024 * 1024;
 
 export function readFeedbackJsonBody<T>(
   request: IncomingMessage,
-  maxBytes = MAX_FEEDBACK_BODY_BYTES
+  maxBytes = MAX_FEEDBACK_BODY_BYTES,
+  maxDrainBytes = MAX_FEEDBACK_DRAIN_BYTES
 ): Promise<T | null> {
   return new Promise((resolve, reject) => {
     let body = "";
     let bytesRead = 0;
     let isExceeded = false;
 
-    request.on("data", (chunk: Buffer | string) => {
-      const chunkBytes = Buffer.isBuffer(chunk) ? chunk.byteLength : Buffer.byteLength(chunk, "utf8");
+    request.setEncoding("utf8");
+
+    request.on("data", (chunk: string) => {
+      const chunkBytes = Buffer.byteLength(chunk, "utf8");
       bytesRead += chunkBytes;
 
       if (bytesRead > maxBytes) {
-        if (!isExceeded) {
-          isExceeded = true;
-          request.pause();
+        isExceeded = true;
+        if (bytesRead > maxDrainBytes) {
+          request.destroy();
           reject(new PayloadTooLargeError("Request body exceeds maximum allowed size"));
         }
         return;
       }
 
-      body += chunk.toString();
+      body += chunk;
     });
 
     request.on("end", () => {
-      if (isExceeded) return;
+      if (isExceeded) {
+        reject(new PayloadTooLargeError("Request body exceeds maximum allowed size"));
+        return;
+      }
+
       if (!body.trim()) {
         resolve(null);
         return;
@@ -130,11 +138,9 @@ export async function processFeedbackApiRequest(
     body = await readFeedbackJsonBody<FeedbackRequestBody>(request, MAX_FEEDBACK_BODY_BYTES);
   } catch (err) {
     if (err instanceof PayloadTooLargeError) {
-      response.once("finish", () => {
-        request.destroy();
-      });
-      writeJson(response, 413, { error: "Payload too large" }, { connection: "close" });
-      request.resume();
+      if (!response.writableEnded) {
+        writeJson(response, 413, { error: "Payload too large" }, { connection: "close" });
+      }
       return;
     }
 

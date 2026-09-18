@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import { connect } from "node:net";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -183,6 +184,152 @@ describe("feedback-api", () => {
       expect(response.status).toBe(413);
       const data = await response.json();
       expect(data.error).toBe("Payload too large");
+    });
+
+    it("distinguishes exact 64 KiB boundary: 65536 bytes goes to field validation, 65537 returns 413", async () => {
+      const url = await startServer();
+
+      // prefix '{"message":"' is 12 bytes, suffix '"}' is 2 bytes => 14 bytes overhead
+      // For exactly 65536 bytes: pad with 65536 - 14 = 65522 ASCII characters
+      const exact64kBody = `{"message":"${"a".repeat(65522)}"}`;
+      expect(Buffer.byteLength(exact64kBody, "utf8")).toBe(65536);
+
+      const res64k = await fetch(`${url}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: exact64kBody
+      });
+      // 65536 bytes passes body size limit, but triggers field validation (message > 5000 chars) -> 400
+      expect(res64k.status).toBe(400);
+      const data64k = await res64k.json();
+      expect(data64k.error).toBe("Feedback message cannot exceed 5000 characters.");
+
+      // For 65537 bytes: pad with 65523 characters
+      const over64kBody = `{"message":"${"a".repeat(65523)}"}`;
+      expect(Buffer.byteLength(over64kBody, "utf8")).toBe(65537);
+
+      const resOver = await fetch(`${url}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: over64kBody
+      });
+      expect(resOver.status).toBe(413);
+      const dataOver = await resOver.json();
+      expect(dataOver.error).toBe("Payload too large");
+    });
+
+    it("returns 413 Payload Too Large when body is 1 MiB without connection reset", async () => {
+      const url = await startServer();
+
+      const body = JSON.stringify({ message: "a".repeat(1024 * 1024 + 100) });
+      const response = await fetch(`${url}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body
+      });
+
+      expect(response.status).toBe(413);
+      const data = await response.json();
+      expect(data.error).toBe("Payload too large");
+    });
+
+    it("returns 413 Payload Too Large when body is 10 MiB without connection reset", async () => {
+      const url = await startServer();
+
+      const body = JSON.stringify({ message: "a".repeat(10 * 1024 * 1024) });
+      const response = await fetch(`${url}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body
+      });
+
+      expect(response.status).toBe(413);
+      const data = await response.json();
+      expect(data.error).toBe("Payload too large");
+    });
+
+    it("returns 413 on continuous raw socket stream of 1 MiB in 256 KiB chunks", async () => {
+      const url = await startServer();
+      const port = Number(new URL(url).port);
+
+      const chunkSize = 256 * 1024;
+      const totalChunks = 4; // 1 MiB total
+      const chunk = Buffer.alloc(chunkSize, "x");
+
+      const bodyPrefix = '{"message":"';
+      const bodySuffix = '"}';
+      const bodyLength = Buffer.byteLength(bodyPrefix) + chunkSize * totalChunks + Buffer.byteLength(bodySuffix);
+
+      const responseText = await new Promise<string>((resolve, reject) => {
+        const socket = connect(port, "127.0.0.1", () => {
+          const header = `POST /api/feedback HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nContent-Length: ${bodyLength}\r\nConnection: close\r\n\r\n`;
+          socket.write(header);
+          socket.write(bodyPrefix);
+          for (let i = 0; i < totalChunks; i++) {
+            socket.write(chunk);
+          }
+          socket.write(bodySuffix);
+          socket.end();
+        });
+
+        let data = "";
+        socket.on("data", (d) => {
+          data += d.toString("utf8");
+        });
+        socket.on("end", () => resolve(data));
+        socket.on("error", reject);
+      });
+
+      expect(responseText).toMatch(/^HTTP\/1\.1 413/);
+      expect(responseText).toContain("Payload too large");
+    });
+  });
+
+  describe("P2-2: Multi-byte UTF-8 chunk boundary handling", () => {
+    it("preserves multibyte UTF-8 characters split across TCP chunks without U+FFFD corruption", async () => {
+      const url = await startServer();
+      const port = Number(new URL(url).port);
+
+      // Character "测" is encoded in UTF-8 as 3 bytes: 0xE6, 0xB5, 0x8B
+      const repeatedCjk = "测".repeat(100);
+      const jsonPrefix = Buffer.from('{"message":"' + "测".repeat(10));
+      const splitCharByte1 = Buffer.from([0xe6]);
+      const splitCharBytes23 = Buffer.from([0xb5, 0x8b]);
+      const jsonSuffix = Buffer.from("测".repeat(89) + '"}');
+
+      const totalBody = Buffer.concat([jsonPrefix, splitCharByte1, splitCharBytes23, jsonSuffix]);
+      const totalLength = totalBody.length;
+
+      const responseText = await new Promise<string>((resolve, reject) => {
+        const socket = connect(port, "127.0.0.1", () => {
+          const header = `POST /api/feedback HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: application/json\r\nContent-Length: ${totalLength}\r\nConnection: close\r\n\r\n`;
+          socket.write(header);
+          // Chunk 1 ends right after the first byte of the 11th "测"
+          socket.write(Buffer.concat([jsonPrefix, splitCharByte1]));
+
+          // Brief delay to ensure TCP chunk boundary arrives separately
+          setTimeout(() => {
+            // Chunk 2 starts with remaining 2 bytes of the 11th "测"
+            socket.write(Buffer.concat([splitCharBytes23, jsonSuffix]));
+            socket.end();
+          }, 50);
+        });
+
+        let data = "";
+        socket.on("data", (d) => {
+          data += d.toString("utf8");
+        });
+        socket.on("end", () => resolve(data));
+        socket.on("error", reject);
+      });
+
+      expect(responseText).toMatch(/^HTTP\/1\.1 201/);
+
+      const stored = testStore.listFeedbacks();
+      expect(stored).toHaveLength(1);
+      expect(stored[0].message).toBe(repeatedCjk);
+      expect(stored[0].message.length).toBe(100);
+      expect(stored[0].message).not.toContain("\uFFFD");
     });
   });
 

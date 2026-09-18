@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`5a55ac64 fix(feedback): resolve Round 1 review defects P1-1, P2-1, P3-3, P3-4, P3-5`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`5a55ac6 fix(feedback): resolve Round 1 review defects P1-1, P2-1, P3-3, P3-4, P3-5`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -23,14 +23,16 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 324 项用例 100% 通过（新增 `src/server/feedback-api.test.ts` 10 项测试，覆盖 201/400/405/413/429/locale 归一化）
+- **单元测试** (`npm test`)：35 个测试套件 / 329 项用例 100% 通过（新增 `src/server/feedback-api.test.ts` 15 项测试，覆盖 201/400/405/413/429/locale 归一化、64 KiB 边界、1 MiB、10 MiB、分片 streaming 상行及多字节跨 chunk 重组）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
-- **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已补齐 201/400/405/413/429 及 `retry-after` 断言，支持幂等探测）
+- **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
 
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **用户反馈系统 (Feedback) Round 2 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 2 源码审查报告（提交 `8b3e165`，报告：[`docs/handoff/2026-09-18-feedback-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-workbuddy-code-review-round2-handoff.md)）指出的 3 项缺陷（2×P2, 1×P3）实施 100% 闭环修复：①P2-1 修复 ≥128 KiB 及 10 MiB 超限报文 TCP RST 导致 413 不可观测缺陷，重构 `readFeedbackJsonBody` 在 `bytesRead > maxBytes` (64 KiB) 时停止累加但自然排空至 `end`（设 15 MiB 硬上限保护），在 `end` 事件中 reject 并返回规范 HTTP 413，移除抢跑 destroy，彻底消除 ECONNRESET；②P2-2 修复 chunk 边界切裂多字节 UTF-8 字符（CJK 3 字节、Emoji 4 字节）导致 `\uFFFD` 损坏落盘缺陷，恢复调用 `request.setEncoding("utf8")` 由 Node 内部 `StringDecoder` 跨 chunk 重组多字节字符，落盘正文 100% 逐字符一致；③P3-1 扩充 413 守门用例至 1 MiB、10 MiB、raw net socket 持续流式传输以及 64 KiB 精确边界校验（单测扩充至 15 项），`smoke:feedback` 超限档位提升至 1 MiB；四道门禁全绿（35 套 / 329 项单测全绿，Next.js 生产构建 18/18 页面通过），准备派发 WorkBuddy 独立代码审查 Round 3。详见 [`docs/handoff/2026-09-18-feedback-round2-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-round2-remediation-handoff.md)。
 
 - 🔍 **用户反馈系统 (Feedback) Round 1 缺陷闭环 · 独立审查 Round 2 复查（被审 `5a55ac64`）**：**审查未通过**。0×P0/P1；**2×P2、1×P3**。Round 1 五项中 **P1-1/P3-3/P3-4/P3-5 经独立探针证实已真正闭环**（真实生产服务端同 IP 前 5 次 `201`、第 6 次 `429` + `retry-after=600`、`data/feedback` 仅新增 5 文件；64 KiB 严格字节语义 65536→400 / 65537→413；伪造 `locale` 与 `zh-CN` 归一化为 `"unknown"`、`ar` 原样保留；`smoke:feedback` 两次连跑全绿），但 **P2-1 仅部分闭环**。**P2-1**：`src/server/feedback-api.ts:131-139` 在响应 `finish` 时 `request.destroy()` 掐断仍在上行的 socket，实测体长 128 KiB~10 MiB 在标准 Node HTTP 服务端上 **3/3 轮 `ECONNRESET`（零字节响应）**，真实 `net` socket 持续上行 5 MiB 时 **5/5 收到 0 字节**，Round 1 §四 明文要求的「65537 与 10 MiB 均返回 413（而非连接重置）」未达成（根因需以 lingering close / 读至 `end` 再回写替代立即 destroy）。**P2-2（本轮新引入回归）**：`feedback-api.ts:43-57` 丢掉 Round 1 原有的 `request.setEncoding("utf8")`，改逐 chunk `Buffer.toString()`，**多字节 UTF-8 字符跨 chunk 被解码为 `U+FFFD`**——真实服务端实测 CJK 正文切裂写入后落盘长度 102（发送 100）、3 个替换字符、与源串不一致，且 HTTP 仍 `201`（静默数据损坏）。**P3-1**：413 守门用例仅覆盖 `MAX+100`（70 KiB），MiB 级与「持续上行」竞态零覆盖，是 P2-1 逃逸门禁的直接原因。四道门禁独立复跑全绿（tsc 0 / lint 0 错误 0 警告 / vitest 35 套 324 例 / build 18/18）。详见 [`docs/handoff/2026-09-18-feedback-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-workbuddy-code-review-round2-handoff.md)。
 
