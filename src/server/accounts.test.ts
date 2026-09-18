@@ -398,28 +398,65 @@ describe("AccountStore", () => {
     expect(store.authenticate(third.token)).toMatchObject({ playerId: "g-3" });
   });
 
+  it("does not rewrite file on every persist after loading a file with entries >= compaction threshold", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-guest-compaction-gate-"));
+    const filePath = join(tempDir, "guest-sessions.jsonl");
+
+    try {
+      const now = 1_000;
+      const compactAfterLines = 10;
+      // Seed a file with 15 entries (exceeding compactAfterLines = 10)
+      const initialStore = new GuestSessionStore({ compactAfterLines, filePath, now: () => now });
+      for (let i = 0; i < 15; i += 1) {
+        expectOk(initialStore.createSession({ playerId: `g-init-${i}`, playerName: `Player ${i}` }));
+      }
+
+      const initialLines = readRawFile(filePath).trim().split("\n").length;
+      expect(initialLines).toBeGreaterThanOrEqual(15);
+
+      // Now load in a fresh store (simulating server restart with file >= threshold)
+      const store = new GuestSessionStore({ compactAfterLines, filePath, now: () => now });
+
+      // Perform 5 consecutive createSession calls
+      for (let i = 0; i < 5; i += 1) {
+        expectOk(store.createSession({ playerId: `g-new-${i}`, playerName: `New ${i}` }));
+      }
+
+      // The 5 creates must be pure appends (initialLines + 5) and NOT trigger 5 full rewrites
+      const currentLines = readRawFile(filePath).trim().split("\n").length;
+      expect(currentLines).toBe(initialLines + 5);
+    } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
   it("safely ignores corrupt lines in guest sessions JSONL", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "gomoku-guest-corrupt-"));
     const filePath = join(tempDir, "guest-sessions.jsonl");
 
     try {
-      const validEntry = {
-        session: {
-          createdAt: 1_000,
-          lastSeenAt: 1_000,
-          playerId: "guest-valid",
-          playerName: "Valid",
-          tokenHash: "somehash"
-        },
-        type: "guest-session",
-        writtenAt: 1_000
-      };
+      const initialStore = new GuestSessionStore({ filePath, now: () => 1_000 });
+      const guest = expectOk(initialStore.createSession({ playerId: "guest-valid", playerName: "Valid" }));
+      const originalFileContent = readFileSync(filePath, "utf8");
 
-      writeFileSync(filePath, `corrupt json\n{"type":"guest-session"}\n${JSON.stringify(validEntry)}\n`, "utf8");
+      // Inject corrupt JSON and invalid schema lines around the valid entry
+      writeFileSync(
+        filePath,
+        `corrupt json\n{"type":"guest-session"}\n${originalFileContent}{"broken":"syntax\n`,
+        "utf8"
+      );
 
       const store = new GuestSessionStore({ filePath, now: () => 1_000 });
-      // Successfully loaded without throwing error
-      expect(store).toBeDefined();
+      // The valid entry is properly restored and authenticates with the real token
+      const auth = store.authenticate(guest.token);
+      expect(auth).toMatchObject({
+        identity: "guest",
+        playerId: "guest-valid",
+        playerName: "Valid"
+      });
+
+      // An unknown token fails cleanly
+      expect(store.authenticate("nonexistent-token")).toBeNull();
     } finally {
       rmSync(tempDir, { force: true, recursive: true });
     }

@@ -89,8 +89,24 @@ export class JsonlCompactionTracker {
     return this.threshold > 0 && this.appended >= this.threshold;
   }
 
-  /** Records that the log was rewritten to `liveLines` lines. */
-  reset(liveLines: number): void {
-    this.appended = Math.max(0, Math.floor(liveLines));
+  /**
+   * Records that the log was rewritten to `liveLines` lines.
+   * If `liveLines < threshold`, `appended` tracks total file lines up to `threshold`.
+   * If `liveLines >= threshold`, the file cannot be reduced below `liveLines`,
+   * so `appended` tracks the incremental growth/churn budget since compaction.
+   */
+  reset(liveLines: number, totalLines?: number): void {
+    const live = Math.max(0, Math.floor(liveLines));
+    if (this.threshold <= 0) {
+      this.appended = 0;
+      return;
+    }
+
+    if (live < this.threshold) {
+      this.appended = totalLines !== undefined ? Math.max(0, Math.floor(totalLines)) : live;
+    } else {
+      const deadLines = totalLines !== undefined ? Math.max(0, Math.floor(totalLines - live)) : 0;
+      this.appended = deadLines;
+    }
   }
 }

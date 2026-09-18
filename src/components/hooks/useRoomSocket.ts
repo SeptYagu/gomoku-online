@@ -270,7 +270,7 @@ export function useRoomSocket({
         if (response.error.code === "guest-session-invalid") {
           clearGuestToken();
           createAndPersistPlayerId();
-          clearRoomSession();
+          clearClosedRoom(storedSession.roomCode);
           setError(null);
           return;
         } else if (response.error.code === "room-not-found") {

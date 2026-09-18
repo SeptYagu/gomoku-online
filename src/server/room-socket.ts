@@ -374,7 +374,18 @@ export function registerRoomSocketHandlers(
       }
 
       socket.join(PRESENCE_ROOM);
-      acknowledgePresence(identifySocketPresence(socket, roomStore, player.value), ack);
+      const presenceAck = identifySocketPresence(socket, roomStore, player.value);
+      if (presenceAck.ok && player.value.identity === "guest" && player.value.guestToken) {
+        ack({
+          ok: true,
+          value: {
+            ...presenceAck.value,
+            guestToken: player.value.guestToken
+          }
+        });
+      } else {
+        acknowledgePresence(presenceAck, ack);
+      }
       broadcastPresence(io, roomStore);
     });
 
@@ -1079,7 +1090,9 @@ function acknowledgeAndBroadcastPublicChat(
   ack(response);
 
   if (!response.ok) {
-    socket.emit("room:error", response.error);
+    if (response.error.code !== "guest-session-invalid") {
+      socket.emit("room:error", response.error);
+    }
     return;
   }
 

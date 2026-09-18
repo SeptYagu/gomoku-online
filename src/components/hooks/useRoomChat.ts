@@ -5,6 +5,7 @@ import type { RoomAck, RoomClientState, PublicChatAck } from "@/server/room-cont
 import type { PublicChatMessage } from "@/server/rooms";
 import { createChatSendGate, type ChatSendGate } from "../chat-send-gate";
 import {
+  clearGuestToken,
   DEFAULT_CHAT_SEND_TIMEOUT_ERROR,
   isPublicChatSnapshot,
   persistPlayerName,
@@ -139,6 +140,29 @@ export function useRoomChat({
         setIsSendingPublicChat(false);
 
         if (!response.ok) {
+          if (response.error.code === "guest-session-invalid") {
+            clearGuestToken();
+            const freshPlayer = getActivePlayer();
+            setIsSendingPublicChat(true);
+            ensureSocket().emit(
+              "public-chat:send",
+              { ...freshPlayer, resetGuestIdentity: true, text },
+              (retryResponse: PublicChatAck) => {
+                setIsSendingPublicChat(false);
+                if (!retryResponse.ok) {
+                  setError(retryResponse.error.message);
+                  setPublicChatText((current) => (current ? current : text));
+                  return;
+                }
+
+                setPublicChatMessages(retryResponse.value.messages);
+                setPublicChatStatus("ready");
+                setError(null);
+              }
+            );
+            return;
+          }
+
           setError(response.error.message);
           setPublicChatText((current) => (current ? current : text));
           return;

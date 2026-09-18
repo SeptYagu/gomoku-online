@@ -921,6 +921,75 @@ describe("room socket handlers", () => {
     }
   });
 
+  it("suppresses room:error when public-chat:send fails with guest-session-invalid", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const client = await harness.connectClient();
+
+      let roomErrorCount = 0;
+      client.on("room:error", () => {
+        roomErrorCount += 1;
+      });
+
+      const response = await emitAck(client, "public-chat:send", {
+        guestToken: "dead-token-chat-test",
+        playerId: "chat-guest",
+        playerName: "Chatter",
+        text: "hello world"
+      });
+
+      expect(response).toMatchObject({
+        ok: false,
+        error: { code: "guest-session-invalid" }
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(roomErrorCount).toBe(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("returns guestToken in presence:join and reuses the session without creating new ones", async () => {
+    const harness = await createSocketHarness();
+
+    try {
+      const client1 = await harness.connectClient();
+
+      // First presence:join without token -> mints a new guest session and returns guestToken
+      const firstPresence = await emitAck<{ ok: boolean; value: { guestToken?: string } }>(
+        client1,
+        "presence:join",
+        {
+          playerId: "lobby-guest-initial",
+          playerName: "Lobbyist"
+        }
+      );
+
+      expect(firstPresence.ok).toBe(true);
+      expect(firstPresence.value.guestToken).toEqual(expect.any(String));
+      const mintedToken = firstPresence.value.guestToken!;
+
+      // A second client connects presenting the returned guestToken
+      const client2 = await harness.connectClient();
+      const secondPresence = await emitAck<{ ok: boolean; value: { guestToken?: string } }>(
+        client2,
+        "presence:join",
+        {
+          guestToken: mintedToken,
+          playerId: "lobby-guest-initial",
+          playerName: "Lobbyist"
+        }
+      );
+
+      expect(secondPresence.ok).toBe(true);
+      expect(secondPresence.value.guestToken).toBe(mintedToken);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it("keeps a player connected while another authenticated socket remains bound", async () => {
     const harness = await createSocketHarness();
 

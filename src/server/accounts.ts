@@ -267,8 +267,6 @@ export class AccountStore {
       console.warn(`[accounts] skipped ${skipped} unreadable line(s) while loading ${this.filePath}`);
     }
 
-    this.compaction.reset(lineCount);
-
     for (const entry of entries) {
       const previous = this.accounts.get(entry.account.id);
 
@@ -289,6 +287,8 @@ export class AccountStore {
       this.playerIdByPublicHandle.set(account.publicHandle, account.id);
       this.lastPersistedSeenAt.set(account.id, account.lastSeenAt);
     }
+
+    this.compaction.reset(this.accounts.size, lineCount);
   }
 
   private persist(account: StoredAccount): void {
@@ -439,7 +439,6 @@ export class GuestSessionStore {
       console.warn(`[guest-sessions] skipped ${skipped} unreadable line(s) while loading ${this.filePath}`);
     }
 
-    this.compaction.reset(lineCount);
     const cutoff = this.now() - this.ttlMs;
 
     for (const entry of entries) {
@@ -459,6 +458,7 @@ export class GuestSessionStore {
     }
 
     this.evictOldestSessions();
+    this.compaction.reset(this.sessionsByPlayerId.size, lineCount);
   }
 
   private persist(session: StoredGuestSession): void {

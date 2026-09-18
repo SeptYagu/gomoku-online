@@ -32,6 +32,7 @@ export type PresenceListQuery = {
 
 export type PresenceSnapshot = {
   generatedAt: number;
+  guestToken?: string;
   users: UserPresenceSnapshot[];
   version: number;
 };

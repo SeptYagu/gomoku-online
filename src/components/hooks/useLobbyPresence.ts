@@ -28,10 +28,12 @@ import {
   clearRoomUrl,
   createAndPersistPlayerId,
   isAbortError,
+  isEphemeralSession,
   isLobbyActivitySummary,
   isLobbyRoomDeletedEvent,
   isLobbyRoomUpdatedEvent,
   isPresenceSnapshot,
+  persistGuestToken,
   persistPlayerName,
   sortLobbyRooms,
   upsertLobbyRoom,
@@ -198,6 +200,11 @@ export function useLobbyPresence({
                   setError(retryResponse.error.message);
                   return;
                 }
+                if (retryResponse.value.guestToken) {
+                  persistGuestToken(retryResponse.value.guestToken, {
+                    ephemeralOnly: isEphemeralSession()
+                  });
+                }
                 setPresenceUsers(retryResponse.value.users);
                 setPresenceStatus("ready");
               }
@@ -210,6 +217,11 @@ export function useLobbyPresence({
           return;
         }
 
+        if (response.value.guestToken) {
+          persistGuestToken(response.value.guestToken, {
+            ephemeralOnly: isEphemeralSession()
+          });
+        }
         setPresenceUsers(response.value.users);
         setPresenceStatus("ready");
       }
