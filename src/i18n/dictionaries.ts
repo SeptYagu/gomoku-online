@@ -238,6 +238,7 @@ export type FeedbackDictionary = {
   errorTooLong: string;
   messageLabel: string;
   messagePlaceholder: string;
+  navLabel: string;
   rateLimited: string;
   submitAction: string;
   submitting: string;
@@ -491,6 +492,7 @@ const en = {
     errorTooLong: "Feedback message is too long.",
     messageLabel: "Your Feedback or Suggestion (Required)",
     messagePlaceholder: "Please describe any bugs, questions, or ideas...",
+    navLabel: "Feedback",
     rateLimited: "Too many feedback submissions. Please try again later.",
     submitAction: "Submit Feedback",
     submitting: "Submitting...",
@@ -739,6 +741,7 @@ const zh = {
     errorTooLong: "反馈内容超出长度限制。",
     messageLabel: "问题描述或建议（必填）",
     messagePlaceholder: "请详细描述您遇到的问题、疑问或改进建议...",
+    navLabel: "意见反馈",
     rateLimited: "提交过于频繁，请稍后再试。",
     submitAction: "提交反馈",
     submitting: "正在提交...",
@@ -987,6 +990,7 @@ const fr = {
     errorTooLong: "Le message est trop long.",
     messageLabel: "Votre retour ou suggestion (Requis)",
     messagePlaceholder: "Décrivez les problèmes rencontrés ou vos suggestions...",
+    navLabel: "Commentaires",
     rateLimited: "Trop de retours envoyés. Veuillez réessayer plus tard.",
     submitAction: "Envoyer le retour",
     submitting: "Envoi en cours...",
@@ -1235,6 +1239,7 @@ const es = {
     errorTooLong: "El mensaje de comentarios es demasiado largo.",
     messageLabel: "Tus comentarios o sugerencias (Obligatorio)",
     messagePlaceholder: "Describe cualquier error, duda o idea...",
+    navLabel: "Comentarios",
     rateLimited: "Demasiados envíos de comentarios. Inténtalo de nuevo más tarde.",
     submitAction: "Enviar comentarios",
     submitting: "Enviando...",
@@ -1483,6 +1488,7 @@ const ru = {
     errorTooLong: "Текст отзыва слишком длинный.",
     messageLabel: "Ваш отзыв или предложение (обязательно)",
     messagePlaceholder: "Опишите найденные ошибки, вопросы или идеи...",
+    navLabel: "Обратная связь",
     rateLimited: "Слишком много запросов. Повторите попытку позже.",
     submitAction: "Отправить отзыв",
     submitting: "Отправка...",
@@ -1731,6 +1737,7 @@ const ar = {
     errorTooLong: "رسالة الملاحظات طويلة جدًا.",
     messageLabel: "ملاحظاتك أو اقتراحاتك (مطلوب)",
     messagePlaceholder: "يُرجى وصف أي أخطاء أو أسئلة أو أفكار لديك...",
+    navLabel: "الملاحظات",
     rateLimited: "تم إرسال عدد كبير من الملاحظات. يُرجى المحاولة مرة أخرى لاحقًا.",
     submitAction: "إرسال الملاحظات",
     submitting: "جارٍ الإرسال...",

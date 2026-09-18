@@ -58,6 +58,26 @@ export function appendJsonlLine(filePath: string, value: unknown): void {
  * The write goes through a sibling temp file + rename so a crash mid-write
  * cannot truncate the log.
  */
+function atomicRenameSync(source: string, destination: string): void {
+  const maxAttempts = 10;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      renameSync(source, destination);
+      return;
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code === "EPERM" || code === "EBUSY" || code === "EACCES") && attempt < maxAttempts) {
+        const start = Date.now();
+        while (Date.now() - start < 15 * attempt) {
+          // busy-wait for Windows file handle release
+        }
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export function rewriteJsonlFile(filePath: string, values: unknown[]): void {
   mkdirSync(dirname(filePath), { recursive: true });
 
@@ -65,7 +85,7 @@ export function rewriteJsonlFile(filePath: string, values: unknown[]): void {
   const tempPath = `${filePath}.compact.tmp`;
 
   writeFileSync(tempPath, body, "utf8");
-  renameSync(tempPath, filePath);
+  atomicRenameSync(tempPath, filePath);
 }
 
 /**

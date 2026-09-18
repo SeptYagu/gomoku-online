@@ -2638,8 +2638,27 @@ h1 {
 .feedback-nav-link {
   align-items: center;
   display: inline-flex;
-  gap: 4px;
+  gap: 6px;
+  padding: 0 12px;
   text-decoration: none;
+  white-space: nowrap;
+}
+
+.feedback-nav-link:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.feedback-nav-link svg {
+  height: 18px;
+  width: 18px;
+}
+
+.feedback-nav-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .app-version .feedback-footer-link {

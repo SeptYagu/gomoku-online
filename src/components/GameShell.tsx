@@ -493,6 +493,7 @@ export function GameShell({ dictionary, feedbackDictionary, locale }: GameShellP
                 aria-label={feedbackDictionary.title}
               >
                 <MessageSquare aria-hidden="true" size={18} />
+                <span className="feedback-nav-label">{feedbackDictionary.navLabel}</span>
               </Link>
             ) : null}
             <LocaleSwitcher currentLocale={locale} label={dictionary.controls.language} />
