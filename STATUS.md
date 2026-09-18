@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`48b6c1a docs(review): add workbuddy round3 review for guest identity implementation`（本字段记录本字段所在提交的直接前驱阶段交付；当前提交为「访客身份持久化与自愈」Round 3 缺陷修复交付，按先例记录直接父提交即被审产品交付 `48b6c1a`）
+- **最新阶段交付提交**：`8657f29 feat(feedback): implement flat storage feedback system with 6-locale i18n`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -23,14 +23,16 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：34 个测试套件 / 314 项用例 100% 通过（新增 `src/server/feedback-store.test.ts` 8 项测试）
+- **单元测试** (`npm test`)：35 个测试套件 / 324 项用例 100% 通过（新增 `src/server/feedback-api.test.ts` 10 项测试，覆盖 201/400/405/413/429/locale 归一化）
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
-- **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（覆盖无头 Chrome CDP 恢复与反馈 API 201/400/405；**429 与 64 KiB 超限尚无用例覆盖**，见 Feedback Round 1 审查 P3-5）
+- **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已补齐 201/400/405/413/429 及 `retry-after` 断言，支持幂等探测）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
 
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **用户反馈系统 (Feedback) Round 1 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 1 源码审查报告（提交 `42daaed`，报告：[`docs/handoff/2026-09-18-feedback-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-18-feedback-workbuddy-code-review-round1-handoff.md)）指出的 5 项缺陷实施 100% 闭环修复：①P1-1 修复限流守门 `feedbackLimiter.consume(clientKey)` 对象真值判断，改为判定 `.allowed` 并携带 `retry-after` 响应头阻断后续落盘；②P2-1 修复大报文 `request.destroy()` 掐断 socket 缺陷，升级为抛出 `PayloadTooLargeError` 并返回规范 HTTP 413 (`Payload too large`) + `Connection: close`，流排空后释放连接彻底消除连接重置；③P3-3 修复 UTF-16 字符计数漏洞，按 UTF-8 真实字节数累加，严格截断超过 64 KiB 的 CJK/Emoji 报文；④P3-4 接入 `isLocale()` 白名单校验，将非法、超长伪造值归一化为 `"unknown"`，合法语种保持原样；⑤P3-5 新增 `src/server/feedback-api.test.ts` 真实 HTTP 路由测试（10 项测试全绿）并在 `tools/smoke-feedback.ts` 补齐 413 与 429 断言；四道门禁全绿（35 套 / 324 项单测全绿，Next.js 生产构建 18/18 页面通过），准备派发 WorkBuddy 独立代码审查 Round 2。详见 [`docs/handoff/2026-09-18-feedback-round1-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-round1-remediation-handoff.md)。
 
 - 🔍 **用户反馈系统 (Feedback) 源码实现 · 独立审查 Round 1 复查（被审 `8657f299`）**：**审查未通过**。0×P0；**1×P1、1×P2、3×P3**。P1-1 `src/server/online-server.ts:251` 限流守门 `if (!feedbackLimiter.consume(...))` 恒为 false（`consume` 返回对象非布尔），**429 分支为死代码**，实测同 IP 连续 8 次提交全 `201`、0×429、8 个文件照常落盘，10 分钟 5 次 IP 限流完全失效；P2-1 请求体超 64 KiB 走 `request.destroy()` 摧毁 socket，实测体长 65537 → `UND_ERR_SOCKET`、70 KiB → `UND_ERR_SOCKET`、10 MiB → `ECONNRESET`，规格要求的 `413` 永不返回且 `.catch` 的 500 落点不可达；P3-3 体积守门按 UTF-16 code unit 计数（66014 字节 CJK 载荷通过 64 KiB 检查）；P3-4 `locale` 未按 6 语种白名单校准（3011 字符含 `<script>` 伪造值原样落盘）；P3-5 `/api/feedback` 路由层零测试、`smoke:feedback` 缺 429 与超限断言，是 P1 逃逸四道门禁的直接原因。四道门禁独立复跑全绿（tsc 0 / lint 0 / vitest 34 套 314 例 / build 18/18），存储契约（40 并发 → 40 合规文件、0 `.tmp-` 残留）与 6 语种 SSG + RTL 页面交付经实测有效。详见 [`docs/handoff/2026-09-18-feedback-workbuddy-code-review-round1-handoff.md`](docs/handoff/2026-09-18-feedback-workbuddy-code-review-round1-handoff.md)。
 

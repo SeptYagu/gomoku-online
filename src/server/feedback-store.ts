@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { isLocale } from "@/i18n/config";
 
 export const MAX_FEEDBACK_MESSAGE_LENGTH = 5000;
 export const MAX_FEEDBACK_EMAIL_LENGTH = 254;
@@ -83,7 +84,7 @@ export class FeedbackStore {
       clientAddress: input.clientAddress,
       email: normalizedEmail,
       feedbackId,
-      locale: input.locale?.trim() || "unknown",
+      locale: input.locale && isLocale(input.locale.trim()) ? input.locale.trim() : "unknown",
       message: trimmedMessage,
       receivedAt: new Date(timestamp).toISOString(),
       timestamp,
