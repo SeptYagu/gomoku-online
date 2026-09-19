@@ -73,10 +73,11 @@ export type AtomicRenameOptions = {
 /**
  * Attempts atomic replacement of destination with source.
  * On Windows, MoveFileEx may transiently report EPERM/EBUSY if the destination
- * was recently touched by antivirus or indexers. We retry up to maxAttempts (default 3)
- * with fixed 5ms micro-sleeps using Atomics.wait (measured ~15.2ms real elapsed time per sleep
- * under Windows timer quantization), allowing transient locks to clear within ~20-25ms
- * while strictly bounding total synchronous pause to ~30-36ms and avoiding CPU busy-wait loops.
+ * was recently touched by antivirus or indexers. We retry up to maxAttempts (default 2)
+ * with a single 5ms micro-sleep using Atomics.wait (measured ~11-16ms real elapsed time
+ * under Windows 15.625ms timer quantization on idle systems; higher under CPU saturation),
+ * allowing transient locks to clear while bounding event-loop stall to < 20ms on idle systems
+ * and avoiding CPU busy-wait loops.
  * Non-transient errors (such as EACCES or ENOENT) fail fast immediately.
  */
 export function atomicRenameSync(
@@ -84,7 +85,7 @@ export function atomicRenameSync(
   destination: string,
   options?: AtomicRenameOptions
 ): void {
-  const maxAttempts = Math.max(1, options?.maxAttempts ?? 3);
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? 2);
   const rename = options?.renameFn ?? renameSync;
   const sleep = options?.sleepFn ?? sleepSync;
 

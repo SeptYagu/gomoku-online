@@ -154,15 +154,15 @@ describe("jsonl-file", () => {
 
       expect(() =>
         atomicRenameSync("temp.tmp", "target.jsonl", {
-          maxAttempts: 3,
+          maxAttempts: 2,
           renameFn,
           sleepFn
         })
       ).toThrow("EPERM");
 
-      expect(attempts).toBe(3);
-      expect(sleeps).toEqual([5, 5]);
-      // Total sleep requested is bounded to <= 20ms (2 * 5ms = 10ms)
+      expect(attempts).toBe(2);
+      expect(sleeps).toEqual([5]);
+      // Total sleep requested is bounded to <= 20ms (1 * 5ms = 5ms)
       expect(sleeps.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(20);
     });
 
@@ -185,10 +185,9 @@ describe("jsonl-file", () => {
         ).toThrow("EBUSY");
 
         const elapsed = Date.now() - t0;
-        expect(attempts).toBe(3);
-        expect(waitSpy).toHaveBeenCalledTimes(2);
-        expect(waitSpy).toHaveBeenNthCalledWith(1, expect.any(Int32Array), 0, 0, 5);
-        expect(waitSpy).toHaveBeenNthCalledWith(2, expect.any(Int32Array), 0, 0, 5);
+        expect(attempts).toBe(2);
+        expect(waitSpy).toHaveBeenCalledTimes(1);
+        expect(waitSpy).toHaveBeenCalledWith(expect.any(Int32Array), 0, 0, 5);
         expect(elapsed).toBeLessThan(300);
       } finally {
         waitSpy.mockRestore();
