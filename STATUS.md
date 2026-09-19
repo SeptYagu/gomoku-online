@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`57a73f1 fix(feedback): resolve Round 1 review findings P2-1, P3-1, P3-2`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`0398bdc fix(feedback): resolve Round 2 review findings P2-1, P3-1`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- ⚠️ **反馈入口按钮文字标签 + Windows 文件重写退避重试 · 独立审查 Round 3 复查（被审 `0398bdc`）**：**审查未通过**。0×P0 / 0×P1 / 0×P2 / **1×P3**。①**P3-1**：第 2 轮 P3-1 明示的修复验收线「强制 EPERM 下事件循环最大停顿 < 20ms」**仍未达成** —— 独立探针实测 `atomicRenameSync(maxAttempts=3)` 30.3ms、`rewriteJsonlFile` 端到端 33ms/35ms、200 次调用平均 **30.77ms**；且本轮唯一功能改动 `sleep(5 * attempt)→sleep(5)` 对真实停顿**零收益**（Windows 15.625ms 定时器粒度把 5ms/10ms 请求一并向上量化，请求预算 15→10ms 而真实停顿 30.5→30.77ms 分毫未减，本轮实质只改了注释与文档）；新写入的 docstring `strictly bounding total synchronous pause to ~30-36ms` 在 6 路 CPU 饱和下被证伪（40 采样 `p50 83 / p90 136 / max 170ms`）。根因：`maxAttempts=3` ⇒ 2 次睡眠，真实停顿恒为请求预算的 ~3 倍，且修复者未做前后实测对比。影响：单进程 `online-server.ts` 的 `persist()→compactFile()` 同步执行 ⇒ 持续锁即冻结全服 30~35ms（空闲）/最高约 170ms（CPU 饱和），属有界回归（远小于第 1 轮 697ms，CPU 忙等已彻底消除）故定 P3。②通过项：6 语种预渲染产物 `aria-label === 可见文本`（WCAG 2.5.3 全达标）、`ar` 为 RTL、零硬编码 left/right，删除 zh 一条 `navLabel` 即 `tsc` exit=2 + 字典测试变红；**`npm test` 连跑 10 次 10/10 全绿（35 套/335 例）**，并额外在 6 路 CPU 饱和下 4/4 全绿；**4 组变异探针（剔 EBUSY / 删 temp 清理 / `maxAttempts=1` / 忙等替身）全部变红**；真实 EPERM 端到端（无锁 4ms、20ms 释放恢复、持续占用安全抛错且无 temp 残留、CPU 0.76%）确认第 2 轮 P2-1 已真闭环；tsc 0 / lint 0 错误 0 警告 / build 18/18 / `smoke:persistence` 干净端口 5/5。详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round3-handoff.md)。
 
 - 🔄 **反馈入口按钮文字标签与文件重写锁容错 Round 2 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 2 源码审查报告（提交 `fa50c64`，报告：[`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md)）指出的 2 项缺陷（1×P2, 1×P3）实施 100% 闭环修复：①P2-1 彻底移除 `jsonl-file.test.ts` 中脆弱墙钟断言（`expect(elapsed).toBeLessThan(40)`），改用 `vi.spyOn(Atomics, "wait")` 确定性断言重试休眠次数（2 次）与单次参数（5ms），墙钟放宽至 `< 300ms` 仅用于守卫忙等回归；批量合并 `accounts.test.ts` 中 185 次零散追加，杜绝高频 I/O 扫描锁争用；在 `atomicRenameSync` 中增加 `Math.max(1, ...)` 防御并补齐极端入参用例；连续 10 次全量 `npm test` 实测 100% 全绿（10/10 PASS，0 flake），3 组变异探针全部变红；②P3-1 调整重试休眠为固定 5ms，将全仓交付文档与 docstring 的休眠与停顿指标修正为真实实测值（Windows 15.625ms 时钟中断量化下单次休眠 ~15.2ms、20ms 释放恢复 ~22~27ms、持续锁占用耗尽 ~30~36ms 规范抛 EPERM，0% CPU 忙等）；本地四道门禁全绿（35 套 / 335 项单测全绿，Next.js 生产构建 18/18 页面通过，smoke:persistence 干净端口 5/5 通过）。详见 [`docs/handoff/2026-09-18-feedback-button-label-round2-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round2-remediation-handoff.md)。
 
