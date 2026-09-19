@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`0398bdc fix(feedback): resolve Round 2 review findings P2-1, P3-1`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`d2e9bcb fix(feedback): resolve Round 3 review finding P3-1`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- ⚠️ **反馈入口按钮文字标签 + Windows 文件重写锁容错 · 独立审查 Round 4 复查（被审 `d2e9bcb`）**：**审查未通过**。0×P0 / 0×P1 / **1×P2** / **1×P3**。①**P2-1**：默认 `maxAttempts` 由 3 降为 2 虽把停顿减半，却把**瞬态锁恢复窗口同步腰斩** —— 注入 `renameFn` 实测两次尝试间隔 `p50 15.09 / max 17.84ms`（n=60），外部 holder 精确释放实测 **16ms → 1/5、18ms → 1/5、20ms → 0/5、24ms → 0/5**，而修复前默认 3 时 24ms 档 5/5 恢复；即 Round 3 交接单声称的「20ms 释放锁仍可恢复（`recovered: true`）」**实测 0/5**，验收标准 4「瞬态锁可成功恢复」在文档引用场景不成立。根因：单次 `Atomics.wait(5)` 被 Windows 15.625ms 粒度量化为 ~15.1ms ⇒ 窗口 ≡ (maxAttempts−1)×15.1ms，同步语义下**不存在**同时满足「停顿 <20ms」与「窗口 >20ms」的取值；修复须把锁等待移出请求线程（异步退避 + `.compact.tmp` 保留重排）。②**P3-1**：docstring `bounding event-loop stall to < 20ms on idle systems` 与三处文档「严格达成 < 20ms」与实测不符 —— 空闲 n=120 三轮分别 `p50 15.44 / p90 16.55 / max 30.9ms（>20ms 占 4.2%）`、`p90 25.12 / max 40.36ms（12.5%）`、`p90 26.44 / max 145.61ms（16.7%）`，6 路 CPU 饱和下 `p50 133 / p90 549 / max 1338ms`，单次休眠本身 `max 22.06ms` 即已越线。③通过项：新构建产物 6 语种 `aria-label === 可见文本`（WCAG 2.5.3 全达标）、`ar` RTL、零硬编码 left/right；`npm test` 连跑 3/3 全绿（35 套）、build 18/18、`smoke:persistence` 干净端口 5/5；**5 组变异探针全红**；持续 EPERM 下 200 次调用 CPU **0.00%**（忙等确已闭环）、无 temp 残留、旧文件不被破坏。另记 1 项待确认风险（重试耗尽抛出后 `online-server.ts:27` 无兜底）与 2 项非阻断建议。详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round4-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round4-handoff.md)。
 
 - 🔄 **反馈入口按钮文字标签与文件重写锁容错 Round 3 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 3 源码审查报告（提交 `5562ecc`，报告：[`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round3-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round3-handoff.md)）指出的 1 项缺陷（1×P3）实施 100% 闭环修复：①P3-1 将 `atomicRenameSync` 的默认 `maxAttempts` 调优为 2（`const maxAttempts = Math.max(1, options?.maxAttempts ?? 2);`），持续锁下仅进行 1 次微休眠，空闲系统实测端到端同步停顿压缩至 ~11~16ms（严格达成 < 20ms 验收线），且 20ms 释放锁测试证实恢复语义未丢（`recovered: true`）；修正 docstring 指标并移除 `strictly bounding` 绝对化断言，注明实测值与负载相关性；单测同步对齐确定性断言（`attempts=2`, `waitSpy` 1 次 5ms），消除 flake 隐患；②文书建议：回填 Round 2 修复交接单的真实提交 SHA `0398bdc`；本地四道门禁全绿（35 套 / 335 项单测全绿，Next.js 生产构建 18/18 页面通过，smoke:persistence 干净端口 5/5 通过）。详见 [`docs/handoff/2026-09-18-feedback-button-label-round3-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round3-remediation-handoff.md)。
 
