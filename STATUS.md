@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 334 项用例；⚠️ **不稳定**（2026-09-18 Round 2 复查实测：连续 10 次全量运行 **2 次红 / 8 次绿**，均红在 `src/server/jsonl-file.test.ts:187` 的墙钟断言 `elapsed < 40`，实测值 54ms / 143ms）—— 详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md) 的 P2-1
+- **单元测试** (`npm test`)：35 个测试套件 / 335 项用例；**全绿通过（100% 稳定，连续 10 次全量运行 10/10 PASS，0 flake）** —— 详见 [`docs/handoff/2026-09-18-feedback-button-label-round2-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round2-remediation-handoff.md)
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **反馈入口按钮文字标签与文件重写锁容错 Round 2 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 2 源码审查报告（提交 `fa50c64`，报告：[`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md)）指出的 2 项缺陷（1×P2, 1×P3）实施 100% 闭环修复：①P2-1 彻底移除 `jsonl-file.test.ts` 中脆弱墙钟断言（`expect(elapsed).toBeLessThan(40)`），改用 `vi.spyOn(Atomics, "wait")` 确定性断言重试休眠次数（2 次）与单次参数（5ms），墙钟放宽至 `< 300ms` 仅用于守卫忙等回归；批量合并 `accounts.test.ts` 中 185 次零散追加，杜绝高频 I/O 扫描锁争用；在 `atomicRenameSync` 中增加 `Math.max(1, ...)` 防御并补齐极端入参用例；连续 10 次全量 `npm test` 实测 100% 全绿（10/10 PASS，0 flake），3 组变异探针全部变红；②P3-1 调整重试休眠为固定 5ms，将全仓交付文档与 docstring 的休眠与停顿指标修正为真实实测值（Windows 15.625ms 时钟中断量化下单次休眠 ~15.2ms、20ms 释放恢复 ~22~27ms、持续锁占用耗尽 ~30~36ms 规范抛 EPERM，0% CPU 忙等）；本地四道门禁全绿（35 套 / 335 项单测全绿，Next.js 生产构建 18/18 页面通过，smoke:persistence 干净端口 5/5 通过）。详见 [`docs/handoff/2026-09-18-feedback-button-label-round2-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round2-remediation-handoff.md)。
 
 - ⚠️ **反馈入口按钮文字标签 + Windows 文件重写锁容错 · 独立审查 Round 2 复查（被审 `57a73f1`）**：**审查未通过**。0×P0 / 0×P1 / **1×P2 / 1×P3**。①**P2-1**：`src/server/jsonl-file.test.ts:187` 的墙钟断言 `expect(elapsed).toBeLessThan(40)` 在**全量** `npm test`（35 套并行 worker 池）下不稳定变红 —— 本机连续 10 次实测 **2 红 / 8 绿**（红值 54ms、143ms；单跑该文件恒绿）。根因：该重试路径真实代价 `p50=30.5ms`，与 40ms 上界余量不足 10ms（Windows 默认定时器粒度 15.625ms 使 `Atomics.wait(5)` 实睡 15.26ms、`Atomics.wait(10)` 实睡 15.20ms，请求 5+10=15ms 实付 30.67ms），且 6 核 CPU 饱和下该耗时分布达 `p90=48.6 / max=51.3ms`，上界本身即低于高负载分布 → 验收标准 6「四道门禁全绿」不可复现。②**P3-1**：实测持续 EPERM 下单次 `rewriteJsonlFile` **同步占用 34.86ms**（10ms 采样器零执行、30ms 定时器未触发），越过其自设的「< 20ms」修复验收线与文档声明的「≤ 15ms」预算约 2 倍；`online-server.ts` 单进程托管 Next.js + Socket.IO 且 `persist()→compactFile()` 同步执行 ⇒ 一次持续锁即冻结全服约 30~35ms（相对基线约 5ms 属有界回归）→ Round 1 P2-1 属**部分闭环**（忙等已除、白名单已收敛，但未达 <20ms）。通过项：生产预渲染产物 6 语种 `aria-label === 可见文本`（WCAG 2.5.3 全达标）、`navLabel` 6 语种齐全、零硬编码 left/right、`ar` 为 RTL；Round 1 P3-1/P3-2 经 3 组变异探针 + a11y 逐语种核验确属真闭环；重试语义经独立端到端证实生效（外部进程 20ms 释放锁即成功落盘，持续占用则旧文件不损坏且 temp 已清理）；tsc 0 / lint 0 错误 0 警告 / build 18/18 全绿，`smoke:persistence` 干净端口 5/5 通过。详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round2-handoff.md)。
 

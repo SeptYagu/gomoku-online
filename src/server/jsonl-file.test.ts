@@ -161,12 +161,13 @@ describe("jsonl-file", () => {
       ).toThrow("EPERM");
 
       expect(attempts).toBe(3);
-      expect(sleeps).toEqual([5, 10]);
-      // Total sleep is bounded to <= 20ms
+      expect(sleeps).toEqual([5, 5]);
+      // Total sleep requested is bounded to <= 20ms (2 * 5ms = 10ms)
       expect(sleeps.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(20);
     });
 
     it("bounds total synchronous sleep during retries to well below event loop stall thresholds", () => {
+      const waitSpy = vi.spyOn(Atomics, "wait");
       const t0 = Date.now();
       let attempts = 0;
       const renameFn = vi.fn(() => {
@@ -176,15 +177,41 @@ describe("jsonl-file", () => {
         throw err;
       });
 
+      try {
+        expect(() =>
+          atomicRenameSync("temp.tmp", "target.jsonl", {
+            renameFn
+          })
+        ).toThrow("EBUSY");
+
+        const elapsed = Date.now() - t0;
+        expect(attempts).toBe(3);
+        expect(waitSpy).toHaveBeenCalledTimes(2);
+        expect(waitSpy).toHaveBeenNthCalledWith(1, expect.any(Int32Array), 0, 0, 5);
+        expect(waitSpy).toHaveBeenNthCalledWith(2, expect.any(Int32Array), 0, 0, 5);
+        expect(elapsed).toBeLessThan(300);
+      } finally {
+        waitSpy.mockRestore();
+      }
+    });
+
+    it("treats maxAttempts <= 0 as at least 1 attempt", () => {
+      let attempts = 0;
+      const renameFn = vi.fn(() => {
+        attempts += 1;
+        const err = new Error("EPERM: operation not permitted") as NodeJS.ErrnoException;
+        err.code = "EPERM";
+        throw err;
+      });
+
       expect(() =>
         atomicRenameSync("temp.tmp", "target.jsonl", {
+          maxAttempts: 0,
           renameFn
         })
-      ).toThrow("EBUSY");
+      ).toThrow("EPERM");
 
-      const elapsed = Date.now() - t0;
-      expect(attempts).toBe(3);
-      expect(elapsed).toBeLessThan(40);
+      expect(attempts).toBe(1);
     });
 
     it("cleans up temp file when rewriteJsonlFile fails to rename", () => {

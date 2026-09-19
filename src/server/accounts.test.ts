@@ -456,23 +456,20 @@ describe("AccountStore", () => {
       }
 
       // Append 185 churn/overwritten lines for one player so file has 200 lines but only 15 live entries
-      for (let i = 0; i < 185; i += 1) {
-        appendFileSync(
-          filePath,
-          JSON.stringify({
-            session: {
-              createdAt: now,
-              lastSeenAt: now,
-              playerId: "g-live-0",
-              playerName: `Overwritten ${i}`,
-              tokenHash: `hash-churn-${i}`
-            },
-            type: "guest-session",
-            writtenAt: now
-          }) + "\n",
-          "utf8"
-        );
-      }
+      const churnLines = Array.from({ length: 185 }, (_, i) =>
+        JSON.stringify({
+          session: {
+            createdAt: now,
+            lastSeenAt: now,
+            playerId: "g-live-0",
+            playerName: `Overwritten ${i}`,
+            tokenHash: `hash-churn-${i}`
+          },
+          type: "guest-session",
+          writtenAt: now
+        })
+      ).join("\n") + "\n";
+      appendFileSync(filePath, churnLines, "utf8");
 
       const totalLines = readRawFile(filePath).trim().split("\n").length;
       expect(totalLines).toBe(200);
