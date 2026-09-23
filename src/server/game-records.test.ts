@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -323,6 +323,55 @@ describe("GameRecordStore", () => {
 
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain("2 unreadable line(s)");
+    } finally {
+      console.warn = originalWarn;
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("gracefully catches compaction failure under file lock, retains append log, and self-heals when lock releases (GameRecordStore)", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-game-record-compaction-lock-"));
+    const filePath = join(tempDir, "records.jsonl");
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    try {
+      console.warn = (...args: unknown[]) => {
+        warnings.push(args.map(String).join(" "));
+      };
+
+      const store = new GameRecordStore({ compactAfterLines: 1, filePath, now: createClock() });
+
+      const record1 = createAuthoritativeGameRecord({ gameId: "ROOM-LOCK-1" });
+      store.recordAuthoritative(record1);
+
+      // Lock destination file so atomic rename fails with EPERM during next write compaction
+      const fd = openSync(filePath, "r");
+      try {
+        let saved2: ReturnType<typeof store.recordAuthoritative> | undefined;
+        expect(() => {
+          saved2 = store.recordAuthoritative(createAuthoritativeGameRecord({ gameId: "ROOM-LOCK-2" }));
+        }).not.toThrow();
+        expect(saved2?.gameId).toBe("ROOM-LOCK-2");
+
+        // Compaction failure was caught and logged gracefully without losing data
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain("[GameRecordStore] file compaction deferred due to lock");
+        expect(warnings[0]).toContain("EPERM");
+
+        const linesWhileLocked = readFileSync(filePath, "utf8").trim().split("\n");
+        expect(linesWhileLocked.length).toBe(2);
+        expect(existsSync(`${filePath}.compact.tmp`)).toBe(false);
+      } finally {
+        closeSync(fd);
+      }
+
+      // Next write triggers compaction without lock and compacts to live count
+      store.recordAuthoritative(createAuthoritativeGameRecord({ gameId: "ROOM-LOCK-3" }));
+
+      const linesAfterRelease = readFileSync(filePath, "utf8").trim().split("\n");
+      expect(linesAfterRelease.length).toBe(3);
     } finally {
       console.warn = originalWarn;
       rmSync(tempDir, { force: true, recursive: true });

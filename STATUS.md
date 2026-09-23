@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 337 项用例；**全绿通过（100% 稳定，连续全量运行 PASS，0 flake）** —— 详见 [`docs/handoff/2026-09-23-feedback-button-label-round5-remediation-handoff.md`](docs/handoff/2026-09-23-feedback-button-label-round5-remediation-handoff.md)
+- **单元测试** (`npm test`)：35 个测试套件 / 339 项用例；**全绿通过（100% 稳定，连续全量运行 PASS，0 flake）** —— 详见 [`docs/handoff/2026-09-23-feedback-button-label-round6-remediation-handoff.md`](docs/handoff/2026-09-23-feedback-button-label-round6-remediation-handoff.md)
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **反馈入口按钮文字标签与文件重写锁容错 Round 6 审查缺陷闭环（2026-09-23，待审交付）**：针对 WorkBuddy Round 6 源码审查报告（提交 `bf895b0`，报告：[`docs/handoff/2026-09-23-workbuddy-code-review-round6-handoff.md`](docs/handoff/2026-09-23-workbuddy-code-review-round6-handoff.md)）指出的缺陷（1×P3）实施 100% 闭环修复：①P3-1 为全部三处 `compactFile` 异常捕获兜底补齐独立守门单测，在 `accounts.test.ts` 补齐 `AccountStore` 守门用例、在 `game-records.test.ts` 补齐 `GameRecordStore` 守门用例，经独立变异探针实测（三处 catch 各自改 throw）**3/3 独立、确定性变红**；②落实非阻断优化：放宽 `jsonl-file.test.ts:192` 墙钟断言至 `< 2000ms`（依赖 5 条确定性 `waitSpy` 断言守门），为 `accounts.test.ts:130` 显式配置 15s 超时，并在 `jsonl-file.ts` docstring 标注实测外部探针采样口径，彻底消除 CPU 饱和与超订多 worker 下的 flake；本地四道门禁全绿（35 套 / 339 项单测全绿，Next.js 生产构建 18/18 页面通过，smoke:persistence 5/5 通过）。详见 [`docs/handoff/2026-09-23-feedback-button-label-round6-remediation-handoff.md`](docs/handoff/2026-09-23-feedback-button-label-round6-remediation-handoff.md)。
 
 - ⚠️ **反馈入口按钮文字标签 + Windows 文件重写锁容错 · 独立审查 Round 6 复查（被审 `cb347c8`）**：**审查未通过**。0×P0 / 0×P1 / 0×P2 / **1×P3**。①**P3-1**：Round 5 P3-2 仅 **1/3 闭环** —— Round 5 明文枚举的三处 `compactFile` 兜底中，只有 `GuestSessionStore`（`accounts.ts:501`）被 `accounts.test.ts:538` 新用例覆盖；**`AccountStore`（`accounts.ts:332`）与 `GameRecordStore`（`game-records.ts:489`）仍零守门** —— 分别变异为 `throw error;` 后全量 `npx vitest run` 两次均为 **35 套 / 337 例全绿 exit=0**（对照：变异 `GuestSessionStore` 则 `accounts.test.ts` 1 failed / 17 passed，探针手法有效）。②通过项：Round 5 **P3-1 文档口径真正闭环**（`jsonl-file.ts:73-85` 已删除 `bounded to ~45ms`，改为「空闲 n=150 分位数 + 饱和尾部无界」双口径，与 STATUS/INDEX 一致）；**验收标准 4 经独立外部 holder 探针证实** —— 真实 `renameSync` + 外部持锁进程精确释放实测 `16/20/30/40ms → 5/5`、`45ms → 4/5`、`50ms → 2/5`、`55/60ms → 0/5`（窗口 ≈45~50ms），持续持锁规范抛 `EPERM`（停顿 63ms）、旧文件逐字节不变、`.compact.tmp` 零残留、释放后 7ms 自愈；`tsc` 0 错误 / `lint` 0 错误 0 警告。③另记 2 项待确认风险（`jsonl-file.test.ts:192` `<300ms` 墙钟断言本轮未改、独立实测其操作数在 8 路超订下 `n=300` `p90 224 / max 632ms`、`≥300ms` 占 **3/300（1.0%）**，验收标准 5「彻底消除高负载 flake」未获代码动作背书；全量套件在 8 路超订首轮即红于 `accounts.test.ts:130` 的 `Test timed out in 5000ms`，属既存用例的负载敏感性而非本轮回归）与 1 项未复跑项（本轮未跑 `npm run build` 与 `smoke:persistence`）。详见 [`docs/handoff/2026-09-23-workbuddy-code-review-round6-handoff.md`](docs/handoff/2026-09-23-workbuddy-code-review-round6-handoff.md)。
 

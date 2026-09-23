@@ -189,7 +189,9 @@ describe("jsonl-file", () => {
         expect(waitSpy).toHaveBeenNthCalledWith(1, expect.any(Int32Array), 0, 0, 5);
         expect(waitSpy).toHaveBeenNthCalledWith(2, expect.any(Int32Array), 0, 0, 5);
         expect(waitSpy).toHaveBeenNthCalledWith(3, expect.any(Int32Array), 0, 0, 5);
-        expect(elapsed).toBeLessThan(300);
+        // Wall-clock guard is relaxed to 2000ms to eliminate false flake under CPU-saturated / oversubscribed test runners
+        // while deterministic Atomics.wait assertions strictly verify sleep durations and attempt count without busy waiting.
+        expect(elapsed).toBeLessThan(2000);
       } finally {
         waitSpy.mockRestore();
       }

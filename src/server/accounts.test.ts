@@ -160,7 +160,7 @@ describe("AccountStore", () => {
     } finally {
       rmSync(tempDir, { force: true, recursive: true });
     }
-  });
+  }, 15_000);
 
   it("warns about unreadable lines instead of silently dropping history", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "gomoku-account-corrupt-"));
@@ -535,8 +535,8 @@ describe("AccountStore", () => {
     }
   });
 
-  it("gracefully catches compaction failure under file lock, retains append log, and self-heals when lock releases", () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-compaction-lock-"));
+  it("gracefully catches compaction failure under file lock, retains append log, and self-heals when lock releases (GuestSessionStore)", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-guest-compaction-lock-"));
     const filePath = join(tempDir, "guest-sessions.jsonl");
 
     const warnings: string[] = [];
@@ -575,6 +575,55 @@ describe("AccountStore", () => {
 
       // Next session write triggers compaction without lock and compacts to live count
       expectOk(store.createSession({ playerId: "g-lock-3", playerName: "Player 3" }));
+
+      const linesAfterRelease = readRawFile(filePath).trim().split("\n");
+      expect(linesAfterRelease.length).toBe(3);
+    } finally {
+      console.warn = originalWarn;
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("gracefully catches compaction failure under file lock, retains append log, and self-heals when lock releases (AccountStore)", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-account-compaction-lock-"));
+    const filePath = join(tempDir, "accounts.jsonl");
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    try {
+      console.warn = (...args: unknown[]) => {
+        warnings.push(args.map(String).join(" "));
+      };
+
+      const now = 1_000;
+      const store = new AccountStore({ compactAfterLines: 1, filePath, now: () => now });
+
+      expectOk(store.createAccount({ displayName: "Lock Player 1" }));
+
+      // Lock destination file so atomic rename fails with EPERM during next write compaction
+      const fd = openSync(filePath, "r");
+      try {
+        let secondAccount: ReturnType<typeof store.createAccount> | undefined;
+        expect(() => {
+          secondAccount = store.createAccount({ displayName: "Lock Player 2" });
+        }).not.toThrow();
+        expect(secondAccount?.ok).toBe(true);
+
+        // Compaction failure was caught and logged gracefully without losing data
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain("[AccountStore] file compaction deferred due to lock");
+        expect(warnings[0]).toContain("EPERM");
+
+        const linesWhileLocked = readRawFile(filePath).trim().split("\n");
+        expect(linesWhileLocked.length).toBe(2);
+        expect(existsSync(`${filePath}.compact.tmp`)).toBe(false);
+      } finally {
+        closeSync(fd);
+      }
+
+      // Next account write triggers compaction without lock and compacts to live count
+      expectOk(store.createAccount({ displayName: "Lock Player 3" }));
 
       const linesAfterRelease = readRawFile(filePath).trim().split("\n");
       expect(linesAfterRelease.length).toBe(3);
