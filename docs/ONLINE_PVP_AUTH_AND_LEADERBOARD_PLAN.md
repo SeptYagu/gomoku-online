@@ -156,8 +156,17 @@ export class ScryptConcurrencyGate {
         throw error;
       }
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          const idx = this.queue.findIndex((item) => item.resolve === resolve);
+        let timer: NodeJS.Timeout | undefined;
+        const waiter = {
+          resolve: () => {
+            if (timer) clearTimeout(timer);
+            resolve();
+          },
+          reject
+        };
+
+        timer = setTimeout(() => {
+          const idx = this.queue.indexOf(waiter);
           if (idx !== -1) {
             this.queue.splice(idx, 1);
             const err = new Error("Scrypt concurrency wait timeout");
@@ -166,13 +175,7 @@ export class ScryptConcurrencyGate {
           }
         }, this.timeoutMs);
 
-        this.queue.push({
-          resolve: () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          reject
-        });
+        this.queue.push(waiter);
       });
     }
 
@@ -522,6 +525,19 @@ export function resolveRoomErrorMessage(
 - `applyRoomAck` 与 `socket.on("room:error")` **统一通过 `resolveRoomErrorMessage(..., messagesRef.current)` 上屏展示**，保证 6 语种本地化文案精准生效；
 - 兼容发布说明：新旧客户端均可正常展示错误信息（旧客户端安全降级为服务端英文原句），零破坏性更新。
 
+#### 2.3.3 本地化文案提供侧装配契约（闭环 P2-2）
+确保 `messages.nameReservedError` 拥有明确的提供源：
+1. **装配入口**：在 `src/components/GameShell.tsx:223-230` 构造 `useFriendRoom` 的 `messages` 字面量时，显式装配：
+   ```typescript
+   messages: {
+     ...
+     nameReservedError: dictionary.room.nameReservedError,
+   }
+   ```
+2. **类型扩展**：在 `src/components/hooks/room-state-utils.ts` 的 `UseFriendRoomOptions.messages` 中扩展 `nameReservedError?: string`；
+3. **透传保证**：在 `src/components/useFriendRoom.ts` 中将 `options.messages` 原样透传至 `useRoomSocket`；
+4. **六语种同步**：在 `src/i18n/dictionaries.ts` 中确保 6 种官方语言均具备 `room.nameReservedError`。
+
 ---
 
 ### 2.4 排行榜搜索框布局、无障碍与交互态契约（闭环 P3-3）
@@ -659,6 +675,11 @@ export function resolveRoomErrorMessage(
 ```
 - **键盘导航**：ArrowLeft / ArrowRight 实现 roving tabindex 轮转，Tab 键平滑步入当前面板中的输入框，严禁在渲染时强夺焦点；
 - **层级关系说明**：既有折叠开关（`aria-expanded`）作为外层面板展开/收起控制，展开后内部渲染上述 `tablist` 与对应的活动 `tabpanel`；
+- **令牌字段映射唯一口径（闭环 P3-1）**：
+  在客户端身份面板提交时：
+  1. **纯令牌快速会话恢复**：当用户仅填写令牌框（未填写 identifier 亦未填写 password）时，提交给 API 的负载为 `{ token: tokenValue }`，后端命中路径 A 恢复会话；
+  2. **遗留无密码账号安全认领**：当用户同时填写昵称/代号 + 新密码 + 原设备令牌时，提交给 API 的负载为 `{ identifier, password, ownershipToken: tokenValue }`，后端命中路径 B1 完成校验与绑定；
+  3. **标准密码登录**：当用户填写昵称/代号 + 密码（无令牌）时，提交给 API 的负载为 `{ identifier, password }`，后端命中路径 B2 完成密码校验；
 - **RTL 兼容**：Flex/Grid 自动跟随阿拉伯语自右向左排版。
 
 ---
