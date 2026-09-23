@@ -48,6 +48,8 @@ export type UseFriendRoomOptions = {
     connectionFailedXhr: string;
     joinTargetRequired: string;
     leaveRoomTimeout: string;
+    guestSessionError: string;
+    nameReservedError: string;
     roomCodeRequired: string;
     roomError: string;
   }>;
@@ -456,4 +458,39 @@ export function formatConnectionError(error: unknown, messages?: UseFriendRoomOp
   }
 
   return (messages?.connectionFailed ?? DEFAULT_CONNECTION_FAILED_ERROR).replace("{message}", message || "unknown error");
+}
+
+export interface RoomErrorMessages {
+  guestSessionError?: string;
+  nameReservedError?: string;
+  roomError?: string;
+}
+
+export function resolveRoomErrorMessage(
+  error: { code?: string; message?: string } | string | unknown,
+  messages?: (UseFriendRoomOptions["messages"] & RoomErrorMessages) | null
+): string | null {
+  if (!error) {
+    return null;
+  }
+  if (typeof error === "string") {
+    if (error === "name-reserved") {
+      return messages?.nameReservedError ?? "Name is registered. Please log in.";
+    }
+    if (error === "guest-session-invalid") {
+      return messages?.guestSessionError ?? "Guest session expired. Starting a new session...";
+    }
+    return error;
+  }
+  if (typeof error !== "object") {
+    return messages?.roomError ?? DEFAULT_ROOM_ERROR;
+  }
+  const err = error as { code?: string; message?: string };
+  if (err.code === "name-reserved") {
+    return messages?.nameReservedError ?? err.message ?? "Name is registered. Please log in.";
+  }
+  if (err.code === "guest-session-invalid") {
+    return messages?.guestSessionError ?? err.message ?? "Guest session expired. Starting a new session...";
+  }
+  return err.message || messages?.roomError || DEFAULT_ROOM_ERROR;
 }

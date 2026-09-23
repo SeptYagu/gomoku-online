@@ -1023,7 +1023,7 @@ function acknowledgeAndBroadcast(
   ack(response);
 
   if (!response.ok) {
-    if (response.error.code !== "guest-session-invalid") {
+    if (response.error.code !== "guest-session-invalid" && response.error.code !== "name-reserved") {
       socket.emit("room:error", response.error);
     }
     return;
@@ -1038,7 +1038,7 @@ function acknowledgeAndBroadcastRoomOnly(socket: RoomSocket, response: RoomAck, 
   ack(response);
 
   if (!response.ok) {
-    if (response.error.code !== "guest-session-invalid") {
+    if (response.error.code !== "guest-session-invalid" && response.error.code !== "name-reserved") {
       socket.emit("room:error", response.error);
     }
     return;

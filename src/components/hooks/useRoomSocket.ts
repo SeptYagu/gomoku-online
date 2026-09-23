@@ -16,13 +16,11 @@ import {
   DEFAULT_JOIN_TARGET_REQUIRED_ERROR,
   DEFAULT_LEAVE_ROOM_TIMEOUT_ERROR,
   DEFAULT_ROOM_CODE_REQUIRED_ERROR,
-  DEFAULT_ROOM_ERROR,
   formatConnectionError,
   getOrCreatePlayerId,
   getRoomCodeFromCurrentUrl,
   isEphemeralSession,
   isLobbyRoomDeletedEvent,
-  isRoomErrorLike,
   isRoomSnapshot,
   markEphemeralSession,
   normalizePlayerName,
@@ -33,6 +31,7 @@ import {
   readAccountToken,
   readGuestToken,
   readRoomSession,
+  resolveRoomErrorMessage,
   shouldBeEphemeral,
   syncRoomUrl,
   useBootSnapshot,
@@ -181,7 +180,7 @@ export function useRoomSocket({
     });
 
     socket.on("room:error", (roomError: unknown) => {
-      setError(isRoomErrorLike(roomError) ? roomError.message : messagesRef.current?.roomError ?? DEFAULT_ROOM_ERROR);
+      setError(resolveRoomErrorMessage(roomError, messagesRef.current));
     });
 
     socket.on("room:state", (snapshot: unknown) => {
@@ -225,7 +224,7 @@ export function useRoomSocket({
     setIsJoiningRoom(false);
 
     if (!response.ok) {
-      setError(response.error.message);
+      setError(resolveRoomErrorMessage(response.error, messagesRef.current));
       return;
     }
 

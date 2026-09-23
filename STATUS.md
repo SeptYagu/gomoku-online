@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 339 项用例；**全绿通过（100% 稳定，连续全量运行 PASS，0 flake）** —— 详见 [`docs/handoff/2026-09-23-feedback-button-label-round6-remediation-handoff.md`](docs/handoff/2026-09-23-feedback-button-label-round6-remediation-handoff.md)
+- **单元测试** (`npm test`)：35 个测试套件 / 351 项用例；**全绿通过（100% 稳定，连续全量运行 PASS，0 flake）** —— 详见 [`docs/handoff/2026-09-23-online-pvp-and-account-auth-implementation-handoff.md`](docs/handoff/2026-09-23-online-pvp-and-account-auth-implementation-handoff.md)
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🚀 **联机对战命名规范、排行榜搜索框修复、账号登录与防冒名全栈代码实施落地交付（待审交付，触发代码审查 Round 1）**：依据用户反馈与已收敛方案完成全栈工程实施：①6 语种命名全面演进为“联机对战”（Online PVP）；②排行榜搜索框限宽 280px，彻底重置内嵌按钮样式并消除遮挡；③引入异步 scrypt + 2并发门禁 + 5000ms超时 + 32队列背压，新增 `/api/account/login`（10次/分限流），支持 5 会话 FIFO 轮换及遗留账号凭原令牌认领；④canonicalizePlayerName 剥离零宽隐形字符，isNameReserved 拦截访客冒名，resolveRoomErrorMessage 确保本地化文案精准上屏；⑤OnlineLobbyView 落地三态 Tab 与键盘巡航；四道工程门禁全绿（35 套 / 351 项单测通过，18 页面构建成功）。详见 [`docs/handoff/2026-09-23-online-pvp-and-account-auth-implementation-handoff.md`](docs/handoff/2026-09-23-online-pvp-and-account-auth-implementation-handoff.md)。
 
 - 🏁 **联机对战命名规范、排行榜搜索框修复、账号登录与防冒名设计方案 · 方案终审收敛定稿（依 Rule 7 & Rule 11 转入代码实施阶段）**：双智能体方案审查已达第 3 轮上限，WorkBuddy Round 3 报告证实核心架构与安全性（P1-1 凭原令牌认领可达、P1-2 内部活对象防抹除、P3-1 状态码与错误码完备、P3-2 FIFO 会话淘汰、P2-2 异步 scrypt、P2-3 规范化守门）全部实质闭环。Round 3 指出的 3 项细节缺陷（P2-1 闸门超时闭包、P2-2 GameShell 提供侧本地化装配、P3-1 令牌表单字段映射口径）已在方案文档中闭环固化。依双智能体协同协议，设计方案正式收敛定稿，推进源码落地与自动化测试构建。详见 [`docs/handoff/2026-09-23-online-pvp-plan-final-convergence-handoff.md`](docs/handoff/2026-09-23-online-pvp-plan-final-convergence-handoff.md) 与 [`docs/ONLINE_PVP_AUTH_AND_LEADERBOARD_PLAN.md`](docs/ONLINE_PVP_AUTH_AND_LEADERBOARD_PLAN.md)。
 

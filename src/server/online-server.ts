@@ -1,7 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import next from "next";
 import { Server } from "socket.io";
-import type { AccountSession } from "./accounts";
+import {
+  mapAccountErrorToStatusCode,
+  type AccountSession,
+  type LoginAccountInput
+} from "./accounts";
 import { resolveClientAddress, shouldTrustProxy } from "./client-address";
 import type { LeaderboardQuery } from "./game-records";
 import { registerRoomSocketHandlers, type RoomSocketServer } from "./room-socket";
@@ -19,6 +23,10 @@ const handler = app.getRequestHandler();
 const accountRegistrationLimiter = new FixedWindowRateLimiter({
   limit: 5,
   windowMs: 10 * 60 * 1000
+});
+const accountLoginLimiter = new FixedWindowRateLimiter({
+  limit: 10,
+  windowMs: 60 * 1000
 });
 
 await app.prepare();
@@ -63,7 +71,11 @@ httpServer.listen(port, hostname, () => {
 function handleAccountApi(request: IncomingMessage, response: ServerResponse): boolean {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
-  if (url.pathname !== "/api/account/register" && url.pathname !== "/api/account/session") {
+  if (
+    url.pathname !== "/api/account/register" &&
+    url.pathname !== "/api/account/login" &&
+    url.pathname !== "/api/account/session"
+  ) {
     return false;
   }
 
@@ -93,39 +105,100 @@ async function processAccountApiRequest(request: IncomingMessage, response: Serv
       return;
     }
 
-    const body = await readJsonBody<{ displayName?: string; publicHandle?: string }>(request);
-    const result = accountStore.createAccount({
-      displayName: body?.displayName ?? "",
-      publicHandle: body?.publicHandle
-    });
+    const body = await readJsonBody<{ displayName?: string; publicHandle?: string; password?: string }>(request);
+    try {
+      const result = await accountStore.createAccount({
+        displayName: body?.displayName ?? "",
+        publicHandle: body?.publicHandle,
+        password: body?.password
+      });
 
-    if (!result.ok) {
+      if (!result.ok) {
+        writeJson(
+          response,
+          mapAccountErrorToStatusCode(result.error.code),
+          { error: result.error.message }
+        );
+        return;
+      }
+
+      writeAccountSession(response, result.value);
+      return;
+    } catch (error) {
+      const errCode = (error as { code?: string })?.code;
+      if (errCode === "QUEUE_FULL" || errCode === "QUEUE_TIMEOUT") {
+        writeJson(response, 503, { error: "Server busy, please retry shortly." });
+        return;
+      }
+      throw error;
+    }
+  }
+
+  if (url.pathname === "/api/account/login") {
+    if (request.method !== "POST") {
+      writeJson(response, 405, { error: "Method not allowed" }, { allow: "POST" });
+      return;
+    }
+
+    const rateLimit = accountLoginLimiter.consume(getRequestClientKey(request));
+
+    if (!rateLimit.allowed) {
       writeJson(
         response,
-        result.error.code === "duplicate-name" || result.error.code === "duplicate-handle" ? 409 : 400,
-        { error: result.error.message }
+        429,
+        { error: "Too many login attempts. Try again later." },
+        { "retry-after": String(Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000))) }
       );
       return;
     }
 
-    writeAccountSession(response, result.value);
-    return;
+    const body = await readJsonBody<LoginAccountInput>(request);
+    try {
+      const result = await accountStore.loginAccount({
+        token: body?.token,
+        identifier: body?.identifier,
+        password: body?.password,
+        ownershipToken: body?.ownershipToken
+      });
+
+      if (!result.ok) {
+        writeJson(
+          response,
+          mapAccountErrorToStatusCode(result.error.code),
+          { error: result.error.message }
+        );
+        return;
+      }
+
+      writeAccountSession(response, result.value);
+      return;
+    } catch (error) {
+      const errCode = (error as { code?: string })?.code;
+      if (errCode === "QUEUE_FULL" || errCode === "QUEUE_TIMEOUT") {
+        writeJson(response, 503, { error: "Server busy, please retry shortly." });
+        return;
+      }
+      throw error;
+    }
   }
 
-  if (request.method !== "GET") {
-    writeJson(response, 405, { error: "Method not allowed" }, { allow: "GET" });
+  if (url.pathname === "/api/account/session") {
+    if (request.method !== "GET") {
+      writeJson(response, 405, { error: "Method not allowed" }, { allow: "GET" });
+      return;
+    }
+
+    const token = getBearerToken(request);
+    const account = token ? accountStore.authenticate(token) : null;
+
+    if (!account || !token) {
+      writeJson(response, 401, { error: "Account session is invalid" });
+      return;
+    }
+
+    writeAccountSession(response, { ...account, token });
     return;
   }
-
-  const token = getBearerToken(request);
-  const account = token ? accountStore.authenticate(token) : null;
-
-  if (!account || !token) {
-    writeJson(response, 401, { error: "Account session is invalid" });
-    return;
-  }
-
-  writeAccountSession(response, { ...account, token });
 }
 
 function writeAccountSession(response: ServerResponse, session: AccountSession): void {

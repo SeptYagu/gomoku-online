@@ -2,7 +2,18 @@ import { appendFileSync, closeSync, existsSync, mkdtempSync, openSync, readFileS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { AccountStore, GuestSessionStore, resolvePlayerIdentity } from "./accounts";
+import {
+  AccountStore,
+  GuestSessionStore,
+  ScryptConcurrencyGate,
+  canonicalizePlayerName,
+  hashPassword,
+  mapAccountErrorToStatusCode,
+  resolvePlayerIdentity,
+  verifyPassword,
+  type AccountResult,
+  type AccountSession
+} from "./accounts";
 import * as jsonlFile from "./jsonl-file";
 
 describe("AccountStore", () => {
@@ -604,7 +615,7 @@ describe("AccountStore", () => {
       // Lock destination file so atomic rename fails with EPERM during next write compaction
       const fd = openSync(filePath, "r");
       try {
-        let secondAccount: ReturnType<typeof store.createAccount> | undefined;
+        let secondAccount: AccountResult<AccountSession> | undefined;
         expect(() => {
           secondAccount = store.createAccount({ displayName: "Lock Player 2" });
         }).not.toThrow();
@@ -631,6 +642,263 @@ describe("AccountStore", () => {
       console.warn = originalWarn;
       rmSync(tempDir, { force: true, recursive: true });
     }
+  });
+});
+
+describe("canonicalizePlayerName", () => {
+  it("normalizes NFKC full-width, strips zero-width/format chars, collapses spaces and lowercases", () => {
+    // Zero-width space (\u200B), word joiner (\u2060), soft hyphen (\u00AD)
+    expect(canonicalizePlayerName("  Ａlice\u200B \u2060Test\u00AD  ")).toBe("alice test");
+    expect(canonicalizePlayerName("Bob   Smith")).toBe("bob smith");
+    expect(canonicalizePlayerName("")).toBe("");
+    expect(canonicalizePlayerName("   ")).toBe("");
+  });
+});
+
+describe("ScryptConcurrencyGate", () => {
+  it("executes tasks within concurrency limits", async () => {
+    const gate = new ScryptConcurrencyGate(2, 4, 1000);
+    const results = await Promise.all([
+      gate.run(async () => 1),
+      gate.run(async () => 2),
+      gate.run(async () => 3)
+    ]);
+    expect(results).toEqual([1, 2, 3]);
+  });
+
+  it("rejects with QUEUE_FULL when queue is exhausted", async () => {
+    const gate = new ScryptConcurrencyGate(1, 1, 1000);
+    let releaseFirst: () => void = () => {};
+    const firstBlocked = gate.run(() => new Promise((resolve) => { releaseFirst = () => resolve(1); }));
+    const secondQueued = gate.run(async () => 2);
+
+    // Third task exceeds maxQueueSize 1
+    await expect(gate.run(async () => 3)).rejects.toMatchObject({ code: "QUEUE_FULL" });
+
+    releaseFirst();
+    await expect(firstBlocked).resolves.toBe(1);
+    await expect(secondQueued).resolves.toBe(2);
+  });
+
+  it("rejects with QUEUE_TIMEOUT when waiting too long", async () => {
+    const gate = new ScryptConcurrencyGate(1, 4, 50);
+    let releaseFirst: () => void = () => {};
+    const firstBlocked = gate.run(() => new Promise((resolve) => { releaseFirst = () => resolve(1); }));
+
+    const timedOutTask = gate.run(async () => 2);
+    await expect(timedOutTask).rejects.toMatchObject({ code: "QUEUE_TIMEOUT" });
+
+    releaseFirst();
+    await expect(firstBlocked).resolves.toBe(1);
+  });
+});
+
+describe("Password hashing & verification", () => {
+  it("hashes and verifies password using scrypt correctly", async () => {
+    const salt = "test-salt-123456";
+    const hash = await hashPassword("mySecretPassword", salt);
+    expect(hash).toHaveLength(64);
+
+    const valid = await verifyPassword("mySecretPassword", salt, hash);
+    expect(valid).toBe(true);
+
+    const invalid = await verifyPassword("wrongPassword", salt, hash);
+    expect(invalid).toBe(false);
+
+    const invalidLength = await verifyPassword("mySecretPassword", salt, "short");
+    expect(invalidLength).toBe(false);
+  });
+});
+
+describe("AccountStore Auth & Name Reservation", () => {
+  it("supports password-based registration and login with identifier", async () => {
+    const store = new AccountStore();
+    const created = await store.createAccount({
+      displayName: "Protected User",
+      password: "strongPassword123"
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    // Login with display name
+    const loginByName = await store.loginAccount({
+      identifier: "Protected User",
+      password: "strongPassword123"
+    });
+    expect(loginByName.ok).toBe(true);
+    if (loginByName.ok) {
+      expect(loginByName.value.playerId).toBe(created.value.playerId);
+      expect(store.authenticate(loginByName.value.token)).not.toBeNull();
+    }
+
+    // Login with @publicHandle
+    const loginByHandle = await store.loginAccount({
+      identifier: `@${created.value.publicHandle}`,
+      password: "strongPassword123"
+    });
+    expect(loginByHandle.ok).toBe(true);
+
+    // Login with wrong password
+    const loginBadPass = await store.loginAccount({
+      identifier: "Protected User",
+      password: "wrongPassword"
+    });
+    expect(loginBadPass).toMatchObject({
+      ok: false,
+      error: { code: "invalid-password" }
+    });
+
+    // Login with unknown account
+    const loginUnknown = await store.loginAccount({
+      identifier: "Nobody",
+      password: "password123"
+    });
+    expect(loginUnknown).toMatchObject({
+      ok: false,
+      error: { code: "account-not-found" }
+    });
+  });
+
+  it("rotates tokens and retains at most 5 newest tokens (FIFO)", async () => {
+    const store = new AccountStore();
+    const created = await store.createAccount({
+      displayName: "Multi Device User",
+      password: "password123"
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const initialToken = created.value.token;
+    expect(store.authenticate(initialToken)).not.toBeNull();
+
+    const tokens: string[] = [initialToken];
+    // Log in 5 more times (total 6 tokens generated)
+    for (let i = 0; i < 5; i++) {
+      const loginRes = await store.loginAccount({
+        identifier: "Multi Device User",
+        password: "password123"
+      });
+      expect(loginRes.ok).toBe(true);
+      if (loginRes.ok) {
+        tokens.push(loginRes.value.token);
+      }
+    }
+
+    expect(tokens.length).toBe(6);
+    // The 1st token (initialToken) should be evicted
+    expect(store.authenticate(tokens[0])).toBeNull();
+    // Tokens 1..5 (the 5 newest) must still authenticate
+    for (let i = 1; i < 6; i++) {
+      expect(store.authenticate(tokens[i])).not.toBeNull();
+    }
+  });
+
+  it("handles legacy unpassworded accounts and claims with ownership token", async () => {
+    const store = new AccountStore();
+    // Legacy account created without password
+    const legacy = store.createAccount({ displayName: "Legacy Legend" });
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) return;
+
+    // Login attempt without ownership token or password fails
+    const claimNoProof = await store.loginAccount({
+      identifier: "Legacy Legend"
+    });
+    expect(claimNoProof).toMatchObject({
+      ok: false,
+      error: { code: "account-password-required" }
+    });
+
+    // Claim with wrong ownership token fails
+    const claimBadProof = await store.loginAccount({
+      identifier: "Legacy Legend",
+      ownershipToken: "wrong_token",
+      password: "newSecurePassword123"
+    });
+    expect(claimBadProof).toMatchObject({
+      ok: false,
+      error: { code: "account-password-required" }
+    });
+
+    // Claim with valid ownership token sets the password
+    const claimSuccess = await store.loginAccount({
+      identifier: "Legacy Legend",
+      ownershipToken: legacy.value.token,
+      password: "newSecurePassword123"
+    });
+    expect(claimSuccess.ok).toBe(true);
+
+    // Now user can log in with new password without needing the token
+    const subsequentLogin = await store.loginAccount({
+      identifier: "Legacy Legend",
+      password: "newSecurePassword123"
+    });
+    expect(subsequentLogin.ok).toBe(true);
+  });
+
+  it("reserves registered display names and public handles against guest spoofing", () => {
+    const store = new AccountStore();
+    const created = store.createAccount({
+      displayName: "VIP Gamer",
+      publicHandle: "vip_gamer"
+    });
+    expect(created.ok).toBe(true);
+
+    expect(store.isNameReserved("VIP Gamer")).toBe(true);
+    expect(store.isNameReserved("vip gamer")).toBe(true);
+    expect(store.isNameReserved("vip_gamer")).toBe(true);
+    expect(store.isNameReserved("Random Guest")).toBe(false);
+  });
+
+  it("rejects guest identity attempting to use a registered account name", () => {
+    const accountStore = new AccountStore();
+    const guestStore = new GuestSessionStore();
+    accountStore.createAccount({ displayName: "Verified Champion" });
+
+    // Guest tries to use the same name
+    const guestResult = resolvePlayerIdentity(
+      { playerId: "guest_player_1", playerName: "Verified Champion" },
+      accountStore,
+      guestStore
+    );
+    expect(guestResult).toMatchObject({
+      ok: false,
+      error: { code: "name-reserved" }
+    });
+
+    // Guest tries to use case/whitespace variant
+    const guestVariant = resolvePlayerIdentity(
+      { playerId: "guest_player_2", playerName: " verified champion " },
+      accountStore,
+      guestStore
+    );
+    expect(guestVariant).toMatchObject({
+      ok: false,
+      error: { code: "name-reserved" }
+    });
+
+    // Guest with unreserved name succeeds
+    const guestClean = resolvePlayerIdentity(
+      { playerId: "guest_player_3", playerName: "Unregistered Guest" },
+      accountStore,
+      guestStore
+    );
+    expect(guestClean.ok).toBe(true);
+  });
+});
+
+describe("mapAccountErrorToStatusCode", () => {
+  it("maps domain error codes to corresponding HTTP statuses", () => {
+    expect(mapAccountErrorToStatusCode("duplicate-name")).toBe(409);
+    expect(mapAccountErrorToStatusCode("duplicate-handle")).toBe(409);
+    expect(mapAccountErrorToStatusCode("name-reserved")).toBe(409);
+    expect(mapAccountErrorToStatusCode("account-not-found")).toBe(401);
+    expect(mapAccountErrorToStatusCode("invalid-password")).toBe(401);
+    expect(mapAccountErrorToStatusCode("account-password-required")).toBe(401);
+    expect(mapAccountErrorToStatusCode("account-token-invalid")).toBe(401);
+    expect(mapAccountErrorToStatusCode("invalid-player")).toBe(400);
+    expect(mapAccountErrorToStatusCode("invalid-handle")).toBe(400);
+    expect(mapAccountErrorToStatusCode("guest-session-invalid")).toBe(400);
   });
 });
 

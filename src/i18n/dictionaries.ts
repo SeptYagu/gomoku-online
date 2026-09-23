@@ -41,8 +41,20 @@ export type GameDictionary = {
   };
   room: {
     account: string;
+    accountIdentifier: string;
+    accountIdentifierPlaceholder: string;
     accountLoading: string;
+    accountPassword: string;
+    accountPasswordPlaceholder: string;
+    accountTokenCopied: string;
+    accountTokenInput: string;
+    accountTokenPlaceholder: string;
     blackSeat: string;
+    copyAccountToken: string;
+    loginAccount: string;
+    loginTab: string;
+    nameReservedError: string;
+    registerTab: string;
     allowUndo: string;
     availableRooms: string;
     chatPlaceholder: string;
@@ -277,7 +289,7 @@ const en = {
       label: "Game modes",
       local: "Local two-player",
       ai: "AI",
-      room: "Friend room"
+      room: "Online PVP"
     },
     ai: {
       cancelSettingsChange: "Cancel changes",
@@ -297,8 +309,20 @@ const en = {
     },
     room: {
       account: "Account",
+      accountIdentifier: "Name or Handle",
+      accountIdentifierPlaceholder: "Name or @handle",
       accountLoading: "Loading",
+      accountPassword: "Password",
+      accountPasswordPlaceholder: "Enter password (min 6)",
+      accountTokenCopied: "Token copied",
+      accountTokenInput: "Account Token",
+      accountTokenPlaceholder: "Original token (for claim/recovery)",
       blackSeat: "Black",
+      copyAccountToken: "Copy token",
+      loginAccount: "Log in",
+      loginTab: "Log in",
+      nameReservedError: "Name is registered. Please log in.",
+      registerTab: "Register",
       allowUndo: "Allow",
       availableRooms: "Rooms",
       chatPlaceholder: "Message this room",
@@ -378,7 +402,7 @@ const en = {
       onlineUsers: "Online users",
       opponentTurn: "Opponent to move",
       orJoinExisting: "or",
-      panelLabel: "Friend room",
+      panelLabel: "Online PVP",
       playerName: "Name",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Players {count}/2",
@@ -526,7 +550,7 @@ const zh = {
       label: "游戏模式",
       local: "本地双人",
       ai: "人机",
-      room: "好友房"
+      room: "联机对战"
     },
     ai: {
       cancelSettingsChange: "取消更改",
@@ -546,8 +570,20 @@ const zh = {
     },
     room: {
       account: "账号",
+      accountIdentifier: "账号或公开代号",
+      accountIdentifierPlaceholder: "输入昵称或 @公开代号",
       accountLoading: "加载中",
+      accountPassword: "密码",
+      accountPasswordPlaceholder: "输入密码 (至少6位)",
+      accountTokenCopied: "令牌已复制",
+      accountTokenInput: "账号令牌",
+      accountTokenPlaceholder: "原设备令牌 (认领或找回时填)",
       blackSeat: "黑棋",
+      copyAccountToken: "复制令牌",
+      loginAccount: "登录",
+      loginTab: "登录",
+      nameReservedError: "该名称属于已注册玩家，请登录使用。",
+      registerTab: "注册",
       allowUndo: "允许",
       availableRooms: "房间列表",
       chatPlaceholder: "发送房间消息",
@@ -627,7 +663,7 @@ const zh = {
       onlineUsers: "在线用户",
       opponentTurn: "对手回合",
       orJoinExisting: "或",
-      panelLabel: "好友房",
+      panelLabel: "联机对战",
       playerName: "昵称",
       playerNamePlaceholder: "Player 1234",
       playersCount: "玩家 {count}/2",
@@ -775,7 +811,7 @@ const fr = {
       label: "Modes de jeu",
       local: "Deux joueurs locaux",
       ai: "IA",
-      room: "Salon ami"
+      room: "PVP en ligne"
     },
     ai: {
       cancelSettingsChange: "Annuler les changements",
@@ -795,8 +831,20 @@ const fr = {
     },
     room: {
       account: "Compte",
+      accountIdentifier: "Nom ou identifiant",
+      accountIdentifierPlaceholder: "Nom ou @identifiant",
       accountLoading: "Chargement",
+      accountPassword: "Mot de passe",
+      accountPasswordPlaceholder: "Mot de passe (6 min)",
+      accountTokenCopied: "Jeton copié",
+      accountTokenInput: "Jeton de compte",
+      accountTokenPlaceholder: "Jeton d'origine (réclamation)",
       blackSeat: "Noirs",
+      copyAccountToken: "Copier le jeton",
+      loginAccount: "Se connecter",
+      loginTab: "Connexion",
+      nameReservedError: "Ce nom est réservé. Veuillez vous connecter.",
+      registerTab: "Inscription",
       allowUndo: "Autoriser",
       availableRooms: "Salons",
       chatPlaceholder: "Message du salon",
@@ -876,7 +924,7 @@ const fr = {
       onlineUsers: "Utilisateurs en ligne",
       opponentTurn: "À l'adversaire",
       orJoinExisting: "ou",
-      panelLabel: "Salon ami",
+      panelLabel: "PVP en ligne",
       playerName: "Nom",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Joueurs {count}/2",
@@ -1024,7 +1072,7 @@ const es = {
       label: "Modos de juego",
       local: "Dos jugadores locales",
       ai: "IA",
-      room: "Sala de amigos"
+      room: "PVP online"
     },
     ai: {
       cancelSettingsChange: "Cancelar cambios",
@@ -1044,8 +1092,20 @@ const es = {
     },
     room: {
       account: "Cuenta",
+      accountIdentifier: "Nombre o alias",
+      accountIdentifierPlaceholder: "Nombre o @alias",
       accountLoading: "Cargando",
+      accountPassword: "Contraseña",
+      accountPasswordPlaceholder: "Contraseña (mín. 6)",
+      accountTokenCopied: "Token copiado",
+      accountTokenInput: "Token de cuenta",
+      accountTokenPlaceholder: "Token original (reclamo)",
       blackSeat: "Negras",
+      copyAccountToken: "Copiar token",
+      loginAccount: "Iniciar sesión",
+      loginTab: "Iniciar sesión",
+      nameReservedError: "Nombre reservado. Por favor inicia sesión.",
+      registerTab: "Registro",
       allowUndo: "Permitir",
       availableRooms: "Salas",
       chatPlaceholder: "Mensaje de sala",
@@ -1125,7 +1185,7 @@ const es = {
       onlineUsers: "Usuarios en línea",
       opponentTurn: "Turno del rival",
       orJoinExisting: "o",
-      panelLabel: "Sala de amigos",
+      panelLabel: "PVP online",
       playerName: "Nombre",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Jugadores {count}/2",
@@ -1273,7 +1333,7 @@ const ru = {
       label: "Режимы игры",
       local: "Два игрока",
       ai: "ИИ",
-      room: "Комната друга"
+      room: "Онлайн PVP"
     },
     ai: {
       cancelSettingsChange: "Отменить изменения",
@@ -1293,8 +1353,20 @@ const ru = {
     },
     room: {
       account: "Аккаунт",
+      accountIdentifier: "Имя или псевдоним",
+      accountIdentifierPlaceholder: "Имя или @псевдоним",
       accountLoading: "Загрузка",
+      accountPassword: "Пароль",
+      accountPasswordPlaceholder: "Пароль (от 6 симв.)",
+      accountTokenCopied: "Токен скопирован",
+      accountTokenInput: "Токен аккаунта",
+      accountTokenPlaceholder: "Исходный токен (для восстановления)",
       blackSeat: "Черные",
+      copyAccountToken: "Копировать токен",
+      loginAccount: "Войти",
+      loginTab: "Вход",
+      nameReservedError: "Имя занято. Пожалуйста, войдите.",
+      registerTab: "Регистрация",
       allowUndo: "Разрешить",
       availableRooms: "Комнаты",
       chatPlaceholder: "Сообщение в комнату",
@@ -1374,7 +1446,7 @@ const ru = {
       onlineUsers: "Пользователи онлайн",
       opponentTurn: "Ход соперника",
       orJoinExisting: "или",
-      panelLabel: "Комната друга",
+      panelLabel: "Онлайн PVP",
       playerName: "Имя",
       playerNamePlaceholder: "Player 1234",
       playersCount: "Игроки {count}/2",
@@ -1522,7 +1594,7 @@ const ar = {
       label: "أوضاع اللعب",
       local: "لاعبان محليان",
       ai: "الذكاء الاصطناعي",
-      room: "غرفة صديق"
+      room: "مبارزة عبر الإنترنت"
     },
     ai: {
       cancelSettingsChange: "إلغاء التغييرات",
@@ -1542,8 +1614,20 @@ const ar = {
     },
     room: {
       account: "الحساب",
+      accountIdentifier: "الاسم أو المعرّف",
+      accountIdentifierPlaceholder: "الاسم أو @المعرّف",
       accountLoading: "تحميل",
+      accountPassword: "كلمة المرور",
+      accountPasswordPlaceholder: "كلمة المرور (6 على الأقل)",
+      accountTokenCopied: "تم نسخ الرمز",
+      accountTokenInput: "رمز الحساب",
+      accountTokenPlaceholder: "الرمز الأصلي (للمطالبة)",
       blackSeat: "الأسود",
+      copyAccountToken: "نسخ الرمز",
+      loginAccount: "تسجيل الدخول",
+      loginTab: "دخول",
+      nameReservedError: "هذا الاسم مسجل. يرجى تسجيل الدخول.",
+      registerTab: "تسجيل",
       allowUndo: "السماح",
       availableRooms: "الغرف",
       chatPlaceholder: "رسالة الغرفة",
@@ -1623,7 +1707,7 @@ const ar = {
       onlineUsers: "المستخدمون المتصلون",
       opponentTurn: "دور الخصم",
       orJoinExisting: "أو",
-      panelLabel: "غرفة صديق",
+      panelLabel: "مبارزة عبر الإنترنت",
       playerName: "الاسم",
       playerNamePlaceholder: "Player 1234",
       playersCount: "اللاعبون {count}/2",

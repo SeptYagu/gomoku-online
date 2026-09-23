@@ -164,6 +164,8 @@ export type MoveIntent = {
 };
 
 export type RoomErrorCode =
+  | "account-not-found"
+  | "account-password-required"
   | "account-token-invalid"
   | "duplicate-handle"
   | "duplicate-name"
@@ -179,8 +181,10 @@ export type RoomErrorCode =
   | "guest-session-invalid"
   | "invalid-player"
   | "invalid-handle"
+  | "invalid-password"
   | "invalid-room-code"
   | "invalid-room-visibility"
+  | "name-reserved"
   | "not-room-host"
   | "move-seq-mismatch"
   | "no-moves-to-undo"

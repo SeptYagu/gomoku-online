@@ -226,6 +226,7 @@ export function GameShell({ dictionary, feedbackDictionary, locale }: GameShellP
       connectionFailedXhr: dictionary.room.connectionFailedXhr,
       joinTargetRequired: dictionary.room.joinTargetRequired,
       leaveRoomTimeout: dictionary.room.leaveRoomTimeout,
+      nameReservedError: dictionary.room.nameReservedError,
       roomCodeRequired: dictionary.room.roomCodeRequired,
       roomError: dictionary.room.roomError
     }

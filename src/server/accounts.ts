@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from "node:crypto";
 import { resolve } from "node:path";
 import { MAX_PLAYER_NAME_LENGTH } from "../lib/constants";
 import { appendJsonlLine, JsonlCompactionTracker, readJsonlFile, rewriteJsonlFile } from "./jsonl-file";
@@ -23,14 +23,45 @@ export type AccountResult<T> = { ok: true; value: T } | { ok: false; error: Acco
 
 export type AccountError = {
   code:
+    | "account-not-found"
+    | "account-password-required"
     | "account-token-invalid"
     | "duplicate-handle"
     | "duplicate-name"
     | "guest-session-invalid"
     | "invalid-handle"
-    | "invalid-player";
+    | "invalid-password"
+    | "invalid-player"
+    | "name-reserved";
   message: string;
 };
+
+export interface LoginAccountInput {
+  token?: string;
+  identifier?: string;
+  password?: string;
+  ownershipToken?: string;
+}
+
+export function mapAccountErrorToStatusCode(code: AccountError["code"]): number {
+  switch (code) {
+    case "duplicate-handle":
+    case "duplicate-name":
+    case "name-reserved":
+      return 409;
+    case "account-not-found":
+    case "invalid-password":
+    case "account-password-required":
+    case "account-token-invalid":
+      return 401;
+    case "invalid-handle":
+    case "invalid-player":
+    case "guest-session-invalid":
+      return 400;
+    default:
+      return 400;
+  }
+}
 
 export type GuestSessionSnapshot = {
   identity: "guest";
@@ -57,8 +88,10 @@ type StoredAccount = {
   id: string;
   lastSeenAt: number;
   publicHandle: string;
-  tokenHash: string;
+  tokenHashes: string[];
   updatedAt: number;
+  passwordHash?: string;
+  passwordSalt?: string;
 };
 
 type StoredGuestSession = {
@@ -104,6 +137,109 @@ const MAX_PUBLIC_HANDLE_LENGTH = 20;
 const MIN_PUBLIC_HANDLE_LENGTH = 3;
 const RESERVED_PUBLIC_HANDLES = new Set(["admin", "api", "gomoku", "guest", "player", "root", "support", "system"]);
 
+export function canonicalizePlayerName(name: string): string {
+  return name
+    .normalize("NFKC")
+    .replace(/[\p{Cf}\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase();
+}
+
+export class ScryptConcurrencyGate {
+  private active = 0;
+  private readonly queue: Array<{ resolve: () => void; reject: (err: Error) => void }> = [];
+  private readonly maxConcurrent: number;
+  private readonly maxQueueSize: number;
+  private readonly timeoutMs: number;
+
+  constructor(maxConcurrent = 2, maxQueueSize = 32, timeoutMs = 5000) {
+    this.maxConcurrent = maxConcurrent;
+    this.maxQueueSize = maxQueueSize;
+    this.timeoutMs = timeoutMs;
+  }
+
+  async run<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.active >= this.maxConcurrent) {
+      if (this.queue.length >= this.maxQueueSize) {
+        const error = new Error("Scrypt concurrency queue full (server busy)");
+        (error as { code?: string }).code = "QUEUE_FULL";
+        throw error;
+      }
+      await new Promise<void>((resolve, reject) => {
+        const waiter: { resolve: () => void; reject: (reason?: unknown) => void } = {
+          resolve: () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          reject
+        };
+
+        const timer = setTimeout(() => {
+          const idx = this.queue.indexOf(waiter);
+          if (idx !== -1) {
+            this.queue.splice(idx, 1);
+            const err = new Error("Scrypt concurrency wait timeout");
+            (err as { code?: string }).code = "QUEUE_TIMEOUT";
+            reject(err);
+          }
+        }, this.timeoutMs);
+
+        this.queue.push(waiter);
+      });
+    }
+
+    this.active += 1;
+    try {
+      return await fn();
+    } finally {
+      this.active -= 1;
+      const next = this.queue.shift();
+      next?.resolve();
+    }
+  }
+}
+
+function scryptAsync(password: string, salt: string, keylen: number, options: ScryptOptions): Promise<Buffer> {
+  return new Promise<Buffer>((res, rej) => {
+    scrypt(password, salt, keylen, options, (err, derivedKey) => {
+      if (err) {
+        rej(err);
+      } else {
+        res(derivedKey as Buffer);
+      }
+    });
+  });
+}
+
+export const defaultScryptGate = new ScryptConcurrencyGate();
+
+export async function hashPassword(
+  password: string,
+  salt: string,
+  gate: ScryptConcurrencyGate = defaultScryptGate
+): Promise<string> {
+  return gate.run(async () => {
+    const derived = (await scryptAsync(password, salt, 32, { N: 16384, r: 8, p: 1 })) as Buffer;
+    return derived.toString("hex");
+  });
+}
+
+export async function verifyPassword(
+  password: string,
+  salt: string,
+  expectedHash: string,
+  gate: ScryptConcurrencyGate = defaultScryptGate
+): Promise<boolean> {
+  const actualHash = await hashPassword(password, salt, gate);
+  const actualBuffer = Buffer.from(actualHash, "hex");
+  const expectedBuffer = Buffer.from(expectedHash, "hex");
+  if (actualBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
 export class AccountStore {
   private readonly accounts = new Map<string, StoredAccount>();
   private readonly compaction: JsonlCompactionTracker;
@@ -127,7 +263,10 @@ export class AccountStore {
     this.loadFromFile();
   }
 
-  createAccount(input: { displayName: string; publicHandle?: string }): AccountResult<AccountSession> {
+  createAccount(input: { displayName: string; publicHandle?: string; password?: undefined }): AccountResult<AccountSession>;
+  createAccount(input: { displayName: string; publicHandle?: string; password: string }): Promise<AccountResult<AccountSession>>;
+  createAccount(input: { displayName: string; publicHandle?: string; password?: string }): Promise<AccountResult<AccountSession>> | AccountResult<AccountSession>;
+  createAccount(input: { displayName: string; publicHandle?: string; password?: string }): Promise<AccountResult<AccountSession>> | AccountResult<AccountSession> {
     const displayName = normalizeDisplayName(input.displayName);
 
     if (!displayName) {
@@ -155,6 +294,40 @@ export class AccountStore {
       return failure("duplicate-handle", "This public handle is already registered.");
     }
 
+    const password = input.password?.trim();
+    if (password !== undefined) {
+      if (password.length < 6) {
+        return failure("invalid-password", "Password must be at least 6 characters.");
+      }
+
+      return (async () => {
+        const salt = randomBytes(16).toString("hex");
+        const passwordHash = await hashPassword(password, salt);
+        const token = `${id}.${randomTokenPart(24)}`;
+        const now = this.now();
+        const account: StoredAccount = {
+          createdAt: now,
+          displayName,
+          id,
+          lastSeenAt: now,
+          publicHandle,
+          tokenHashes: [hashToken(token)],
+          updatedAt: now,
+          passwordHash,
+          passwordSalt: salt
+        };
+
+        this.accounts.set(account.id, account);
+        this.playerIdByPublicHandle.set(account.publicHandle, account.id);
+        this.persist(account);
+
+        return success({
+          ...getAccountSnapshot(account),
+          token
+        });
+      })();
+    }
+
     const token = `${id}.${randomTokenPart(24)}`;
     const now = this.now();
     const account: StoredAccount = {
@@ -163,7 +336,7 @@ export class AccountStore {
       id,
       lastSeenAt: now,
       publicHandle,
-      tokenHash: hashToken(token),
+      tokenHashes: [hashToken(token)],
       updatedAt: now
     };
 
@@ -177,6 +350,66 @@ export class AccountStore {
     });
   }
 
+  async loginAccount(input: LoginAccountInput): Promise<AccountResult<AccountSession>> {
+    if (input.token?.trim() && !input.identifier?.trim()) {
+      const snapshot = this.authenticate(input.token.trim());
+      if (!snapshot) {
+        return failure("account-token-invalid", "Account session token is invalid.");
+      }
+      return success({ ...snapshot, token: input.token.trim() });
+    }
+
+    const identifier = input.identifier?.trim() ?? "";
+    if (!identifier) {
+      return failure("account-not-found", "Account identifier is required.");
+    }
+
+    const account = this.findLiveAccountByIdentifier(identifier);
+    if (!account) {
+      return failure("account-not-found", "Account not found.");
+    }
+
+    const ownershipToken = input.ownershipToken?.trim() || input.token?.trim();
+
+    if (!account.passwordHash) {
+      const isOwner = Boolean(ownershipToken && account.tokenHashes.includes(hashToken(ownershipToken)));
+
+      if (!isOwner) {
+        return failure(
+          "account-password-required",
+          "This account does not have a password. Please sign in on your original device using your account token to set a password."
+        );
+      }
+
+      const newPassword = input.password?.trim() ?? "";
+      if (newPassword.length < 6) {
+        return failure("invalid-password", "Password must be at least 6 characters.");
+      }
+      const salt = randomBytes(16).toString("hex");
+      account.passwordSalt = salt;
+      account.passwordHash = await hashPassword(newPassword, salt);
+    } else {
+      const password = input.password?.trim() ?? "";
+      if (!password) {
+        return failure("invalid-password", "Password is required.");
+      }
+      const valid = await verifyPassword(password, account.passwordSalt ?? "", account.passwordHash);
+      if (!valid) {
+        return failure("invalid-password", "Incorrect password.");
+      }
+    }
+
+    const newToken = `${account.id}.${randomTokenPart(24)}`;
+    const newTokenHash = hashToken(newToken);
+    account.tokenHashes = [newTokenHash, ...account.tokenHashes.filter((h) => h !== newTokenHash)].slice(0, 5);
+    const now = this.now();
+    account.lastSeenAt = now;
+    account.updatedAt = now;
+    this.persist(account);
+
+    return success({ ...getAccountSnapshot(account), token: newToken });
+  }
+
   authenticate(token: string): AccountSnapshot | null {
     const normalizedToken = token.trim();
 
@@ -187,7 +420,12 @@ export class AccountStore {
     const accountId = normalizedToken.split(".", 1)[0];
     const account = this.accounts.get(accountId);
 
-    if (!account || account.tokenHash !== hashToken(normalizedToken)) {
+    if (!account) {
+      return null;
+    }
+
+    const tokenHash = hashToken(normalizedToken);
+    if (!account.tokenHashes.includes(tokenHash)) {
       return null;
     }
 
@@ -209,12 +447,56 @@ export class AccountStore {
     return account ? getAccountSnapshot(account) : null;
   }
 
+  findByDisplayName(displayName: string): AccountSnapshot | null {
+    const account = this.findLiveAccountByIdentifier(displayName);
+
+    return account ? getAccountSnapshot(account) : null;
+  }
+
   findByPublicHandle(publicHandle: string): AccountSnapshot | null {
     const normalizedHandle = normalizePublicHandle(publicHandle);
     const playerId = normalizedHandle ? this.playerIdByPublicHandle.get(normalizedHandle) : null;
     const account = playerId ? this.accounts.get(playerId) : null;
 
     return account ? getAccountSnapshot(account) : null;
+  }
+
+  isNameReserved(name: string): boolean {
+    const canonical = canonicalizePlayerName(name);
+    if (!canonical) return false;
+    return (
+      [...this.accounts.values()].some((acc) => canonicalizePlayerName(acc.displayName) === canonical) ||
+      this.findByPublicHandle(canonical) !== null
+    );
+  }
+
+  private findLiveAccountByIdentifier(identifier: string): StoredAccount | null {
+    const trimmed = identifier.trim();
+    if (!trimmed) return null;
+
+    // 1. Direct ID match (e.g. acct_*)
+    const directAccount = this.accounts.get(trimmed);
+    if (directAccount) return directAccount;
+
+    // 2. Handle match (@handle or handle)
+    const normalizedHandle = normalizePublicHandle(trimmed);
+    if (normalizedHandle) {
+      const playerId = this.playerIdByPublicHandle.get(normalizedHandle);
+      const account = playerId ? this.accounts.get(playerId) : null;
+      if (account) return account;
+    }
+
+    // 3. Canonical display name match
+    const canonicalName = canonicalizePlayerName(trimmed);
+    if (canonicalName) {
+      for (const account of this.accounts.values()) {
+        if (canonicalizePlayerName(account.displayName) === canonicalName) {
+          return account;
+        }
+      }
+    }
+
+    return null;
   }
 
   private createUniqueAccountId(): string {
@@ -230,7 +512,9 @@ export class AccountStore {
   }
 
   private hasDisplayName(displayName: string): boolean {
-    return [...this.accounts.values()].some((account) => namesMatch(account.displayName, displayName));
+    const canonical = canonicalizePlayerName(displayName);
+    if (!canonical) return false;
+    return [...this.accounts.values()].some((account) => canonicalizePlayerName(account.displayName) === canonical);
   }
 
   private createAvailablePublicHandle(displayName: string, accountId: string): string {
@@ -281,7 +565,37 @@ export class AccountStore {
         !this.playerIdByPublicHandle.has(persistedHandle)
           ? persistedHandle
           : this.createAvailablePublicHandle(entry.account.displayName, entry.account.id);
-      const account = { ...entry.account, publicHandle };
+
+      const rawAccount = entry.account as unknown as {
+        createdAt?: number;
+        displayName?: string;
+        id?: string;
+        lastSeenAt?: number;
+        publicHandle?: string;
+        tokenHash?: string;
+        tokenHashes?: string[];
+        updatedAt?: number;
+        passwordHash?: string;
+        passwordSalt?: string;
+      };
+
+      const tokenHashes = Array.isArray(rawAccount.tokenHashes)
+        ? rawAccount.tokenHashes.filter((h): h is string => typeof h === "string" && h.length > 0)
+        : typeof rawAccount.tokenHash === "string" && rawAccount.tokenHash
+          ? [rawAccount.tokenHash]
+          : [];
+
+      const account: StoredAccount = {
+        createdAt: typeof rawAccount.createdAt === "number" ? rawAccount.createdAt : this.now(),
+        displayName: entry.account.displayName ?? "",
+        id: entry.account.id,
+        lastSeenAt: typeof rawAccount.lastSeenAt === "number" ? rawAccount.lastSeenAt : this.now(),
+        publicHandle,
+        tokenHashes,
+        updatedAt: typeof rawAccount.updatedAt === "number" ? rawAccount.updatedAt : this.now(),
+        passwordHash: typeof rawAccount.passwordHash === "string" ? rawAccount.passwordHash : undefined,
+        passwordSalt: typeof rawAccount.passwordSalt === "string" ? rawAccount.passwordSalt : undefined
+      };
 
       this.accounts.set(account.id, account);
       this.playerIdByPublicHandle.set(account.publicHandle, account.id);
@@ -561,6 +875,11 @@ export function resolvePlayerIdentity(
     });
   }
 
+  const requestedName = canonicalizePlayerName(input.playerName);
+  if (requestedName && accountStore.isNameReserved(requestedName)) {
+    return failure("name-reserved", "This display name is registered to an account. Please sign in to use this name.");
+  }
+
   const guestToken = input.guestToken?.trim();
 
   if (guestToken) {
@@ -695,10 +1014,6 @@ function isValidPublicHandle(publicHandle: string): boolean {
     !RESERVED_PUBLIC_HANDLES.has(publicHandle) &&
     /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])$/.test(publicHandle)
   );
-}
-
-function namesMatch(first: string, second: string): boolean {
-  return first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase();
 }
 
 function success<T>(value: T): AccountResult<T> {

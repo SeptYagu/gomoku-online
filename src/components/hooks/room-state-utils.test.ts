@@ -10,6 +10,7 @@ import {
   readGuestToken,
   readPlayerName,
   persistRoomSession,
+  resolveRoomErrorMessage,
   GUEST_TOKEN_STORAGE_KEY,
   PLAYER_ID_STORAGE_KEY,
   PLAYER_NAME_STORAGE_KEY
@@ -236,5 +237,29 @@ describe("room-state-utils client storage & ephemeral tab isolation", () => {
     expect(mockSessionStorage.getItem(GUEST_TOKEN_STORAGE_KEY)).toBe(healedAvatarToken);
     // localStorage MUST remain untouched and byte-for-byte identical to baseline:
     expect(mockLocalStorage.getItem(GUEST_TOKEN_STORAGE_KEY)).toBe(deadPrimaryToken);
+  });
+});
+
+describe("resolveRoomErrorMessage", () => {
+  it("resolves name-reserved and guest-session-invalid to localized or fallback messages", () => {
+    expect(resolveRoomErrorMessage("name-reserved")).toBe("Name is registered. Please log in.");
+    expect(
+      resolveRoomErrorMessage("name-reserved", {
+        nameReservedError: "该名称属于已注册玩家，请登录使用。"
+      })
+    ).toBe("该名称属于已注册玩家，请登录使用。");
+
+    expect(resolveRoomErrorMessage("guest-session-invalid")).toBe(
+      "Guest session expired. Starting a new session..."
+    );
+    expect(
+      resolveRoomErrorMessage("guest-session-invalid", {
+        guestSessionError: "Session expirée."
+      })
+    ).toBe("Session expirée.");
+
+    expect(resolveRoomErrorMessage("custom-error-text")).toBe("custom-error-text");
+    expect(resolveRoomErrorMessage(null)).toBeNull();
+    expect(resolveRoomErrorMessage(undefined)).toBeNull();
   });
 });

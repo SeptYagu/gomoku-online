@@ -98,7 +98,8 @@ export type FriendRoomController = {
   ready: boolean;
   nextLeaderboardPage: () => void;
   previousLeaderboardPage: () => void;
-  registerAccount: () => void;
+  loginAccount: (input: { identifier?: string; password?: string; token?: string; ownershipToken?: string }) => void;
+  registerAccount: (options?: { password?: string }) => void;
   refreshPresence: () => void;
   refreshLeaderboard: () => void;
   refreshProfile: () => void;
@@ -217,12 +218,16 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
   });
 
   // ─── 账户与会话方法 ───
-  const registerAccount = useCallback(() => {
+  const registerAccount = useCallback((options?: { password?: string }) => {
     const displayName = normalizePlayerName(playerName);
 
     setAccountStatus("loading");
     void fetch("/api/account/register", {
-      body: JSON.stringify({ displayName, publicHandle: registrationHandle.trim() || undefined }),
+      body: JSON.stringify({
+        displayName,
+        publicHandle: registrationHandle.trim() || undefined,
+        password: options?.password?.trim() || undefined
+      }),
       headers: {
         "accept": "application/json",
         "content-type": "application/json"
@@ -252,6 +257,41 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
         roomSocket.setError(accountError instanceof Error ? accountError.message : "Account request failed.");
       });
   }, [playerName, registrationHandle, roomSocket]);
+
+  const loginAccount = useCallback(
+    (input: { identifier?: string; password?: string; token?: string; ownershipToken?: string }) => {
+      setAccountStatus("loading");
+      void fetch("/api/account/login", {
+        body: JSON.stringify(input),
+        headers: {
+          "accept": "application/json",
+          "content-type": "application/json"
+        },
+        method: "POST"
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            const body = (await response.json().catch(() => null)) as { error?: string } | null;
+            throw new Error(body?.error ?? `Login failed: ${response.status}`);
+          }
+          return (await response.json()) as AccountSession;
+        })
+        .then((session) => {
+          persistAccountToken(session.token);
+          setAccount(session);
+          setAccountStatus("registered");
+          setPlayerNameState(session.displayName);
+          setRegistrationHandleState(session.publicHandle);
+          persistPlayerName(session.displayName);
+          roomSocket.setError(null);
+        })
+        .catch((accountError: unknown) => {
+          setAccountStatus("error");
+          roomSocket.setError(accountError instanceof Error ? accountError.message : "Account request failed.");
+        });
+    },
+    [roomSocket]
+  );
 
   const signOutAccount = useCallback(() => {
     clearAccountToken();
@@ -417,6 +457,7 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
     ready: roomGame.ready,
     nextLeaderboardPage: lobbyPresence.nextLeaderboardPage,
     previousLeaderboardPage: lobbyPresence.previousLeaderboardPage,
+    loginAccount,
     registerAccount,
     refreshPresence: lobbyPresence.refreshPresence,
     refreshLeaderboard: lobbyPresence.refreshLeaderboard,
