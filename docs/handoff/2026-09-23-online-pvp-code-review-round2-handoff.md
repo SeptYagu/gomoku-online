@@ -12,8 +12,8 @@
 - **P2-1 竞态已实质闭环**：二次查重与 `accounts.set`/`persist` 已收进 `await hashPassword` 之后的同一同步 tick（`accounts.ts:308-336`），3 路同名并发、密码/无密码混合并发两种更强交错下均**恰一个成功**（证据见第二节 P3-1 对照），回退前序实现 `5c03b7b` 实测 `[true,true]` 双双成功，证明守门有效。
 - **P3-1 服务端路径 A 已打通**：`OnlineLobbyView.tsx:271/321` 双门放宽为「令牌非空即可提交」，`identifier` 留空时 `JSON.stringify` 丢弃 `undefined` ⇒ 请求体仅含 `token`/`ownershipToken`，命中 `accounts.ts:368-374` 路径 A；占位文案 6 语种已收敛为「令牌登录或认领无密码账号」，不再承诺未实现的找回语义。
 - **P3-2 死键已闭环**：`guestSessionError` 已进入 `GameDictionary.room` 必填成员 + 6 语种实值，`buildRoomMessages`（`room-state-utils.ts:69-83`）为唯一装配点且被 `GameShell.tsx:224` 使用（全仓仅此一处构造 `messages`），缺键即 `tsc` 红。
-- 独立复算：本轮新增的**全部 44 条断言**（P2-1 6 条 / P2-2 5 条 / P3-1 5 条 / P3-2 28 条）以 `tsx` 逐条重放**全部 PASS**（因本机 vitest 无法启动，见第三节），另设计 4 组负向/边界探针，其中 **2 组构造出反例（见第二节）**。
-- 门禁复跑：`npx tsc --noEmit` 0 错误、`npm run lint` 0 错误 0 警告、`npm run build` 18/18 路由成功（exit 0）；`npm test` 本机**无法运行**（环境级，非本次提交引入，见第三节）。
+- 独立复算：本轮新增用例的**全部 48 条断言**（P2-1 6 条 / P2-2 5 条 / P3-1 5 条 / P3-2 6 语种 × 5 + 2 条边界）以 `tsx` 直调真实模块逐条重放**全部 PASS**（`--pool=vmForks` 下 `accounts.test.ts` 33/33 通过，与该结论一致），另设计 4 组负向/边界探针，其中 **2 组构造出反例（见第二节）**。
+- 门禁复跑：`npx tsc --noEmit` 0 错误、`npm run lint` 0 错误 0 警告、`npm run build` 18/18 路由成功（exit 0）；**门禁 3 未能复现「全绿」** —— 默认 pool 下任何测试文件（含本轮未改动的既有套件）均在首个 `describe(` 处抛 `TypeError: Cannot read properties of undefined (reading 'config')`（环境级），改用 `--pool=vmForks` 可运行，实测 **34 套 / 351 例通过、1 套 / 4 例失败**，失败全部落在本次**未改动**的 `useRoomChat.test.ts`（连跑 2 次结果一致，归因详见第三节）。
 
 ---
 
@@ -87,7 +87,12 @@
 
 **未验证项（受环境限制）**
 
-1. **`npm test` 无法在本机复跑**（含本轮全部 355 例）。原因：`vitest 4.1.9 + vite 8.0.16 + node v25.8.0` 组合下，**任何**测试文件（含本次完全未改动的既有 `accounts.test.ts`）均在首个 `describe(` 处抛 `TypeError: Cannot read properties of undefined (reading 'config')`，与 `--pool=threads/forks` 无关 ⇒ 属环境/依赖组合问题，**不可归因于 `eac1b95`**。所需条件：可用的 Node/Vite/Vitest 版本组合。补偿措施：以 `tsx` 直调真实模块逐条重放本轮新增的全部 44 条断言（全部 PASS）+ `tsc`/`lint`/`build` 三道门禁实跑通过。残余风险：新增测试在 runner 层的实际通过性与既有 351 例的回归情况**未经本轮独立背书**。
+1. **门禁 3（`npm test`）未达「全绿」，且该门禁声明在本机不可复现**（已核实为**既存问题，不可归因于 `eac1b95`**，故不计为缺陷，但直接影响验收标准 5 的独立性）：
+   - **默认 pool 无法启动任何测试文件**：`vitest run`（含 `--pool=threads`）对**每一个**测试文件都在首个 `describe(` 处抛 `TypeError: Cannot read properties of undefined (reading 'config')`，0 用例执行 —— 包括本轮**完全未改动**的既有 `accounts.test.ts`，故与本次 diff 无关。环境：`vitest 4.1.9 / vite 8.0.16 / node v25.8.0 / react 19.2.7`。
+   - **改用 `--pool=vmForks` 可运行，但非全绿**：实测 `34 套通过 / 1 套失败`、`351 例通过 / 4 例失败`；**4 例失败全部位于 `src/components/hooks/useRoomChat.test.ts`**（`M-2 Guard: explicitly constructs freshPlayer…`、`M-1 Watchdog Guard: arms gate.begin…`、`P3-4 Retry Write-back Guard…`、`P3-4 First-send Write-back Guard…`），错误为 `TypeError: Cannot read properties of null (reading 'useState')`（`useRoomChat.ts:41`）。**连跑 2 次失败集合完全一致 ⇒ 确定性失败，非 flake**。
+   - **归因证据**：`git diff --name-only b2c6383..eac1b95 | grep useRoomChat` **无命中**（该文件与 `useRoomChat.ts` 均不在本次变更范围，最后改动为更早的 `1ee8ff1`）；失败机制是该文件内 `vi.mock("react", …)` **未生效**（错误栈指向真实 `node_modules/react/cjs/react.development.js`，且全仓仅此一个文件 mock `react`），与本次「名称规范化 / 文案装配」改动无因果关系。
+   - **含义与所需条件**：`eac1b95` 声明的「35 套 / 355 例全绿」**在本机无法复现**；须先修复工具链组合（或该文件的 mock 方式）后方能核销门禁 3。附带影响：该文件正是「访客身份自愈」的 hook 级守门所在 ⇒ 该链路的自动化守门**当前实际不执行**（残余风险：自愈链路回退仍不会被任何可运行用例发现）。
+   - 残余风险：除上述 4 例外，其余 351 例与四道门禁的其余三道均已实跑通过；但「门禁 3 全绿」这一验收项本轮**未获独立背书**。
 2. **客户端纯令牌提交门（`OnlineLobbyView.tsx:271`、`:321`）仅做静态路径核验**，未做浏览器端 E2E（仓库无 jsdom/无头浏览器基建）。已核实：`identifier: loginIdentifier.trim() || undefined` 经 `JSON.stringify` 丢弃后请求体不含 `identifier`，命中服务端路径 A。残余风险：React 受控态与真实提交链路未在运行时取证。
 3. **6 语种新增文案未在真实渲染下取样**（仅程序化断言键存在与非空、装配与映射不回退）。残余风险：RTL 镜像与窄屏破版未见实测证据。
 
