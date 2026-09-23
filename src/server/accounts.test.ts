@@ -964,6 +964,78 @@ describe("AccountStore Auth & Name Reservation", () => {
       error: { code: "account-token-invalid" }
     });
   });
+
+  it("maintains idempotency on canonicalizePlayerName across unicode expansions and blocks U+0130 spoofing (Round 2 P2-1)", () => {
+    // 1. Idempotency test across various unicode test strings
+    const corpus = [
+      "A".repeat(23) + "\u0130",
+      "Hello World!",
+      "  Multi   Spaces  ",
+      "GÖMOKU_\u200B_PLAYER",
+      "İSTANBUL",
+      "ß".repeat(12),
+      "NormalPlayer123",
+      "A".repeat(30)
+    ];
+
+    for (const text of corpus) {
+      expect(canonicalizePlayerName(canonicalizePlayerName(text))).toBe(canonicalizePlayerName(text));
+    }
+
+    // 2. 24-unit name ending in U+0130 cannot be spoofed by a guest
+    const accountStore = new AccountStore();
+    const guestStore = new GuestSessionStore();
+    const turkishICharName = "A".repeat(23) + "\u0130"; // exactly 24 UTF-16 code units
+    expect(turkishICharName).toHaveLength(24);
+
+    const created = accountStore.createAccount({ displayName: turkishICharName });
+    expect(created.ok).toBe(true);
+
+    // Guest attempts to claim the exact same name
+    expect(accountStore.isNameReserved(turkishICharName)).toBe(true);
+    expect(accountStore.isNameReserved(canonicalizePlayerName(turkishICharName))).toBe(true);
+
+    const guestResult = resolvePlayerIdentity(
+      { playerId: "guest_spoof_turkish_i", playerName: turkishICharName },
+      accountStore,
+      guestStore
+    );
+    expect(guestResult).toMatchObject({
+      ok: false,
+      error: { code: "name-reserved" }
+    });
+  });
+
+  it("re-derives available publicHandle on collision when handle is not explicitly requested (Round 2 P3-1)", async () => {
+    const store = new AccountStore({ filePath: false });
+    // "Dana!" and "Dana?" both produce createPublicHandleBase "dana", neither specifies publicHandle
+    const [resultA, resultB] = await Promise.all([
+      store.createAccount({ displayName: "Dana!", password: "password123" }),
+      store.createAccount({ displayName: "Dana?", password: "password123" })
+    ]);
+
+    expect(resultA.ok).toBe(true);
+    expect(resultB.ok).toBe(true);
+
+    if (resultA.ok && resultB.ok) {
+      expect(resultA.value.publicHandle).not.toBe(resultB.value.publicHandle);
+      expect(resultA.value.publicHandle).toMatch(/^dana(_[a-z0-9]+)?$/);
+      expect(resultB.value.publicHandle).toMatch(/^dana(_[a-z0-9]+)?$/);
+      expect(store.findByPublicHandle(resultA.value.publicHandle)?.playerId).toBe(resultA.value.playerId);
+      expect(store.findByPublicHandle(resultB.value.publicHandle)?.playerId).toBe(resultB.value.playerId);
+    }
+
+    // Explicit handle collision still returns duplicate-handle
+    const explicitCollision = await store.createAccount({
+      displayName: "Dana Three",
+      publicHandle: resultA.ok ? resultA.value.publicHandle : "dana",
+      password: "password123"
+    });
+    expect(explicitCollision).toMatchObject({
+      ok: false,
+      error: { code: "duplicate-handle" }
+    });
+  });
 });
 
 describe("mapAccountErrorToStatusCode", () => {

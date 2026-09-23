@@ -28,29 +28,42 @@ let refPointer = 0;
 
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
+  const mockUseState = <T>(initial: T | (() => T)) => {
+    const idx = statePointer++;
+    if (stateSlots[idx] === undefined) {
+      stateSlots[idx] = typeof initial === "function" ? (initial as () => T)() : initial;
+    }
+    if (!stateSetters[idx]) {
+      stateSetters[idx] = (updater: unknown) => {
+        stateSlots[idx] = typeof updater === "function" ? (updater as (prev: unknown) => unknown)(stateSlots[idx]) : updater;
+      };
+    }
+    return [stateSlots[idx] as T, stateSetters[idx] as React.Dispatch<React.SetStateAction<T>>];
+  };
+  const mockUseRef = <T>(initial: T) => {
+    const idx = refPointer++;
+    if (refSlots.length <= idx) {
+      refSlots[idx] = { current: initial };
+    }
+    return refSlots[idx] as React.MutableRefObject<T>;
+  };
+  const mockUseCallback = <T extends (...args: unknown[]) => unknown>(fn: T) => fn;
+  const mockUseEffect = () => {};
+
   return {
     ...actual,
-    useState: <T>(initial: T | (() => T)) => {
-      const idx = statePointer++;
-      if (stateSlots[idx] === undefined) {
-        stateSlots[idx] = typeof initial === "function" ? (initial as () => T)() : initial;
-      }
-      if (!stateSetters[idx]) {
-        stateSetters[idx] = (updater: unknown) => {
-          stateSlots[idx] = typeof updater === "function" ? (updater as (prev: unknown) => unknown)(stateSlots[idx]) : updater;
-        };
-      }
-      return [stateSlots[idx] as T, stateSetters[idx] as React.Dispatch<React.SetStateAction<T>>];
+    default: {
+      ...(actual as unknown as { default?: object }).default,
+      ...actual,
+      useState: mockUseState,
+      useRef: mockUseRef,
+      useCallback: mockUseCallback,
+      useEffect: mockUseEffect
     },
-    useRef: <T>(initial: T) => {
-      const idx = refPointer++;
-      if (refSlots.length <= idx) {
-        refSlots[idx] = { current: initial };
-      }
-      return refSlots[idx] as React.MutableRefObject<T>;
-    },
-    useCallback: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
-    useEffect: () => {}
+    useState: mockUseState,
+    useRef: mockUseRef,
+    useCallback: mockUseCallback,
+    useEffect: mockUseEffect
   };
 });
 

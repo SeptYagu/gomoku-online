@@ -143,8 +143,8 @@ export function canonicalizePlayerName(name: string): string {
     .replace(/[\p{Cf}\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/gu, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, MAX_PLAYER_NAME_LENGTH)
-    .toLowerCase();
+    .toLowerCase()
+    .slice(0, MAX_PLAYER_NAME_LENGTH);
 }
 
 export class ScryptConcurrencyGate {
@@ -308,13 +308,18 @@ export class AccountStore {
         if (this.hasDisplayName(displayName)) {
           return failure("duplicate-name", "This display name is already registered.");
         }
-        if (this.playerIdByPublicHandle.has(publicHandle)) {
-          return failure("duplicate-handle", "This public handle is already registered.");
-        }
 
         let accountId = id;
         while (this.accounts.has(accountId)) {
           accountId = this.createUniqueAccountId();
+        }
+
+        const finalHandle = requestedHandle
+          ? publicHandle
+          : this.createAvailablePublicHandle(displayName, accountId);
+
+        if (this.playerIdByPublicHandle.has(finalHandle)) {
+          return failure("duplicate-handle", "This public handle is already registered.");
         }
 
         const token = `${accountId}.${randomTokenPart(24)}`;
@@ -324,7 +329,7 @@ export class AccountStore {
           displayName,
           id: accountId,
           lastSeenAt: now,
-          publicHandle,
+          publicHandle: finalHandle,
           tokenHashes: [hashToken(token)],
           updatedAt: now,
           passwordHash,
