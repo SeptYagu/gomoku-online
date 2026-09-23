@@ -23,7 +23,7 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 335 项用例；**全绿通过（100% 稳定，连续 10 次全量运行 10/10 PASS，0 flake）** —— 详见 [`docs/handoff/2026-09-18-feedback-button-label-round3-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round3-remediation-handoff.md)
+- **单元测试** (`npm test`)：35 个测试套件 / 336 项用例；**全绿通过（100% 稳定，连续 10 次全量运行 10/10 PASS，0 flake）** —— 详见 [`docs/handoff/2026-09-18-feedback-button-label-round4-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round4-remediation-handoff.md)
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
 - **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
 - **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **反馈入口按钮文字标签与文件重写锁容错 Round 4 审查缺陷闭环（2026-09-18，待审交付）**：针对 WorkBuddy Round 4 源码审查报告（提交 `68213dd`，报告：[`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round4-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round4-handoff.md)）指出的缺陷（1×P2, 1×P3）实施 100% 闭环修复：①P2-1 将 `atomicRenameSync` 默认 `maxAttempts` 调优为 4，恢复窗口扩充至 ~45ms，实测 20ms 与 30ms 释放档位均达成 5/5 完美恢复落盘；在 `AccountStore`、`GuestSessionStore`、`GameRecordStore` 的 `compactFile()` 中增加 `try/catch` 兜底，防止极端持久锁导致异常冒泡破坏业务接口；②P3-1 代码 docstring 与交接单全面对齐实测分位数（单次微休眠 ~15.1ms，持续锁停顿 ~45ms），彻底消除绝对化断言；③非阻断项：防御 `maxAttempts: NaN` 并在单测中覆盖；本地四道门禁全绿（35 套 / 336 项单测全绿，Next.js 生产构建 18/18 页面通过，smoke:persistence 干净端口 5/5 通过）。详见 [`docs/handoff/2026-09-18-feedback-button-label-round4-remediation-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-round4-remediation-handoff.md)。
 
 - ⚠️ **反馈入口按钮文字标签 + Windows 文件重写锁容错 · 独立审查 Round 4 复查（被审 `d2e9bcb`）**：**审查未通过**。0×P0 / 0×P1 / **1×P2** / **1×P3**。①**P2-1**：默认 `maxAttempts` 由 3 降为 2 虽把停顿减半，却把**瞬态锁恢复窗口同步腰斩** —— 注入 `renameFn` 实测两次尝试间隔 `p50 15.09 / max 17.84ms`（n=60），外部 holder 精确释放实测 **16ms → 1/5、18ms → 1/5、20ms → 0/5、24ms → 0/5**，而修复前默认 3 时 24ms 档 5/5 恢复；即 Round 3 交接单声称的「20ms 释放锁仍可恢复（`recovered: true`）」**实测 0/5**，验收标准 4「瞬态锁可成功恢复」在文档引用场景不成立。根因：单次 `Atomics.wait(5)` 被 Windows 15.625ms 粒度量化为 ~15.1ms ⇒ 窗口 ≡ (maxAttempts−1)×15.1ms，同步语义下**不存在**同时满足「停顿 <20ms」与「窗口 >20ms」的取值；修复须把锁等待移出请求线程（异步退避 + `.compact.tmp` 保留重排）。②**P3-1**：docstring `bounding event-loop stall to < 20ms on idle systems` 与三处文档「严格达成 < 20ms」与实测不符 —— 空闲 n=120 三轮分别 `p50 15.44 / p90 16.55 / max 30.9ms（>20ms 占 4.2%）`、`p90 25.12 / max 40.36ms（12.5%）`、`p90 26.44 / max 145.61ms（16.7%）`，6 路 CPU 饱和下 `p50 133 / p90 549 / max 1338ms`，单次休眠本身 `max 22.06ms` 即已越线。③通过项：新构建产物 6 语种 `aria-label === 可见文本`（WCAG 2.5.3 全达标）、`ar` RTL、零硬编码 left/right；`npm test` 连跑 3/3 全绿（35 套）、build 18/18、`smoke:persistence` 干净端口 5/5；**5 组变异探针全红**；持续 EPERM 下 200 次调用 CPU **0.00%**（忙等确已闭环）、无 temp 残留、旧文件不被破坏。另记 1 项待确认风险（重试耗尽抛出后 `online-server.ts:27` 无兜底）与 2 项非阻断建议。详见 [`docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round4-handoff.md`](docs/handoff/2026-09-18-feedback-button-label-workbuddy-code-review-round4-handoff.md)。
 

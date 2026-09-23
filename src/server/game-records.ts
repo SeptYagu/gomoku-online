@@ -477,13 +477,18 @@ export class GameRecordStore {
 
     const writtenAt = this.now();
 
-    rewriteJsonlFile(
-      this.filePath,
-      [...this.records.values()].map(
-        (record) => ({ record, type: "game-record", writtenAt }) satisfies PersistedGameRecordEntry
-      )
-    );
-    this.compaction.reset(this.records.size);
+    try {
+      rewriteJsonlFile(
+        this.filePath,
+        [...this.records.values()].map(
+          (record) => ({ record, type: "game-record", writtenAt }) satisfies PersistedGameRecordEntry
+        )
+      );
+      this.compaction.reset(this.records.size);
+    } catch {
+      // Compaction is a non-critical maintenance task. If file rewrite fails due to persistent
+      // external locks, the append log remains the authoritative ground truth and no data is lost.
+    }
   }
 }
 

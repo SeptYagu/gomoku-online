@@ -154,16 +154,15 @@ describe("jsonl-file", () => {
 
       expect(() =>
         atomicRenameSync("temp.tmp", "target.jsonl", {
-          maxAttempts: 2,
+          maxAttempts: 4,
           renameFn,
           sleepFn
         })
       ).toThrow("EPERM");
 
-      expect(attempts).toBe(2);
-      expect(sleeps).toEqual([5]);
-      // Total sleep requested is bounded to <= 20ms (1 * 5ms = 5ms)
-      expect(sleeps.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(20);
+      expect(attempts).toBe(4);
+      expect(sleeps).toEqual([5, 5, 5]);
+      expect(sleeps.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(25);
     });
 
     it("bounds total synchronous sleep during retries to well below event loop stall thresholds", () => {
@@ -185,9 +184,11 @@ describe("jsonl-file", () => {
         ).toThrow("EBUSY");
 
         const elapsed = Date.now() - t0;
-        expect(attempts).toBe(2);
-        expect(waitSpy).toHaveBeenCalledTimes(1);
-        expect(waitSpy).toHaveBeenCalledWith(expect.any(Int32Array), 0, 0, 5);
+        expect(attempts).toBe(4);
+        expect(waitSpy).toHaveBeenCalledTimes(3);
+        expect(waitSpy).toHaveBeenNthCalledWith(1, expect.any(Int32Array), 0, 0, 5);
+        expect(waitSpy).toHaveBeenNthCalledWith(2, expect.any(Int32Array), 0, 0, 5);
+        expect(waitSpy).toHaveBeenNthCalledWith(3, expect.any(Int32Array), 0, 0, 5);
         expect(elapsed).toBeLessThan(300);
       } finally {
         waitSpy.mockRestore();
@@ -211,6 +212,28 @@ describe("jsonl-file", () => {
       ).toThrow("EPERM");
 
       expect(attempts).toBe(1);
+    });
+
+    it("falls back to default maxAttempts when maxAttempts is NaN or non-finite", () => {
+      let attempts = 0;
+      const renameFn = vi.fn(() => {
+        attempts += 1;
+        const err = new Error("EPERM: operation not permitted") as NodeJS.ErrnoException;
+        err.code = "EPERM";
+        throw err;
+      });
+      const sleepFn = vi.fn();
+
+      expect(() =>
+        atomicRenameSync("temp.tmp", "target.jsonl", {
+          maxAttempts: Number.NaN,
+          renameFn,
+          sleepFn
+        })
+      ).toThrow("EPERM");
+
+      expect(attempts).toBe(4);
+      expect(sleepFn).toHaveBeenCalledTimes(3);
     });
 
     it("cleans up temp file when rewriteJsonlFile fails to rename", () => {

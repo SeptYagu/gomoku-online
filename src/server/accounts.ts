@@ -320,13 +320,18 @@ export class AccountStore {
 
     const writtenAt = this.now();
 
-    rewriteJsonlFile(
-      this.filePath,
-      [...this.accounts.values()].map(
-        (account) => ({ account, type: "account", writtenAt }) satisfies PersistedAccountEntry
-      )
-    );
-    this.compaction.reset(this.accounts.size);
+    try {
+      rewriteJsonlFile(
+        this.filePath,
+        [...this.accounts.values()].map(
+          (account) => ({ account, type: "account", writtenAt }) satisfies PersistedAccountEntry
+        )
+      );
+      this.compaction.reset(this.accounts.size);
+    } catch {
+      // Compaction is a non-critical maintenance task. If file rewrite fails due to persistent
+      // external locks, the append log remains the authoritative ground truth and no data is lost.
+    }
   }
 }
 
@@ -485,13 +490,18 @@ export class GuestSessionStore {
 
     const writtenAt = this.now();
 
-    rewriteJsonlFile(
-      this.filePath,
-      [...this.sessionsByPlayerId.values()].map(
-        (session) => ({ session, type: "guest-session", writtenAt }) satisfies PersistedGuestSessionEntry
-      )
-    );
-    this.compaction.reset(this.sessionsByPlayerId.size);
+    try {
+      rewriteJsonlFile(
+        this.filePath,
+        [...this.sessionsByPlayerId.values()].map(
+          (session) => ({ session, type: "guest-session", writtenAt }) satisfies PersistedGuestSessionEntry
+        )
+      );
+      this.compaction.reset(this.sessionsByPlayerId.size);
+    } catch {
+      // Compaction is a non-critical maintenance task. If file rewrite fails due to persistent
+      // external locks, the append log remains the authoritative ground truth and no data is lost.
+    }
   }
 
   private evictOldestSessions(): void {
