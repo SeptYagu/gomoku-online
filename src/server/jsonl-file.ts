@@ -77,7 +77,10 @@ export type AtomicRenameOptions = {
  * with fixed 5ms micro-sleeps using Atomics.wait (measured ~15.1ms real elapsed time per sleep
  * under Windows 15.625ms timer quantization on idle systems; higher under CPU saturation),
  * providing a ~45ms recovery window that reliably absorbs 20ms and 30ms transient lock releases
- * while keeping persistent-lock stalls bounded to ~45ms (idle p50 ~45ms, p90 ~48ms) and avoiding CPU busy-wait loops.
+ * and avoiding CPU busy-wait loops.
+ * Persistent-lock stall equals (maxAttempts - 1) * single sleep; empirical measurements on idle systems
+ * (n=150): p50 ~47ms, p90 ~50ms, with idle tails up to ~95ms; under CPU saturation the tail is unbounded
+ * (measured max ~1.0s over n=360) due to OS scheduler preemption.
  * Non-transient errors (such as EACCES or ENOENT) fail fast immediately.
  */
 export function atomicRenameSync(

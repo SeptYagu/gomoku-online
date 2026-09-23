@@ -328,9 +328,8 @@ export class AccountStore {
         )
       );
       this.compaction.reset(this.accounts.size);
-    } catch {
-      // Compaction is a non-critical maintenance task. If file rewrite fails due to persistent
-      // external locks, the append log remains the authoritative ground truth and no data is lost.
+    } catch (error) {
+      console.warn(`[AccountStore] file compaction deferred due to lock on ${this.filePath}:`, (error as Error)?.message ?? error);
     }
   }
 }
@@ -498,9 +497,8 @@ export class GuestSessionStore {
         )
       );
       this.compaction.reset(this.sessionsByPlayerId.size);
-    } catch {
-      // Compaction is a non-critical maintenance task. If file rewrite fails due to persistent
-      // external locks, the append log remains the authoritative ground truth and no data is lost.
+    } catch (error) {
+      console.warn(`[GuestSessionStore] file compaction deferred due to lock on ${this.filePath}:`, (error as Error)?.message ?? error);
     }
   }
 

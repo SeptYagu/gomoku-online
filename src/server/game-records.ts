@@ -485,9 +485,8 @@ export class GameRecordStore {
         )
       );
       this.compaction.reset(this.records.size);
-    } catch {
-      // Compaction is a non-critical maintenance task. If file rewrite fails due to persistent
-      // external locks, the append log remains the authoritative ground truth and no data is lost.
+    } catch (error) {
+      console.warn(`[GameRecordStore] file compaction deferred due to lock on ${this.filePath}:`, (error as Error)?.message ?? error);
     }
   }
 }

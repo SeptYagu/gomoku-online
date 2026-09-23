@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -531,6 +531,55 @@ describe("AccountStore", () => {
       // An unknown token fails cleanly
       expect(store.authenticate("nonexistent-token")).toBeNull();
     } finally {
+      rmSync(tempDir, { force: true, recursive: true });
+    }
+  });
+
+  it("gracefully catches compaction failure under file lock, retains append log, and self-heals when lock releases", () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "gomoku-compaction-lock-"));
+    const filePath = join(tempDir, "guest-sessions.jsonl");
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+
+    try {
+      console.warn = (...args: unknown[]) => {
+        warnings.push(args.map(String).join(" "));
+      };
+
+      const now = 1_000;
+      const store = new GuestSessionStore({ compactAfterLines: 1, filePath, now: () => now });
+
+      expectOk(store.createSession({ playerId: "g-lock-1", playerName: "Player 1" }));
+
+      // Lock destination file so atomic rename fails with EPERM during next write compaction
+      const fd = openSync(filePath, "r");
+      try {
+        let secondSession: ReturnType<typeof store.createSession> | undefined;
+        expect(() => {
+          secondSession = store.createSession({ playerId: "g-lock-2", playerName: "Player 2" });
+        }).not.toThrow();
+        expect(secondSession?.ok).toBe(true);
+
+        // Compaction failure was caught and logged gracefully without losing data
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain("[GuestSessionStore] file compaction deferred due to lock");
+        expect(warnings[0]).toContain("EPERM");
+
+        const linesWhileLocked = readRawFile(filePath).trim().split("\n");
+        expect(linesWhileLocked.length).toBe(2);
+        expect(existsSync(`${filePath}.compact.tmp`)).toBe(false);
+      } finally {
+        closeSync(fd);
+      }
+
+      // Next session write triggers compaction without lock and compacts to live count
+      expectOk(store.createSession({ playerId: "g-lock-3", playerName: "Player 3" }));
+
+      const linesAfterRelease = readRawFile(filePath).trim().split("\n");
+      expect(linesAfterRelease.length).toBe(3);
+    } finally {
+      console.warn = originalWarn;
       rmSync(tempDir, { force: true, recursive: true });
     }
   });

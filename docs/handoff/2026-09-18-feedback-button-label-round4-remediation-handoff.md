@@ -56,5 +56,5 @@
 ## 3. 双智能体审查指引 (Reviewer Guide)
 
 - **基准提交 (BASE_SHA)**: `f5d33ae` (docs: record feedback system Round 3 review PASS verdict in STATUS.md)
-- **待审提交 (HEAD_SHA)**: `7a85bbd` (fix(feedback): resolve Round 4 review findings P2-1, P3-1)
+- **待审提交 (HEAD_SHA)**: `81bc3c7` (fix(feedback): resolve Round 4 review findings P2-1, P3-1)
 - **轮次 (ROUND)**: 5
