@@ -11,10 +11,12 @@ import {
   readPlayerName,
   persistRoomSession,
   resolveRoomErrorMessage,
+  buildRoomMessages,
   GUEST_TOKEN_STORAGE_KEY,
   PLAYER_ID_STORAGE_KEY,
   PLAYER_NAME_STORAGE_KEY
 } from "./room-state-utils";
+import { dictionaries } from "../../i18n/dictionaries";
 
 class MemoryStorage implements Storage {
   private items = new Map<string, string>();
@@ -261,5 +263,36 @@ describe("resolveRoomErrorMessage", () => {
     expect(resolveRoomErrorMessage("custom-error-text")).toBe("custom-error-text");
     expect(resolveRoomErrorMessage(null)).toBeNull();
     expect(resolveRoomErrorMessage(undefined)).toBeNull();
+  });
+
+  it("assembles messages across all 6 locales and resolves guest-session-invalid without fallback (P3-2)", () => {
+    const locales = ["en", "zh", "fr", "es", "ru", "ar"] as const;
+
+    for (const locale of locales) {
+      const dict = dictionaries[locale].game;
+      expect(dict.room.guestSessionError).toBeDefined();
+      expect(dict.room.guestSessionError.length).toBeGreaterThan(0);
+      expect(dict.room.nameReservedError).toBeDefined();
+      expect(dict.room.nameReservedError.length).toBeGreaterThan(0);
+
+      const assembledMessages = buildRoomMessages(dict.room);
+      expect(assembledMessages.guestSessionError).toBe(dict.room.guestSessionError);
+      expect(assembledMessages.nameReservedError).toBe(dict.room.nameReservedError);
+
+      // Verify penetration through resolveRoomErrorMessage:
+      const resolvedGuestError = resolveRoomErrorMessage(
+        { code: "guest-session-invalid", message: "English fallback from server" },
+        assembledMessages
+      );
+      expect(resolvedGuestError).toBe(dict.room.guestSessionError);
+      expect(resolvedGuestError).not.toBe("English fallback from server");
+
+      const resolvedNameError = resolveRoomErrorMessage(
+        { code: "name-reserved", message: "English fallback from server" },
+        assembledMessages
+      );
+      expect(resolvedNameError).toBe(dict.room.nameReservedError);
+      expect(resolvedNameError).not.toBe("English fallback from server");
+    }
   });
 });

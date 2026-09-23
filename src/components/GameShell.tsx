@@ -32,6 +32,7 @@ import { deriveGameWorkspace, isOnlineWorkspaceEnabled, type GameMode } from "./
 import { AiGameView, type FirstPlayer } from "./play/AiGameView";
 import { LocalGameView } from "./play/LocalGameView";
 import { getAiStone, replayMoves, useAiGame } from "./hooks/useAiGame";
+import { buildRoomMessages } from "./hooks/room-state-utils";
 import { useFriendRoom, type FriendRoomController } from "./useFriendRoom";
 import type { AiDifficulty } from "@/game/ai";
 import {
@@ -220,16 +221,7 @@ export function GameShell({ dictionary, feedbackDictionary, locale }: GameShellP
 
   const friendRoom = useFriendRoom({
     enabled: isOnlineWorkspaceEnabled(mode),
-    messages: {
-      chatSendTimeout: dictionary.room.chatSendTimeout,
-      connectionFailed: dictionary.room.connectionFailed,
-      connectionFailedXhr: dictionary.room.connectionFailedXhr,
-      joinTargetRequired: dictionary.room.joinTargetRequired,
-      leaveRoomTimeout: dictionary.room.leaveRoomTimeout,
-      nameReservedError: dictionary.room.nameReservedError,
-      roomCodeRequired: dictionary.room.roomCodeRequired,
-      roomError: dictionary.room.roomError
-    }
+    messages: buildRoomMessages(dictionary.room)
   });
 
   const resetGame = useCallback(({

@@ -268,11 +268,11 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room: roomProp }
                   id="auth-panel-login"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (!loginIdentifier.trim()) {
+                    if (!loginIdentifier.trim() && !loginToken.trim()) {
                       return;
                     }
                     room.loginAccount({
-                      identifier: loginIdentifier.trim(),
+                      identifier: loginIdentifier.trim() || undefined,
                       password: loginPassword || undefined,
                       ownershipToken: loginToken.trim() || undefined,
                       token: loginToken.trim() || undefined
@@ -318,7 +318,7 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room: roomProp }
                   <div className="room-account-actions lobby-identity-span-2">
                     <button
                       className="mode-pill"
-                      disabled={room.accountStatus === "loading" || !loginIdentifier.trim()}
+                      disabled={room.accountStatus === "loading" || (!loginIdentifier.trim() && !loginToken.trim())}
                       type="submit"
                     >
                       <LogIn aria-hidden="true" focusable={false} />

@@ -143,7 +143,8 @@ export function canonicalizePlayerName(name: string): string {
     .replace(/[\p{Cf}\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/gu, "")
     .replace(/\s+/g, " ")
     .trim()
-    .toLocaleLowerCase();
+    .slice(0, MAX_PLAYER_NAME_LENGTH)
+    .toLowerCase();
 }
 
 export class ScryptConcurrencyGate {
@@ -303,12 +304,25 @@ export class AccountStore {
       return (async () => {
         const salt = randomBytes(16).toString("hex");
         const passwordHash = await hashPassword(password, salt);
-        const token = `${id}.${randomTokenPart(24)}`;
+
+        if (this.hasDisplayName(displayName)) {
+          return failure("duplicate-name", "This display name is already registered.");
+        }
+        if (this.playerIdByPublicHandle.has(publicHandle)) {
+          return failure("duplicate-handle", "This public handle is already registered.");
+        }
+
+        let accountId = id;
+        while (this.accounts.has(accountId)) {
+          accountId = this.createUniqueAccountId();
+        }
+
+        const token = `${accountId}.${randomTokenPart(24)}`;
         const now = this.now();
         const account: StoredAccount = {
           createdAt: now,
           displayName,
-          id,
+          id: accountId,
           lastSeenAt: now,
           publicHandle,
           tokenHashes: [hashToken(token)],
@@ -875,7 +889,7 @@ export function resolvePlayerIdentity(
     });
   }
 
-  const requestedName = canonicalizePlayerName(input.playerName);
+  const requestedName = canonicalizePlayerName(normalizeDisplayName(input.playerName));
   if (requestedName && accountStore.isNameReserved(requestedName)) {
     return failure("name-reserved", "This display name is registered to an account. Please sign in to use this name.");
   }

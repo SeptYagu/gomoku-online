@@ -885,6 +885,85 @@ describe("AccountStore Auth & Name Reservation", () => {
     );
     expect(guestClean.ok).toBe(true);
   });
+
+  it("prevents TOCTOU race condition in concurrent password account creation (P2-1)", async () => {
+    const store = new AccountStore({ filePath: false });
+    const [resultA, resultB] = await Promise.all([
+      store.createAccount({ displayName: "Race Name", password: "password123" }),
+      store.createAccount({ displayName: "Race Name", password: "password123" })
+    ]);
+
+    const successes = [resultA, resultB].filter((r) => r.ok);
+    const failures = [resultA, resultB].filter((r) => !r.ok);
+
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      ok: false,
+      error: { code: "duplicate-name" }
+    });
+
+    const winner = successes[0];
+    if (winner.ok) {
+      expect(store.findByDisplayName("Race Name")?.playerId).toBe(winner.value.playerId);
+      expect(store.findByPublicHandle("race_name")?.playerId).toBe(winner.value.playerId);
+    }
+  });
+
+  it("prevents 24-character truncation anti-spoofing bypass for guests (P2-2)", () => {
+    const accountStore = new AccountStore();
+    const guestStore = new GuestSessionStore();
+    const maxName = "ABCDEFGHIJKLMNOPQRSTUVWX"; // exactly 24 chars
+    expect(maxName).toHaveLength(24);
+
+    const created = accountStore.createAccount({ displayName: maxName });
+    expect(created.ok).toBe(true);
+
+    // Guest attempts to spoof by appending characters beyond 24
+    const spoofName = `${maxName}ZZZ`; // 27 chars
+    expect(spoofName.length).toBeGreaterThan(24);
+
+    // Both isNameReserved directly and resolvePlayerIdentity must reject the spoof attempt
+    expect(accountStore.isNameReserved(spoofName)).toBe(true);
+
+    const guestResult = resolvePlayerIdentity(
+      { playerId: "guest_spoof_attacker", playerName: spoofName },
+      accountStore,
+      guestStore
+    );
+    expect(guestResult).toMatchObject({
+      ok: false,
+      error: { code: "name-reserved" }
+    });
+
+    // Invariant check: canonicalizePlayerName matches normalizeDisplayName truncation
+    expect(canonicalizePlayerName(spoofName)).toBe(canonicalizePlayerName(maxName));
+  });
+
+  it("supports token-only login recovery via Path A (P3-1)", async () => {
+    const store = new AccountStore({ filePath: false });
+    const created = await store.createAccount({
+      displayName: "Token Recoverable",
+      password: "password123"
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    // Login with token alone (identifier omitted)
+    const tokenLogin = await store.loginAccount({ token: created.value.token });
+    expect(tokenLogin.ok).toBe(true);
+    if (tokenLogin.ok) {
+      expect(tokenLogin.value.playerId).toBe(created.value.playerId);
+      expect(tokenLogin.value.displayName).toBe("Token Recoverable");
+    }
+
+    // Login with invalid token alone fails with account-token-invalid
+    const badTokenLogin = await store.loginAccount({ token: "invalid.token" });
+    expect(badTokenLogin).toMatchObject({
+      ok: false,
+      error: { code: "account-token-invalid" }
+    });
+  });
 });
 
 describe("mapAccountErrorToStatusCode", () => {

@@ -55,6 +55,33 @@ export type UseFriendRoomOptions = {
   }>;
 };
 
+export type RoomMessageKeys =
+  | "chatSendTimeout"
+  | "connectionFailed"
+  | "connectionFailedXhr"
+  | "guestSessionError"
+  | "joinTargetRequired"
+  | "leaveRoomTimeout"
+  | "nameReservedError"
+  | "roomCodeRequired"
+  | "roomError";
+
+export function buildRoomMessages(
+  roomDict: Record<RoomMessageKeys, string>
+): NonNullable<UseFriendRoomOptions["messages"]> {
+  return {
+    chatSendTimeout: roomDict.chatSendTimeout,
+    connectionFailed: roomDict.connectionFailed,
+    connectionFailedXhr: roomDict.connectionFailedXhr,
+    guestSessionError: roomDict.guestSessionError,
+    joinTargetRequired: roomDict.joinTargetRequired,
+    leaveRoomTimeout: roomDict.leaveRoomTimeout,
+    nameReservedError: roomDict.nameReservedError,
+    roomCodeRequired: roomDict.roomCodeRequired,
+    roomError: roomDict.roomError
+  };
+}
+
 export const PLAYER_ID_STORAGE_KEY = "gomoku-room-player-id";
 export const PLAYER_NAME_STORAGE_KEY = "gomoku-room-player-name";
 export const ROOM_SESSION_STORAGE_KEY = "gomoku-room-session";
