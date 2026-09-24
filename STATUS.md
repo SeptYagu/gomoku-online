@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`83a2aab fix(pvp): resolve Round 2 code review findings (P2-1, P3-1)`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`17af0da fix(pvp): resolve Round 3 code review finding (P2-1 single-pass gate & fixed-point canonicalization)`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -31,6 +31,8 @@
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🎉 **联机对战命名规范、排行榜搜索框修复、账号登录与防冒名 · 源码独立审查 Round 4 复查（被审 `17af0da`）**：**审查通过（PASS）**。**0×P0 / 0×P1 / 0×P2 / 0×P3**，无任何缺陷。①**Round 3 P2-1 真闭环**：守门单次规范化（`accounts.ts:914-917`）将 `normalizeDisplayName` 产物直接交给 `isNameReserved`，门侧与账号侧（`acc.displayName`）统一为单次 `canon`，彻底消除了由于双重规范化（`canon² vs canon`）引起的计算发散，与幂等性彻底解耦；②**幂等性纵深防御**：`canonicalizePlayerName` 剥离 `\p{Cf}` 前置于 `normalize("NFKC")` 并配置固定点收敛循环，经 WorkBuddy 独立 ~16.7M 输入四族深度扫描（1.75M 全码点×9 模式、1.5M 对抗字母表、11.5M 长度≤4 穷举、2M 跨 24 边界长串）实测 **0 反例**；③**对抗语料守门实测**：11 组对抗性语料（`Cf`+组合附加符、`U+03AA` 希腊展开、`U+0130`、24 单元截断边界、全角、西里尔等）在真实 Socket.IO 房间与 Presence 层全量通过验证（同名访客加入确定性拦截并返回 `name-reserved`）；④**变异探针自证**：还原旧 `canon` 顺序并去掉收敛循环确定性使守门用例变红（`accounts.test.ts:1034`）；⑤四道工程门禁实跑全绿（`tsc` 0 错误、`lint` 0 警告、`npm test` 35 套 / 358 例全绿、`build` 18/18 路由 SSG 成功）。双智能体协同审查圆满闭环，全部核心需求与技术债 100% 达成。
 
 - 🔄 **联机对战命名规范、排行榜搜索框修复、账号登录与防冒名 · Round 3 审查缺陷闭环（1×P2 100% 全闭环，待审交付，触发代码审查 Round 4）**：针对 WorkBuddy Round 3 独立代码审查报告（[`docs/handoff/2026-09-23-online-pvp-code-review-round3-handoff.md`](docs/handoff/2026-09-23-online-pvp-code-review-round3-handoff.md)）指出的缺陷（0×P0 / 0×P1 / **1×P2** / 0×P3）实施 100% 深度闭环修复：①**P2-1 守门单次规范化**：重构 `resolvePlayerIdentity`，直接将 `normalizeDisplayName(input.playerName)` 透传至 `accountStore.isNameReserved`，彻底消除双重规范化造成的守门侧（`canon²`）与账号存储侧（`canon`）口径发散；②**P2-1 规范化幂等性纵深防御**：优化 `canonicalizePlayerName`，将 `\p{Cf}` 格式字符剥离前置于 `normalize("NFKC")`，并在尾部引入 2 次固定点迭代收敛，彻底吸收次级合成与希腊语等特殊大小写映射展开，实现真幂等（`canon(canon(x)) === canon(x)`）；③**单测加固**：针对全部 5 组对抗性输入（含格式字符 + 组合附加符、希腊语展开、24 单元截断边界）建立行为断言测试，逐一验证访客冒名确定性被拦截并返回 `name-reserved`；本地四道门禁全绿（35 套 / 358 项单测全绿，Next.js 生产构建 18/18 页面通过）。详见 [`docs/handoff/2026-09-24-online-pvp-auth-and-leaderboard-code-review-round3-remediation-handoff.md`](docs/handoff/2026-09-24-online-pvp-auth-and-leaderboard-code-review-round3-remediation-handoff.md)。
 
