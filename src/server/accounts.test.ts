@@ -9,6 +9,7 @@ import {
   canonicalizePlayerName,
   hashPassword,
   mapAccountErrorToStatusCode,
+  normalizeDisplayName,
   resolvePlayerIdentity,
   verifyPassword,
   type AccountResult,
@@ -975,7 +976,10 @@ describe("AccountStore Auth & Name Reservation", () => {
       "İSTANBUL",
       "ß".repeat(12),
       "NormalPlayer123",
-      "A".repeat(30)
+      "A".repeat(30),
+      "a\u200D\u0301bcdefghij",
+      "alice\u200D\u030C",
+      "a\u03AA\u0301b"
     ];
 
     for (const text of corpus) {
@@ -1004,6 +1008,43 @@ describe("AccountStore Auth & Name Reservation", () => {
       ok: false,
       error: { code: "name-reserved" }
     });
+  });
+
+  it("blocks guest spoofing across adversarial format chars, combining marks, and truncation borders (Round 3 P2-1)", () => {
+    const adversarialCorpus = [
+      "a\u200D\u0301bcdefghij",
+      "alice\u200D\u030C",
+      "a\u03AA\u0301b",
+      "A".repeat(23) + "\u0130",
+      "A".repeat(24) + "ZZZ"
+    ];
+
+    for (const name of adversarialCorpus) {
+      const accountStore = new AccountStore({ filePath: false });
+      const guestStore = new GuestSessionStore({ filePath: false });
+      const registeredName = normalizeDisplayName(name);
+
+      const created = accountStore.createAccount({ displayName: registeredName });
+      expect(created.ok).toBe(true);
+
+      // Verify single-pass gate contract alignment:
+      // isNameReserved(raw) and isNameReserved(canonical) must be consistent
+      expect(accountStore.isNameReserved(name)).toBe(true);
+      expect(accountStore.isNameReserved(registeredName)).toBe(true);
+      expect(accountStore.isNameReserved(canonicalizePlayerName(name))).toBe(true);
+
+      // Guest attempting to join with byte-identical raw name is blocked
+      const guestAttempt = resolvePlayerIdentity(
+        { playerId: `guest_${name.slice(0, 5)}`, playerName: name },
+        accountStore,
+        guestStore
+      );
+
+      expect(guestAttempt).toMatchObject({
+        ok: false,
+        error: { code: "name-reserved" }
+      });
+    }
   });
 
   it("re-derives available publicHandle on collision when handle is not explicitly requested (Round 2 P3-1)", async () => {

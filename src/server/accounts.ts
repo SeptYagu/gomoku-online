@@ -138,13 +138,27 @@ const MIN_PUBLIC_HANDLE_LENGTH = 3;
 const RESERVED_PUBLIC_HANDLES = new Set(["admin", "api", "gomoku", "guest", "player", "root", "support", "system"]);
 
 export function canonicalizePlayerName(name: string): string {
-  return name
-    .normalize("NFKC")
+  let current = name
     .replace(/[\p{Cf}\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/gu, "")
+    .normalize("NFKC")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase()
     .slice(0, MAX_PLAYER_NAME_LENGTH);
+
+  // Defense-in-depth: fixed-point convergence pass (absorbs any secondary decompositions/compositions)
+  for (let i = 0; i < 2; i++) {
+    const next = current
+      .replace(/[\p{Cf}\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/gu, "")
+      .normalize("NFKC")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase()
+      .slice(0, MAX_PLAYER_NAME_LENGTH);
+    if (next === current) break;
+    current = next;
+  }
+  return current;
 }
 
 export class ScryptConcurrencyGate {
@@ -894,7 +908,10 @@ export function resolvePlayerIdentity(
     });
   }
 
-  const requestedName = canonicalizePlayerName(normalizeDisplayName(input.playerName));
+  // Gate contract: pass normalizeDisplayName output to isNameReserved (do NOT pre-canonicalize here;
+  // isNameReserved applies canonicalizePlayerName once internally, perfectly matching the account store's
+  // single-pass canonicalization on acc.displayName)
+  const requestedName = normalizeDisplayName(input.playerName);
   if (requestedName && accountStore.isNameReserved(requestedName)) {
     return failure("name-reserved", "This display name is registered to an account. Please sign in to use this name.");
   }
@@ -986,7 +1003,7 @@ function randomTokenPart(byteLength: number): string {
   return randomBytes(byteLength).toString("base64url");
 }
 
-function normalizeDisplayName(displayName: string): string {
+export function normalizeDisplayName(displayName: string): string {
   return displayName.trim().replace(/\s+/g, " ").slice(0, MAX_DISPLAY_NAME_LENGTH);
 }
 
