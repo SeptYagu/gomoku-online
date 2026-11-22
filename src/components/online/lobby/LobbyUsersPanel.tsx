@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { RefreshCw, Users } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import type { PresenceStatus, UserPresenceSnapshot } from "@/server/rooms";
@@ -15,12 +14,6 @@ export type LobbyUsersPanelProps = {
 export function LobbyUsersPanel({ dictionary, room: roomProp }: LobbyUsersPanelProps) {
   const room = useOptionalRoomContext(roomProp);
   const labels = dictionary.room;
-  const { refreshPresence } = room;
-
-  useEffect(() => {
-    refreshPresence();
-  }, [refreshPresence]);
-
   return (
     <section aria-label={labels.onlineUsers} className="room-presence">
       <div className="room-presence-header">

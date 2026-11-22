@@ -595,6 +595,16 @@ export function useRoomSocket({
   }, [applyRoomAck, currentRoomCode, enabled, ensureSocket, hasRoom, identityReady, joinRoomByCode]);
 
   useEffect(() => {
+    if (enabled || room || !socketRef.current) {
+      return;
+    }
+
+    socketRef.current.disconnect();
+    socketRef.current = null;
+    hasConnectedOnceRef.current = false;
+  }, [enabled, room]);
+
+  useEffect(() => {
     return () => {
       leaveRoomRequestRef.current?.attempt.settle();
       leaveRoomRequestRef.current = null;

@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`9390792 docs: record Round 4 code review PASS in STATUS.md`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`a53575f fix(online): restore lobby subscriptions and accurate profiles`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -25,12 +25,14 @@
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
 - **单元测试** (`npm test`)：35 个测试套件 / 362 项用例；本地全绿通过 —— 详见 [`docs/handoff/2026-11-22-frontend-backend-audit-fixes-handoff.md`](docs/handoff/2026-11-22-frontend-backend-audit-fixes-handoff.md)
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
-- **本轮端到端烟测**：本地生产统一入口下 `verify:online`、`smoke:lobby`、`smoke:profile-records` 均通过；`smoke:lobby-ui` 在 Chrome CDP 启动后的首次页面等待超时，未进入业务断言
-- **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本轮前两项通过；`smoke:matchmaking` 未重跑
+- **本地端到端烟测**：本地生产统一入口下 `verify:online`、`smoke:lobby`、`smoke:matchmaking`、上一阶段的 `smoke:profile-records` 均通过；上一阶段 `smoke:lobby-ui` 在 Chrome CDP 启动后的首次页面等待超时，未进入业务断言，本阶段未重跑该项
+- **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本轮三项均通过
 
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **联机大厅在线人数复查与修复（2026-11-22，待上线）**：线上正常进入大厅显示 0 Online，打开用户面板后才变为 1，确认在线登记被面板挂载错误控制。本轮改为进入大厅自动登记 Presence，退出联机模式时断开连接并释放在线计数，重新进入时重建订阅。四道门禁全绿（35 套 / 362 项），本地生产版双浏览器实测计数 `2 → 1 → 2`、面板打开不重复计数、服务重启后自动恢复；`verify:online`、`smoke:lobby`、`smoke:matchmaking` 通过。线上仍为 `0596ec1`，尚未部署本轮修复。详见 [`docs/handoff/2026-11-22-online-presence-lifecycle-handoff.md`](docs/handoff/2026-11-22-online-presence-lifecycle-handoff.md)。
 
 - 🔄 **前后端代码审查与缺陷修复（2026-11-22，待上线）**：修复大厅房间增量事件版本消费、跳号全量同步与断线重连后的频道重订阅及陈旧连接错误提示；个人资料总战绩改用全部公开棋谱计算，最近记录仍分页；聊天与棋谱日期遵循页面语言，资料加载提示使用现有多语言文案；资料烟测改用服务端权威访客 ID。四道门禁通过（35 套 / 362 项），本地生产统一入口与大厅、资料烟测通过，浏览器确认重连后新公开房间无需刷新即可进入大厅。线上 `/api/version` 仍为 `0596ec1`，与本地基线 `9390792` 不同。详见 [`docs/handoff/2026-11-22-frontend-backend-audit-fixes-handoff.md`](docs/handoff/2026-11-22-frontend-backend-audit-fixes-handoff.md)。
 

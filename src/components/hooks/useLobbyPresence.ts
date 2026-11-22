@@ -272,6 +272,14 @@ export function useLobbyPresence({
     }
   }, [enabled, refreshLobby, refreshPresence]);
 
+  useEffect(() => {
+    if (!enabled) {
+      lobbyVersionRef.current = null;
+      lobbyJoinedRef.current = false;
+      presenceJoinedRef.current = false;
+    }
+  }, [enabled]);
+
   const refreshLeaderboard = useCallback(() => {
     const params = new URLSearchParams({
       identity: leaderboardIdentity,

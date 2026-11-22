@@ -45,6 +45,7 @@ export function OnlineJoiningView({ dictionary, room: roomProp }: OnlineViewProp
 
 export function OnlineLobbyView({ dictionary, locale, onPlayAi, room: roomProp }: OnlineLobbyViewProps) {
   const room = useOptionalRoomContext(roomProp);
+  const { refreshPresence } = room;
   const labels = dictionary.room;
   const [activeSection, setActiveSection] = useState<LobbySection | null>(null);
   const [authTab, setAuthTab] = useState<"guest" | "login" | "register">("guest");
@@ -53,6 +54,10 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room: roomProp }
   const [loginToken, setLoginToken] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [copiedToken, setCopiedToken] = useState(false);
+
+  useEffect(() => {
+    refreshPresence();
+  }, [refreshPresence]);
 
   function toggleSection(section: LobbySection) {
     setActiveSection((current) => (current === section ? null : section));
