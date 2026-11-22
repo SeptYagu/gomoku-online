@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`a53575f fix(online): restore lobby subscriptions and accurate profiles`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`73d513c fix(online): count lobby presence across mode changes`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x

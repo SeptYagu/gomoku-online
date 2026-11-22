@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, LogIn, LogOut, Trophy, UserRound, Users } from "lucide-react";
 import type { Locale } from "@/i18n/config";
 import type { GameDictionary } from "@/i18n/dictionaries";
 import { COPY_FEEDBACK_DURATION_MS, MAX_PLAYER_NAME_LENGTH } from "@/lib/constants";
+import { isAccountIdentityReady } from "../account-identity";
 import { copyTextWithFallback } from "../hooks/room-state-utils";
 import { getProfileUrl } from "../profile/profile-url";
 import type { FriendRoomController } from "../useFriendRoom";
@@ -46,6 +47,7 @@ export function OnlineJoiningView({ dictionary, room: roomProp }: OnlineViewProp
 export function OnlineLobbyView({ dictionary, locale, onPlayAi, room: roomProp }: OnlineLobbyViewProps) {
   const room = useOptionalRoomContext(roomProp);
   const { refreshPresence } = room;
+  const refreshPresenceRef = useRef(refreshPresence);
   const labels = dictionary.room;
   const [activeSection, setActiveSection] = useState<LobbySection | null>(null);
   const [authTab, setAuthTab] = useState<"guest" | "login" | "register">("guest");
@@ -56,8 +58,14 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room: roomProp }
   const [copiedToken, setCopiedToken] = useState(false);
 
   useEffect(() => {
-    refreshPresence();
-  }, [refreshPresence]);
+    refreshPresenceRef.current = refreshPresence;
+  });
+
+  useEffect(() => {
+    if (isAccountIdentityReady(room.accountStatus)) {
+      refreshPresenceRef.current();
+    }
+  }, [room.accountStatus]);
 
   function toggleSection(section: LobbySection) {
     setActiveSection((current) => (current === section ? null : section));
@@ -250,6 +258,7 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room: roomProp }
                       <span>{labels.playerName}</span>
                       <input
                         maxLength={MAX_PLAYER_NAME_LENGTH}
+                        onBlur={refreshPresence}
                         onChange={(event) => room.setPlayerName(event.target.value)}
                         placeholder={labels.playerNamePlaceholder}
                         type="text"
