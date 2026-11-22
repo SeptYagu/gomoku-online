@@ -142,11 +142,11 @@ export function PlayerProfilePage({ dictionary, initialName, locale, playerId }:
         {records.length > 0 ? (
           <div className="profile-record-grid">
             {records.map((record) => (
-              <ProfileRecordCard key={record.gameId} labels={labels} playerName={displayName} record={record} />
+              <ProfileRecordCard key={record.gameId} labels={labels} locale={locale} playerName={displayName} record={record} />
             ))}
           </div>
         ) : (
-          <p className="room-message">{status === "loading" ? labels.refreshProfile : labels.noGameRecords}</p>
+          <p className="room-message">{status === "loading" ? labels.loading : labels.noGameRecords}</p>
         )}
 
         {status === "error" && error ? <p className="room-error">{error}</p> : null}
@@ -161,10 +161,12 @@ function ProfileStat({ label }: { label: string }) {
 
 function ProfileRecordCard({
   labels,
+  locale,
   playerName,
   record
 }: {
   labels: GameDictionary["room"];
+  locale: Locale;
   playerName: string;
   record: PlayerGameRecordSummary;
 }) {
@@ -192,7 +194,7 @@ function ProfileRecordCard({
           {" · "}
           {record.roomCode}
           {" · "}
-          {formatRecordTime(record.finishedAt)}
+          {formatRecordTime(record.finishedAt, locale)}
         </p>
         <div className="profile-record-meta">
           <span>{labels.recordMoves.replace("{count}", String(record.moveSeq))}</span>
@@ -308,8 +310,8 @@ function getRecordStatusLabel(status: GameRecordStatus, labels: GameDictionary["
   return labels.recordPartial;
 }
 
-function formatRecordTime(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+function formatRecordTime(timestamp: number, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",

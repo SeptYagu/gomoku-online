@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { Send } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
+import type { Locale } from "@/i18n/config";
 import { MAX_CHAT_MESSAGE_LENGTH } from "@/lib/constants";
 import { formatChatMessageTime } from "@/lib/date-format";
 import { useOptionalRoomContext } from "../RoomContext";
@@ -10,10 +11,11 @@ import type { FriendRoomController } from "../../useFriendRoom";
 
 export type LobbyPublicChatProps = {
   dictionary: GameDictionary;
+  locale: Locale;
   room?: FriendRoomController;
 };
 
-export function LobbyPublicChat({ dictionary, room: roomProp }: LobbyPublicChatProps) {
+export function LobbyPublicChat({ dictionary, locale, room: roomProp }: LobbyPublicChatProps) {
   const room = useOptionalRoomContext(roomProp);
   const labels = dictionary.room;
   const { refreshPublicChat } = room;
@@ -33,7 +35,7 @@ export function LobbyPublicChat({ dictionary, room: roomProp }: LobbyPublicChatP
             <div className="room-chat-message" key={message.id}>
               <div className="room-chat-meta">
                 <strong>{message.name}</strong>
-                <span>{formatChatMessageTime(message.sentAt)}</span>
+                <span>{formatChatMessageTime(message.sentAt, locale)}</span>
               </div>
               <p>{message.text}</p>
             </div>

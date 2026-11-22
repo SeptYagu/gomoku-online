@@ -47,6 +47,7 @@ export function useRoomChat({
 
   const chatSendGateRef = useRef<ChatSendGate | null>(null);
   const publicChatSendGateRef = useRef<ChatSendGate | null>(null);
+  const publicChatJoinedRef = useRef(false);
 
   const handlePublicChatMessages = useCallback((snapshot: unknown) => {
     if (isPublicChatSnapshot(snapshot)) {
@@ -56,6 +57,7 @@ export function useRoomChat({
   }, []);
 
   const refreshPublicChat = useCallback(() => {
+    publicChatJoinedRef.current = true;
     setPublicChatStatus("loading");
     ensureSocket().emit("public-chat:join", undefined, (response: PublicChatAck) => {
       if (!response.ok) {
@@ -68,6 +70,12 @@ export function useRoomChat({
       setPublicChatStatus("ready");
     });
   }, [ensureSocket, setError]);
+
+  const onSocketReconnect = useCallback(() => {
+    if (publicChatJoinedRef.current) {
+      refreshPublicChat();
+    }
+  }, [refreshPublicChat]);
 
   const sendChatMessage = useCallback(() => {
     if (!room) {
@@ -230,6 +238,7 @@ export function useRoomChat({
     isSendingPublicChat,
     sendPublicChatMessage,
     refreshPublicChat,
+    onSocketReconnect,
     handlePublicChatMessages,
     resetChatOnRoomClosed
   };

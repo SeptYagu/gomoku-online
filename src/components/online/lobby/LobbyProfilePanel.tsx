@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { RefreshCw } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
+import type { Locale } from "@/i18n/config";
 import type {
   GameRecordFinishReason,
   GameRecordStatus,
@@ -14,10 +15,11 @@ import type { FriendRoomController } from "../../useFriendRoom";
 
 export type LobbyProfilePanelProps = {
   dictionary: GameDictionary;
+  locale: Locale;
   room?: FriendRoomController;
 };
 
-export function LobbyProfilePanel({ dictionary, room: roomProp }: LobbyProfilePanelProps) {
+export function LobbyProfilePanel({ dictionary, locale, room: roomProp }: LobbyProfilePanelProps) {
   const room = useOptionalRoomContext(roomProp);
   const labels = dictionary.room;
   const { refreshProfile } = room;
@@ -50,7 +52,7 @@ export function LobbyProfilePanel({ dictionary, room: roomProp }: LobbyProfilePa
       {records.length > 0 ? (
         <div className="room-record-list">
           {records.map((record) => (
-            <RoomRecordItem key={record.gameId} labels={labels} record={record} />
+            <RoomRecordItem key={record.gameId} labels={labels} locale={locale} record={record} />
           ))}
         </div>
       ) : (
@@ -67,9 +69,11 @@ export const RoomProfilePanel = LobbyProfilePanel;
 
 export function RoomRecordItem({
   labels,
+  locale,
   record
 }: {
   labels: GameDictionary["room"];
+  locale: Locale;
   record: PlayerGameRecordSummary;
 }) {
   return (
@@ -85,7 +89,7 @@ export function RoomRecordItem({
           {" · "}
           {record.roomCode}
           {" · "}
-          {formatRecordTime(record.finishedAt)}
+          {formatRecordTime(record.finishedAt, locale)}
         </p>
       </div>
       <div className="room-record-metrics">
@@ -144,8 +148,8 @@ export function getRecordStatusLabel(status: GameRecordStatus, labels: GameDicti
   return labels.recordPartial;
 }
 
-export function formatRecordTime(finishedAt: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+export function formatRecordTime(finishedAt: number, locale: Locale): string {
+  return new Intl.DateTimeFormat(locale, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",

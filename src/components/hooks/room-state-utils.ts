@@ -209,6 +209,14 @@ export function sortLobbyRooms(rooms: RoomListItem[]): RoomListItem[] {
   return [...rooms].sort((first, second) => second.updatedAt - first.updatedAt || first.code.localeCompare(second.code));
 }
 
+export function classifyLobbyEventVersion(current: number | null, incoming: number): "apply" | "ignore" | "resync" {
+  if (current !== null && incoming <= current) {
+    return "ignore";
+  }
+
+  return current !== null && incoming === current + 1 ? "apply" : "resync";
+}
+
 export { useBootSnapshot } from "../client-boot-state";
 
 export function getInitialPlayerName(): string {

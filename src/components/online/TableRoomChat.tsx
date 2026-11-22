@@ -2,6 +2,7 @@
 
 import { Send } from "lucide-react";
 import type { GameDictionary } from "@/i18n/dictionaries";
+import type { Locale } from "@/i18n/config";
 import { formatChatMessageTime } from "@/lib/date-format";
 import { MAX_CHAT_MESSAGE_LENGTH } from "@/lib/constants";
 import type { FriendRoomController } from "../useFriendRoom";
@@ -9,10 +10,11 @@ import { useOptionalRoomContext } from "./RoomContext";
 
 type TableRoomChatProps = {
   dictionary: GameDictionary;
+  locale: Locale;
   room?: FriendRoomController;
 };
 
-export function TableRoomChat({ dictionary, room: roomProp }: TableRoomChatProps) {
+export function TableRoomChat({ dictionary, locale, room: roomProp }: TableRoomChatProps) {
   const room = useOptionalRoomContext(roomProp);
   const labels = dictionary.room;
   const messages = room.room?.snapshot.chatMessages ?? [];
@@ -25,7 +27,7 @@ export function TableRoomChat({ dictionary, room: roomProp }: TableRoomChatProps
             <div className="room-chat-message" key={message.id}>
               <div className="room-chat-meta">
                 <strong>{message.name}</strong>
-                <span>{formatChatMessageTime(message.sentAt)}</span>
+                <span>{formatChatMessageTime(message.sentAt, locale)}</span>
               </div>
               <p>{message.text}</p>
             </div>

@@ -23,6 +23,7 @@ import type {
 } from "@/server/rooms";
 import { PAGINATION } from "@/lib/constants";
 import {
+  classifyLobbyEventVersion,
   clearGuestToken,
   clearRoomSession,
   clearRoomUrl,
@@ -76,6 +77,10 @@ export function useLobbyPresence({
   const leaderboardRequestSeqRef = useRef(0);
   const submittedGameRecordsRef = useRef<Set<string>>(new Set());
   const previousGameRecordRequestRef = useRef<string | null>(null);
+  const lobbyVersionRef = useRef<number | null>(null);
+  const lobbyRefreshSeqRef = useRef(0);
+  const lobbyJoinedRef = useRef(false);
+  const presenceJoinedRef = useRef(false);
 
   const [lobbyActivity, setLobbyActivity] = useState<LobbyActivitySummary | null>(null);
   const [lobbyRooms, setLobbyRooms] = useState<RoomListItem[]>([]);
@@ -111,6 +116,32 @@ export function useLobbyPresence({
     room?.snapshot.status === "waiting" &&
     room.snapshot.players.length === 1;
 
+  const refreshLobby = useCallback(() => {
+    lobbyJoinedRef.current = true;
+    const requestSeq = ++lobbyRefreshSeqRef.current;
+    setLobbyStatus("loading");
+    ensureSocket().emit("lobby:join", { limit: PAGINATION.LOBBY_ROOMS }, (response: RoomListAck) => {
+      if (requestSeq !== lobbyRefreshSeqRef.current) {
+        return;
+      }
+      if (!response.ok) {
+        setLobbyStatus("error");
+        setError(response.error.message);
+        return;
+      }
+
+      if (lobbyVersionRef.current === null || response.value.version >= lobbyVersionRef.current) {
+        lobbyVersionRef.current = response.value.version;
+        setLobbyRooms(response.value.rooms);
+      }
+      if (response.value.activity) {
+        const activity = response.value.activity;
+        setLobbyActivity((current) => !current || activity.version >= current.version ? activity : current);
+      }
+      setLobbyStatus("ready");
+    });
+  }, [ensureSocket, setError]);
+
   // Socket 事件响应函数
   const handleLobbyActivity = useCallback((summary: unknown) => {
     if (isLobbyActivitySummary(summary)) {
@@ -125,17 +156,35 @@ export function useLobbyPresence({
 
   const handleLobbyRoomUpdated = useCallback((event: unknown) => {
     if (isLobbyRoomUpdatedEvent(event)) {
+      const action = classifyLobbyEventVersion(lobbyVersionRef.current, event.version);
+      if (action === "resync") {
+        refreshLobby();
+        return;
+      }
+      if (action === "ignore") {
+        return;
+      }
+      lobbyVersionRef.current = event.version;
       setLobbyRooms((currentRooms) => sortLobbyRooms(upsertLobbyRoom(currentRooms, event.room)));
       setLobbyStatus("ready");
     }
-  }, []);
+  }, [refreshLobby]);
 
   const handleLobbyRoomDeleted = useCallback((event: unknown) => {
     if (isLobbyRoomDeletedEvent(event)) {
+      const action = classifyLobbyEventVersion(lobbyVersionRef.current, event.version);
+      if (action === "resync") {
+        refreshLobby();
+        return;
+      }
+      if (action === "ignore") {
+        return;
+      }
+      lobbyVersionRef.current = event.version;
       setLobbyRooms((currentRooms) => currentRooms.filter((candidate) => candidate.code !== event.code));
       setLobbyStatus("ready");
     }
-  }, []);
+  }, [refreshLobby]);
 
   const handlePresenceUsers = useCallback((snapshot: unknown) => {
     if (isPresenceSnapshot(snapshot)) {
@@ -144,28 +193,12 @@ export function useLobbyPresence({
     }
   }, []);
 
-  const refreshLobby = useCallback(() => {
-    setLobbyStatus("loading");
-    ensureSocket().emit("lobby:join", { limit: PAGINATION.LOBBY_ROOMS }, (response: RoomListAck) => {
-      if (!response.ok) {
-        setLobbyStatus("error");
-        setError(response.error.message);
-        return;
-      }
-
-      setLobbyRooms(response.value.rooms);
-      if (response.value.activity) {
-        setLobbyActivity(response.value.activity);
-      }
-      setLobbyStatus("ready");
-    });
-  }, [ensureSocket, setError]);
-
   const refreshPresence = useCallback(() => {
     if (!identityReady) {
       return;
     }
 
+    presenceJoinedRef.current = true;
     let player = getActivePlayer();
 
     setPresenceStatus("loading");
@@ -227,6 +260,17 @@ export function useLobbyPresence({
       }
     );
   }, [ensureSocket, getActivePlayer, identityReady, setError, setPlayerNameState]);
+
+  const onSocketReconnect = useCallback(() => {
+    lobbyVersionRef.current = null;
+    setLobbyActivity(null);
+    if (enabled && lobbyJoinedRef.current) {
+      refreshLobby();
+    }
+    if (enabled && presenceJoinedRef.current) {
+      refreshPresence();
+    }
+  }, [enabled, refreshLobby, refreshPresence]);
 
   const refreshLeaderboard = useCallback(() => {
     const params = new URLSearchParams({
@@ -558,6 +602,7 @@ export function useLobbyPresence({
     handleLobbyRoomUpdated,
     handleLobbyRoomDeleted,
     handlePresenceUsers,
-    resetLobbyOnRoomClosed
+    resetLobbyOnRoomClosed,
+    onSocketReconnect
   };
 }

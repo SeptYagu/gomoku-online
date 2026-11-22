@@ -321,11 +321,12 @@ export class GameRecordStore {
     fallbackIdentity: PlayerIdentityKind = "guest"
   ): PlayerProfileSnapshot {
     const normalizedPlayerId = playerId.trim();
-    const records = this.listRecordsForPlayer(normalizedPlayerId, limit);
+    const allRecords = this.getPublicRecordsForPlayer(normalizedPlayerId);
+    const records = allRecords.slice(0, Math.max(1, Math.min(200, Math.floor(limit))));
     const stats = {
       conflicted: 0,
       draws: 0,
-      games: records.length,
+      games: allRecords.length,
       losses: 0,
       partial: 0,
       verified: 0,
@@ -334,7 +335,7 @@ export class GameRecordStore {
     const latestRecordPlayer = records[0]?.players.find((player) => player.playerId === normalizedPlayerId);
     const latestPlayerName = (latestRecordPlayer?.name ?? displayName.trim()) || DEFAULT_PLAYER_NAME;
 
-    for (const record of records) {
+    for (const record of allRecords) {
       if (record.recordStatus === "verified") {
         stats.verified += 1;
       } else if (record.recordStatus === "partial") {
@@ -368,14 +369,17 @@ export class GameRecordStore {
     const normalizedPlayerId = playerId.trim();
     const clampedLimit = Math.max(1, Math.min(200, Math.floor(limit)));
 
+    return this.getPublicRecordsForPlayer(normalizedPlayerId).slice(0, clampedLimit);
+  }
+
+  private getPublicRecordsForPlayer(playerId: string): SavedGameRecord[] {
     return [...this.records.values()]
       .filter(
         (record) =>
           record.visibility === "public" &&
-          record.players.some((player) => player.playerId === normalizedPlayerId)
+          record.players.some((player) => player.playerId === playerId)
       )
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .slice(0, clampedLimit);
+      .sort((left, right) => right.updatedAt - left.updatedAt);
   }
 
   submit(authoritative: AuthoritativeGameRecord, submission: GameRecordClientSubmission): GameRecordSubmitResult {

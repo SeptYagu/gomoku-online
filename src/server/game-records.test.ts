@@ -99,6 +99,30 @@ describe("GameRecordStore", () => {
     expect(bobProfile.recentRecords[0]?.result).toBe("win");
   });
 
+  it("counts all public games even when profile records are paginated", () => {
+    const store = new GameRecordStore({ now: createClock() });
+
+    for (let index = 0; index < 25; index += 1) {
+      store.recordAuthoritative(createAuthoritativeGameRecord({
+        gameId: `ROOM-${index}`,
+        roomCode: `ROOM${index}`,
+        winner: index % 2 === 0 ? "black" : "white"
+      }));
+    }
+    store.recordAuthoritative(createAuthoritativeGameRecord({
+      gameId: "UNLISTED-1",
+      roomCode: "UNLISTED",
+      visibility: "unlisted"
+    }));
+
+    const profile = store.getPlayerProfile("player-1", "Alice", 3);
+    expect(profile.recentRecords).toHaveLength(3);
+    expect(profile.recentRecords[0].gameId).toBe("ROOM-24");
+    expect(profile.stats).toMatchObject({ games: 25, wins: 13, losses: 12, verified: 25 });
+    expect(store.getPlayerProfile("player-1", "Alice").recentRecords).toHaveLength(20);
+    expect(store.getPlayerProfile("player-1", "Alice").stats.games).toBe(25);
+  });
+
   it("stores unlisted records for internal integrity without publishing them in profiles or rankings", () => {
     const store = new GameRecordStore({ now: createClock() });
     const publicRecord = createAuthoritativeGameRecord();

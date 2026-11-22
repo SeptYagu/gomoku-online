@@ -8,7 +8,7 @@
 
 - **当前分支与 HEAD**：`main`（以 `git rev-parse --short HEAD` 实时为准；双字段规则：「`当前 HEAD` 以 `git rev-parse` 实时为准；`最新阶段交付提交` 记录本字段所在提交的直接前驱阶段交付，每次阶段交付在下一次提交回填」）
 - **上游远端**：`git@github.com:SeptYagu/gomoku-online.git`
-- **最新阶段交付提交**：`17af0da fix(pvp): resolve Round 3 code review finding (P2-1 single-pass gate & fixed-point canonicalization)`（本字段记录本字段所在提交的直接前驱阶段交付）
+- **最新阶段交付提交**：`9390792 docs: record Round 4 code review PASS in STATUS.md`（本字段记录本字段所在提交的直接前驱阶段交付）
 - **环境基准**：
   - Node.js v24.x
   - npm 11.x
@@ -23,14 +23,16 @@
 
 - **TypeScript 编译检查** (`npx tsc --noEmit`)：0 错误（严格类型推导，无逆变与缺少属性）
 - **代码规范检查** (`npm run lint`)：0 错误，0 警告（严格遵守 React 19 Hooks 规则，无 setState-in-effect 与 render-ref-access）
-- **单元测试** (`npm test`)：35 个测试套件 / 358 项用例；**全绿通过（100% 稳定，连续全量运行 PASS，0 flake）** —— 详见 [`docs/handoff/2026-09-24-online-pvp-auth-and-leaderboard-code-review-round3-remediation-handoff.md`](docs/handoff/2026-09-24-online-pvp-auth-and-leaderboard-code-review-round3-remediation-handoff.md)
+- **单元测试** (`npm test`)：35 个测试套件 / 362 项用例；本地全绿通过 —— 详见 [`docs/handoff/2026-11-22-frontend-backend-audit-fixes-handoff.md`](docs/handoff/2026-11-22-frontend-backend-audit-fixes-handoff.md)
 - **生产构建** (`npm run build`)：打包成功，所有多语言路由静态预渲染正常（SSG 零 Bailout，`/[locale]` 与 `/[locale]/feedback` 保持为 `● (SSG)`）
-- **端到端冒烟测试** (`npm run smoke:persistence` + `npm run smoke:feedback`)：全部通过（`smoke:feedback` 已提升至 1 MiB 报文断言，且覆盖 201/400/405/413/429 及 `retry-after` 断言）
-- **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本地门禁就绪
+- **本轮端到端烟测**：本地生产统一入口下 `verify:online`、`smoke:lobby`、`smoke:profile-records` 均通过；`smoke:lobby-ui` 在 Chrome CDP 启动后的首次页面等待超时，未进入业务断言
+- **联机时序烟测** (`npm run verify:online` + `smoke:lobby` + `smoke:matchmaking`)：本轮前两项通过；`smoke:matchmaking` 未重跑
 
 ---
 
 ## 3. 近期已交付里程碑
+
+- 🔄 **前后端代码审查与缺陷修复（2026-11-22，待上线）**：修复大厅房间增量事件版本消费、跳号全量同步与断线重连后的频道重订阅及陈旧连接错误提示；个人资料总战绩改用全部公开棋谱计算，最近记录仍分页；聊天与棋谱日期遵循页面语言，资料加载提示使用现有多语言文案；资料烟测改用服务端权威访客 ID。四道门禁通过（35 套 / 362 项），本地生产统一入口与大厅、资料烟测通过，浏览器确认重连后新公开房间无需刷新即可进入大厅。线上 `/api/version` 仍为 `0596ec1`，与本地基线 `9390792` 不同。详见 [`docs/handoff/2026-11-22-frontend-backend-audit-fixes-handoff.md`](docs/handoff/2026-11-22-frontend-backend-audit-fixes-handoff.md)。
 
 - 🎉 **联机对战命名规范、排行榜搜索框修复、账号登录与防冒名 · 源码独立审查 Round 4 复查（被审 `17af0da`）**：**审查通过（PASS）**。**0×P0 / 0×P1 / 0×P2 / 0×P3**，无任何缺陷。①**Round 3 P2-1 真闭环**：守门单次规范化（`accounts.ts:914-917`）将 `normalizeDisplayName` 产物直接交给 `isNameReserved`，门侧与账号侧（`acc.displayName`）统一为单次 `canon`，彻底消除了由于双重规范化（`canon² vs canon`）引起的计算发散，与幂等性彻底解耦；②**幂等性纵深防御**：`canonicalizePlayerName` 剥离 `\p{Cf}` 前置于 `normalize("NFKC")` 并配置固定点收敛循环，经 WorkBuddy 独立 ~16.7M 输入四族深度扫描（1.75M 全码点×9 模式、1.5M 对抗字母表、11.5M 长度≤4 穷举、2M 跨 24 边界长串）实测 **0 反例**；③**对抗语料守门实测**：11 组对抗性语料（`Cf`+组合附加符、`U+03AA` 希腊展开、`U+0130`、24 单元截断边界、全角、西里尔等）在真实 Socket.IO 房间与 Presence 层全量通过验证（同名访客加入确定性拦截并返回 `name-reserved`）；④**变异探针自证**：还原旧 `canon` 顺序并去掉收敛循环确定性使守门用例变红（`accounts.test.ts:1034`）；⑤四道工程门禁实跑全绿（`tsc` 0 错误、`lint` 0 警告、`npm test` 35 套 / 358 例全绿、`build` 18/18 路由 SSG 成功）。双智能体协同审查圆满闭环，全部核心需求与技术债 100% 达成。
 

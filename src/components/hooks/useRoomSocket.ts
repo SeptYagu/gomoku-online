@@ -58,6 +58,7 @@ export type UseRoomSocketProps = {
   setPlayerNameState: (name: string) => void;
   setJoinTargetState: (target: string) => void;
   onRoomCleared?: (roomCode: string, isCurrentRoom: boolean) => void;
+  onReconnect?: () => void;
   canCreate?: () => boolean;
 };
 
@@ -75,12 +76,15 @@ export function useRoomSocket({
   setPlayerNameState,
   setJoinTargetState,
   onRoomCleared,
+  onReconnect,
   canCreate
 }: UseRoomSocketProps) {
   const socketRef = useRef<RoomSocket | null>(null);
   const messagesRef = useRef(messages);
+  const connectionErrorRef = useRef<string | null>(null);
   const eventHandlersRef = useRef<RoomSocketEventHandlers>({});
   const onRoomClearedRef = useRef(onRoomCleared);
+  const onReconnectRef = useRef(onReconnect);
   const canCreateRef = useRef(canCreate);
 
   const updateEventHandlers = useCallback((handlers: RoomSocketEventHandlers) => {
@@ -110,6 +114,7 @@ export function useRoomSocket({
   useEffect(() => {
     messagesRef.current = messages;
     onRoomClearedRef.current = onRoomCleared;
+    onReconnectRef.current = onReconnect;
     canCreateRef.current = canCreate;
     roomRef.current = room;
   });
@@ -164,9 +169,15 @@ export function useRoomSocket({
 
     socket.on("connect", () => {
       setConnectionStatus("connected");
+      const connectionError = connectionErrorRef.current;
+      connectionErrorRef.current = null;
+      if (connectionError) {
+        setError((current) => current === connectionError ? null : current);
+      }
 
       if (hasConnectedOnceRef.current) {
         reconnectHandlerRef.current?.();
+        onReconnectRef.current?.();
       } else {
         hasConnectedOnceRef.current = true;
       }
@@ -176,7 +187,9 @@ export function useRoomSocket({
 
     socket.on("connect_error", (connectError: unknown) => {
       setConnectionStatus("disconnected");
-      setError(formatConnectionError(connectError, messagesRef.current));
+      const message = formatConnectionError(connectError, messagesRef.current);
+      connectionErrorRef.current = message;
+      setError(message);
     });
 
     socket.on("room:error", (roomError: unknown) => {

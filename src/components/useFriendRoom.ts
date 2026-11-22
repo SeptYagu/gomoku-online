@@ -166,6 +166,12 @@ export function useFriendRoom({ enabled = true, messages }: UseFriendRoomOptions
         roomChatRef.current?.resetChatOnRoomClosed();
       }
     },
+    onReconnect: () => {
+      if (enabled) {
+        lobbyPresenceRef.current?.onSocketReconnect();
+        roomChatRef.current?.onSocketReconnect();
+      }
+    },
     canCreate: () => lobbyPresenceRef.current?.canCreateRoom ?? (enabled && identityReady && !roomSocket.room)
   });
 

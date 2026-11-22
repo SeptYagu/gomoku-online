@@ -35,16 +35,16 @@ async function main(): Promise<void> {
     console.log(`PASS connect host - ${host.io.engine.transport.name}`);
     console.log(`PASS connect guest - ${guest.io.engine.transport.name}`);
 
-    const created = requireRoomOk(
+    const hostSession = requireRoomOk(
       await emitAck<RoomAck>(host, "room:create", {
         playerId: hostId,
         playerName: `Profile Host ${suffix}`
       }),
       "room:create"
-    ).snapshot;
-    const roomCode = created.code;
+    );
+    const roomCode = hostSession.snapshot.code;
 
-    requireRoomOk(
+    const guestSession = requireRoomOk(
       await emitAck<RoomAck>(guest, "room:join", {
         playerId: guestId,
         playerName: `Profile Guest ${suffix}`,
@@ -75,9 +75,9 @@ async function main(): Promise<void> {
     assert(verified.record.recordStatus === "verified", "both submissions should verify the game record");
     console.log(`PASS submitted verified record - ${finished.gameId}`);
 
-    const hostProfile = await fetchProfile(baseUrl, hostId, `Profile Host ${suffix}`);
-    const guestProfile = await fetchProfile(baseUrl, guestId, `Profile Guest ${suffix}`);
-    const aliasProfile = await fetchProfile(baseUrl, hostId, `Profile Host ${suffix}`, "/api/game-records");
+    const hostProfile = await fetchProfile(baseUrl, hostSession.playerId, `Profile Host ${suffix}`);
+    const guestProfile = await fetchProfile(baseUrl, guestSession.playerId, `Profile Guest ${suffix}`);
+    const aliasProfile = await fetchProfile(baseUrl, hostSession.playerId, `Profile Host ${suffix}`, "/api/game-records");
 
     assert(hostProfile.stats.games === 1, "host profile should include one game");
     assert(hostProfile.stats.losses === 1, "host profile should record a loss");

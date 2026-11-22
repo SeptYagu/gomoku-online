@@ -428,14 +428,14 @@ export function OnlineLobbyView({ dictionary, locale, onPlayAi, room: roomProp }
 
       {activeSection === "community" ? (
         <section className="lobby-disclosure-panel" data-lobby-section="community">
-          <LobbyPublicChat dictionary={dictionary} room={room} />
+          <LobbyPublicChat dictionary={dictionary} locale={locale} room={room} />
           <LobbyUsersPanel dictionary={dictionary} room={room} />
         </section>
       ) : null}
 
       {activeSection === "progress" ? (
         <section className="lobby-disclosure-panel" data-lobby-section="progress">
-          <LobbyProfilePanel dictionary={dictionary} room={room} />
+          <LobbyProfilePanel dictionary={dictionary} locale={locale} room={room} />
           <LobbyLeaderboard dictionary={dictionary} locale={locale} room={room} />
         </section>
       ) : null}

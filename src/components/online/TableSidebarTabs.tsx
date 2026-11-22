@@ -56,7 +56,7 @@ export function TableSidebarTabs({ dictionary, locale, onReplayGame, room: roomP
         id={`table-sidebar-panel-${activeTab}`}
         role="tabpanel"
       >
-        {activeTab === "chat" ? <TableRoomChat dictionary={dictionary} room={room} /> : null}
+        {activeTab === "chat" ? <TableRoomChat dictionary={dictionary} locale={locale} room={room} /> : null}
         {activeTab === "history" ? (
           <TableMoveHistory dictionary={dictionary} locale={locale} onReplayGame={onReplayGame} room={room} />
         ) : null}

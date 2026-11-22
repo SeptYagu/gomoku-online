@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  classifyLobbyEventVersion,
   clearGuestToken,
   createAndPersistPlayerId,
   getOrCreatePlayerId,
@@ -17,6 +18,16 @@ import {
   PLAYER_NAME_STORAGE_KEY
 } from "./room-state-utils";
 import { dictionaries } from "../../i18n/dictionaries";
+
+describe("lobby event versions", () => {
+  it("ignores old updates and resyncs after a missed room change", () => {
+    expect(classifyLobbyEventVersion(null, 1)).toBe("resync");
+    expect(classifyLobbyEventVersion(4, 4)).toBe("ignore");
+    expect(classifyLobbyEventVersion(4, 3)).toBe("ignore");
+    expect(classifyLobbyEventVersion(4, 5)).toBe("apply");
+    expect(classifyLobbyEventVersion(4, 6)).toBe("resync");
+  });
+});
 
 class MemoryStorage implements Storage {
   private items = new Map<string, string>();

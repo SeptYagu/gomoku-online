@@ -167,6 +167,19 @@ describe("useRoomChat self-healing & watchdog integration guard", () => {
     });
   }
 
+  it("rejoins public chat after reconnect only when the panel had subscribed", () => {
+    const controller = useTestRoomChat();
+
+    controller.onSocketReconnect();
+    expect(emittedCalls).toHaveLength(0);
+
+    controller.refreshPublicChat();
+    expect(emittedCalls.map((call) => call.event)).toEqual(["public-chat:join"]);
+
+    controller.onSocketReconnect();
+    expect(emittedCalls.map((call) => call.event)).toEqual(["public-chat:join", "public-chat:join"]);
+  });
+
   it("M-2 Guard: explicitly constructs freshPlayer without guestToken and with resetGuestIdentity upon guest-session-invalid", () => {
     // Tab is ephemeral (e.g. secondary tab)
     markEphemeralSession();
